@@ -267,7 +267,7 @@ data/builds/
 
 本地配置 `config/servers/local.yaml` 默认 `codex.enabled: true`，controller 会优先调用本机 `codex exec` 理解玩家自然语言。比如“钻石稿子/钻石镐子/diamond pickaxe”应由 Codex CLI 理解成 `minecraft:diamond_pickaxe`，不会只因为包含“钻石”就发 64 个钻石。
 
-建筑类需求会优先走 Codex 蓝图规划，而不是先匹配内置关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先让 Codex 生成新的蓝图 JSON，保存后再按同一份 blocks 下发给 Minecraft。只有 `codex.enabled: false` 或 Codex 不可用时，controller 才会退回本地内置蓝图兜底。
+建筑类需求会优先走 Codex 蓝图规划，而不是先匹配内置关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先让 Codex 生成新的蓝图 JSON，保存后再按同一份 blocks 下发给 Minecraft。只要 `codex.enabled: true`，Codex 失败时 controller 会明确提示失败，不会再偷偷退回关键词规则。只有你主动把 `codex.enabled` 改成 `false`，才会启用本地离线兜底。
 
 从游戏内 `/bw ...` 触发的新建筑会带上附近场地扫描。controller 会先估算地面高度和落点，再检查蓝图目标体积是否和已有方块重叠：草、花、雪这类软阻挡可以自动覆盖；木头、石头、箱子、已有建筑等硬方块不会直接覆盖。如果目标区域被硬方块占用，controller 会提示你换位置，或者明确说“清空这里再建”后才允许覆盖。
 
@@ -278,11 +278,11 @@ data/builds/
 ```yaml
 codex:
   enabled: true
-  command: "codex --ignore-user-config -m gpt-5.5"
+  command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=low"
   timeout_seconds: 120
 ```
 
-这里的 `command` 只写 `codex exec` 的参数，controller 会自动补上 `exec`、`--ephemeral` 和 `--output-last-message`。这样不会继承你全局 `~/.codex/config.toml` 里的 MCP、插件和其他项目配置，游戏里的每次请求也不会污染 Codex 会话历史。改完这个配置后需要重启 controller。
+这里的 `command` 只写 `codex exec` 的参数，controller 会自动补上 `exec`、`--ephemeral`、`--output-schema` 和 `--output-last-message`。这样不会继承你全局 `~/.codex/config.toml` 里的 MCP、插件和其他项目配置，游戏里的每次请求也不会污染 Codex 会话历史。默认 `model_reasoning_effort=low`，优先保证游戏内响应速度；改完这个配置后需要重启 controller。
 
 controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
 
@@ -295,7 +295,7 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 - 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。
 - 执行结果必须通过 `data/builds/` 的逐块校验报告确认。
 
-如果本机暂时没有登录或安装 Codex CLI，可以把 `config/servers/local.yaml` 里的 `codex.enabled` 改成 `false`，controller 会退回内置规则兜底。
+如果本机暂时没有登录或安装 Codex CLI，可以把 `config/servers/local.yaml` 里的 `codex.enabled` 改成 `false`，controller 才会退回内置规则兜底。默认启用 Codex 时，不再用本地关键词规则冒充大模型理解。
 
 请求进入 controller 后会先打印 `received minecraft message`；开始调用模型时会打印 `starting codex cli request`，结束时会打印 `finished codex cli request`。如果游戏里显示请求失败但 controller 没有这两类日志，先检查游戏里的 `controllerUrl` 是否指向 `http://127.0.0.1:8765`。
 

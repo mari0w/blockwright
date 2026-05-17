@@ -3,7 +3,7 @@ use crate::{
         BlockOrigin, Blueprint, ChatAttachment, ChatAttachmentKind, GameAction, PlayerPosition,
         WorldScan,
     },
-    integrations::codex::CodexClient,
+    integrations::codex::{CodexClient, CodexResponseSchema},
     services::blueprint_store::BlueprintStore,
 };
 use serde::Deserialize;
@@ -92,6 +92,16 @@ impl Planner {
             return result;
         }
 
+        if self.codex_enabled() {
+            return PlanResult {
+                reply: "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。请看 controller 日志里的 Codex 错误，修好后再试。".to_string(),
+                summary: "大模型动作理解失败".to_string(),
+                actions: vec![GameAction::Chat {
+                    message: "这次没有执行：Codex 未返回有效动作。".to_string(),
+                }],
+            };
+        }
+
         if let Some(item) = requested_item(text, &lower_text) {
             return PlanResult {
                 reply: format!("可以，已经准备给你{}。", item.reply_name),
@@ -117,10 +127,10 @@ impl Planner {
         }
 
         PlanResult {
-            reply: "我已经收到需求。当前第一版先支持钻石、钻石剑和木屋蓝图，后续会接 Codex 做更完整的理解。".to_string(),
+            reply: "当前没有启用 Codex，也没有匹配到本地离线动作。请启用 Codex 后再让模型理解这类需求。".to_string(),
             summary: "普通对话".to_string(),
             actions: vec![GameAction::Chat {
-                message: "当前支持：给我钻石剑、给我钻石、帮我盖一个木屋。".to_string(),
+                message: "没有启用 Codex，无法理解这类自然语言需求。".to_string(),
             }],
         }
     }
@@ -192,7 +202,10 @@ impl Planner {
         }
 
         let prompt = build_blueprint_prompt(input);
-        let output = match codex.ask(&prompt).await {
+        let output = match codex
+            .ask_with_schema(&prompt, CodexResponseSchema::Blueprint)
+            .await
+        {
             Ok(Some(output)) if !output.trim().is_empty() => output,
             Ok(_) => return None,
             Err(error) => {
@@ -269,7 +282,10 @@ impl Planner {
         }
 
         let prompt = build_action_plan_prompt(input);
-        let output = match codex.ask(&prompt).await {
+        let output = match codex
+            .ask_with_schema(&prompt, CodexResponseSchema::ActionPlan)
+            .await
+        {
             Ok(Some(output)) if !output.trim().is_empty() => output,
             Ok(_) => return None,
             Err(error) => {
@@ -917,6 +933,7 @@ fn build_action_plan_prompt(input: &PlannerInput) -> String {
   1. 发物品：{{"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}}
   2. 执行 Minecraft 指令：{{"type":"run_command","command":"time set day"}}
   3. 聊天提示：{{"type":"chat","message":"中文提示"}}
+- 如果结构化输出 schema 要求保留未使用字段，未使用字段填 null，不要填假值。
 - 需要识别完整物品名，不能只因为文本包含“钻石”就发 minecraft:diamond。
 - 例如“钻石镐/钻石稿子/diamond pickaxe”应是 minecraft:diamond_pickaxe。
 - 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
@@ -1161,6 +1178,28 @@ BLOCKWRIGHT_JSON
                 ..
             } if item == "minecraft:diamond_pickaxe"
         ));
+    }
+
+    #[tokio::test]
+    async fn enabled_codex_failure_does_not_fall_back_to_keyword_rules() {
+        let store = empty_store("codex-invalid-action").await;
+        let planner = planner_with_fake_codex("codex-invalid-action", "not json");
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "给我钻石".to_string(),
+                    player: Some("Alex".to_string()),
+                    position: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "大模型动作理解失败");
+        assert!(matches!(result.actions[0], GameAction::Chat { .. }));
     }
 
     #[tokio::test]
@@ -1465,6 +1504,8 @@ BLOCKWRIGHT_JSON
 
         assert_eq!(image_result.summary, "说明图片复刻流程");
         assert_eq!(fallback_result.summary, "普通对话");
+        assert!(!fallback_result.reply.contains("第一版"));
+        assert!(!fallback_result.reply.contains("后续会接 Codex"));
         assert!(matches!(
             fallback_result.actions[0],
             GameAction::Chat { .. }
@@ -1560,6 +1601,25 @@ BLOCKWRIGHT_JSON
   "summary": "设置为白天",
   "actions": [
     {"type":"run_command","command":"time set day"}
+  ]
+}"#;
+
+        let plan = parse_action_plan_response(output).unwrap();
+
+        assert_eq!(plan.summary, "设置为白天");
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::RunCommand { ref command } if command == "time set day"
+        ));
+    }
+
+    #[test]
+    fn parses_schema_constrained_action_plan_with_nullable_variant_fields() {
+        let output = r#"{
+  "reply": "可以，已经切到白天。",
+  "summary": "设置为白天",
+  "actions": [
+    {"type":"run_command","player":null,"item":null,"count":null,"command":"time set day","message":null}
   ]
 }"#;
 

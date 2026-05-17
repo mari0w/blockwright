@@ -1,5 +1,5 @@
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -18,6 +18,24 @@ pub struct CodexClient {
     config: CodexConfig,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum CodexResponseSchema {
+    ActionPlan,
+    Blueprint,
+}
+
+impl CodexResponseSchema {
+    fn path(self) -> PathBuf {
+        let file_name = match self {
+            CodexResponseSchema::ActionPlan => "action-plan.schema.json",
+            CodexResponseSchema::Blueprint => "blueprint.schema.json",
+        };
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("schemas")
+            .join(file_name)
+    }
+}
+
 impl CodexClient {
     pub fn new(config: CodexConfig) -> Self {
         Self { config }
@@ -30,6 +48,22 @@ impl CodexClient {
     pub async fn ask(
         &self,
         prompt: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        self.ask_inner(prompt, None).await
+    }
+
+    pub async fn ask_with_schema(
+        &self,
+        prompt: &str,
+        schema: CodexResponseSchema,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        self.ask_inner(prompt, Some(schema.path())).await
+    }
+
+    async fn ask_inner(
+        &self,
+        prompt: &str,
+        schema_path: Option<PathBuf>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(None);
@@ -46,7 +80,13 @@ impl CodexClient {
         let started_at = std::time::Instant::now();
         let output = timeout(
             Duration::from_secs(self.config.timeout_seconds),
-            run_codex_exec(program, &args, prompt, &last_message_path),
+            run_codex_exec(
+                program,
+                &args,
+                prompt,
+                &last_message_path,
+                schema_path.as_deref(),
+            ),
         )
         .await
         .map_err(|_| {
@@ -107,12 +147,14 @@ async fn run_codex_exec(
     args: &[&str],
     prompt: &str,
     last_message_path: &PathBuf,
+    schema_path: Option<&Path>,
 ) -> std::io::Result<std::process::Output> {
     let mut command = Command::new(program);
+    command.arg("exec").args(args).arg("--ephemeral");
+    if let Some(schema_path) = schema_path {
+        command.arg("--output-schema").arg(schema_path);
+    }
     command
-        .arg("exec")
-        .args(args)
-        .arg("--ephemeral")
         .arg("--output-last-message")
         .arg(last_message_path)
         .arg("-")
@@ -210,6 +252,12 @@ mod tests {
 
         assert_eq!(program, "codex");
         assert_eq!(args, vec!["--profile", "local"]);
+    }
+
+    #[test]
+    fn response_schema_files_are_packaged_with_controller_source() {
+        assert!(CodexResponseSchema::ActionPlan.path().exists());
+        assert!(CodexResponseSchema::Blueprint.path().exists());
     }
 
     #[test]
