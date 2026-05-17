@@ -9,7 +9,7 @@ fi
 
 (
   cd plugins/fabric
-  gradle clean build --no-daemon
+  gradle clean remapJar --no-daemon
 )
 
 echo
