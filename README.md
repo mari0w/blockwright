@@ -259,6 +259,17 @@ data/builds/
 
 本地配置 `config/servers/local.yaml` 默认 `codex.enabled: true`，controller 会优先调用本机 `codex exec` 理解玩家自然语言。比如“钻石稿子/钻石镐子/diamond pickaxe”应由 Codex CLI 理解成 `minecraft:diamond_pickaxe`，不会只因为包含“钻石”就发 64 个钻石。
 
+默认命令是：
+
+```yaml
+codex:
+  enabled: true
+  command: "codex --ignore-user-config -m gpt-5.5"
+  timeout_seconds: 120
+```
+
+这里的 `command` 只写 `codex exec` 的参数，controller 会自动补上 `exec`、`--ephemeral` 和 `--output-last-message`。这样不会继承你全局 `~/.codex/config.toml` 里的 MCP、插件和其他项目配置，游戏里的每次请求也不会污染 Codex 会话历史。改完这个配置后需要重启 controller。
+
 controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
 
 - 只输出蓝图 JSON，不输出命令步骤。
@@ -271,7 +282,7 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 
 请求进入 controller 后会先打印 `received minecraft message`；开始调用模型时会打印 `starting codex cli request`，结束时会打印 `finished codex cli request`。如果游戏里显示请求失败但 controller 没有这两类日志，先检查游戏里的 `controllerUrl` 是否指向 `http://127.0.0.1:8765`。
 
-如果你要让 Codex CLI 走本地模型，可以把 `command` 配成带参数的形式，例如：
+如果你要让 Codex CLI 走本地模型，可以把 `command` 改成带参数的形式，例如：
 
 ```yaml
 codex:
