@@ -269,7 +269,7 @@ data/builds/
 
 建筑类需求会优先走 Codex 蓝图规划，而不是先匹配内置关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先让 Codex 生成新的蓝图 JSON，保存后再按同一份 blocks 下发给 Minecraft。只要 `codex.enabled: true`，Codex 失败时 controller 会明确提示失败，不会再偷偷退回关键词规则。只有你主动把 `codex.enabled` 改成 `false`，才会启用本地离线兜底。
 
-从游戏内 `/bw ...` 触发的新建筑会带上附近场地扫描。controller 会先估算地面高度和落点，再检查蓝图目标体积是否和已有方块重叠：草、花、雪这类软阻挡可以自动覆盖；木头、石头、箱子、已有建筑等硬方块不会直接覆盖。如果目标区域被硬方块占用，controller 会提示你换位置，或者明确说“清空这里再建”后才允许覆盖。
+从游戏内 `/bw ...` 触发的新建筑会带上附近场地扫描。controller 会先估算地面高度和落点，再在扫描半径内选择冲突最少、离玩家目标最近的位置。草、花、雪这类软阻挡会自动清理；如果所有合适位置仍然和木头、石头、箱子、已有建筑等硬方块冲突，controller 会自动清理目标体积后继续建造，不会把建筑需求直接拒绝掉。
 
 普通游戏操作会走 `run_command`。例如“我想白天”会生成 `time set day`，“别下雨”会生成 `weather clear`，“我想创造模式”会生成 `gamemode creative <玩家名>`。Fabric 执行端会再做命令白名单校验，只允许 `time/weather/difficulty/gamerule/gamemode/effect/enchant/experience/xp/tp/teleport/spawnpoint/setworldspawn/summon` 这类 Minecraft 命令，不执行 `op/stop/execute/fill/setblock` 等高风险命令。
 
@@ -290,7 +290,7 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 - 方块坐标必须是相对坐标。
 - 材质必须是 `minecraft:xxx`。
 - 建筑需求先由大模型理解和规划，不要只靠“木屋/房子”关键词套模板。
-- 下发前必须结合附近扫描做场地评估：地面高度、目标体积、已有方块重叠和是否允许清理。
+- 下发前必须结合附近扫描做场地评估：地面高度、目标体积、已有方块重叠、自动择址和必要清理。
 - 普通游戏操作使用 `run_command`，但只能下发白名单内的 Minecraft 命令。
 - 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。
 - 执行结果必须通过 `data/builds/` 的逐块校验报告确认。

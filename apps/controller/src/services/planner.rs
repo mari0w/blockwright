@@ -154,16 +154,12 @@ impl Planner {
         }
 
         let blueprint = blueprints.first_by_tag("house").await?;
-        let placement = assess_placement(input, &blueprint);
         let PlacementDecision::Ready {
             origin,
             clear_existing,
             pre_clear_blocks,
             note: _,
-        } = placement
-        else {
-            return None;
-        };
+        } = assess_placement(input, &blueprint);
 
         let mut actions = Vec::new();
         if !pre_clear_blocks.is_empty() {
@@ -242,38 +238,23 @@ impl Planner {
             material_count = blueprint.materials.len(),
             "codex blueprint json parsed"
         );
-        let placement = match assess_placement(input, &blueprint) {
-            PlacementDecision::Ready {
-                origin,
-                clear_existing,
-                pre_clear_blocks,
-                note,
-            } => {
-                tracing::info!(
-                    blueprint_id = %blueprint.id,
-                    world = ?origin.world,
-                    origin_x = origin.x,
-                    origin_y = origin.y,
-                    origin_z = origin.z,
-                    clear_existing,
-                    pre_clear_count = pre_clear_blocks.len(),
-                    "codex blueprint placement assessed"
-                );
-                (origin, clear_existing, pre_clear_blocks, note)
-            }
-            PlacementDecision::Blocked(message) => {
-                tracing::warn!(
-                    blueprint_id = %blueprint.id,
-                    reason = %message,
-                    "codex blueprint placement blocked"
-                );
-                return Some(PlanResult {
-                    reply: message.clone(),
-                    summary: "场地被已有方块占用".to_string(),
-                    actions: vec![GameAction::Chat { message }],
-                });
-            }
-        };
+        let PlacementDecision::Ready {
+            origin,
+            clear_existing,
+            pre_clear_blocks,
+            note,
+        } = assess_placement(input, &blueprint);
+        tracing::info!(
+            blueprint_id = %blueprint.id,
+            world = ?origin.world,
+            origin_x = origin.x,
+            origin_y = origin.y,
+            origin_z = origin.z,
+            clear_existing,
+            pre_clear_count = pre_clear_blocks.len(),
+            "codex blueprint placement assessed"
+        );
+        let placement = (origin, clear_existing, pre_clear_blocks, note);
         let blueprint = match blueprints.save(blueprint).await {
             Ok(blueprint) => blueprint,
             Err(error) => {
@@ -384,6 +365,14 @@ struct PlacementCollision {
     material: String,
 }
 
+struct PlacementCandidate {
+    origin: BlockOrigin,
+    target_collisions: Vec<PlacementCollision>,
+    volume_collisions: Vec<PlacementCollision>,
+    distance_score: i32,
+    has_known_ground: bool,
+}
+
 enum PlacementDecision {
     Ready {
         origin: BlockOrigin,
@@ -391,7 +380,6 @@ enum PlacementDecision {
         pre_clear_blocks: Vec<crate::domain::types::BlueprintBlock>,
         note: String,
     },
-    Blocked(String),
 }
 
 fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDecision {
@@ -414,12 +402,21 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         };
     }
 
-    let target_positions = target_position_set(&origin, &blueprint.blocks);
-    let target_collisions = placement_collisions(scan, &target_positions);
-    let volume_collisions = bounds
-        .as_ref()
-        .map(|bounds| placement_volume_collisions(scan, &origin, bounds, &target_positions))
-        .unwrap_or_default();
+    let candidate = choose_placement_candidate(input, scan, bounds.as_ref(), &blueprint.blocks)
+        .unwrap_or_else(|| {
+            placement_candidate(scan, origin, false, bounds.as_ref(), &blueprint.blocks)
+        });
+    let shifted_note = if candidate.distance_score > 0 {
+        format!(
+            "已在附近自动选择更合适落点（距扫描中心 {} 格），",
+            candidate.distance_score
+        )
+    } else {
+        String::new()
+    };
+    let origin = candidate.origin;
+    let target_collisions = candidate.target_collisions;
+    let volume_collisions = candidate.volume_collisions;
     let all_collisions = target_collisions
         .iter()
         .chain(volume_collisions.iter())
@@ -432,24 +429,10 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
             clear_existing: false,
             pre_clear_blocks: Vec::new(),
             note: format!(
-                "已根据附近扫描把地基放在 y={}，目标区域没有检测到重叠方块，",
-                origin_y
+                "{}已根据附近扫描把地基放在 y={}，目标区域没有检测到重叠方块，",
+                shifted_note, origin_y
             ),
         };
-    }
-
-    let explicit_clear = wants_clear_existing(&input.text);
-    let blocking = all_collisions
-        .iter()
-        .copied()
-        .filter(|collision| !explicit_clear && !is_auto_clear_material(collision.material.as_str()))
-        .collect::<Vec<_>>();
-    if !blocking.is_empty() {
-        return PlacementDecision::Blocked(format!(
-            "我已经生成了建筑方案，但你面前目标区域会和 {} 个已有方块重叠（{}）。我不会直接覆盖这些方块；请换个空地，或者明确说“清空这里再建”。",
-            blocking.len(),
-            summarize_collisions(blocking.iter().copied())
-        ));
     }
 
     let pre_clear_blocks = volume_collisions
@@ -462,22 +445,149 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         })
         .collect::<Vec<_>>();
     let origin_y = origin.y;
-    let collision_label = if explicit_clear {
-        "已有方块"
-    } else {
+    let collision_label = if all_collisions
+        .iter()
+        .all(|collision| is_auto_clear_material(collision.material.as_str()))
+    {
         "软阻挡方块"
+    } else {
+        "已有方块"
     };
     PlacementDecision::Ready {
         origin,
         clear_existing: !target_collisions.is_empty(),
         pre_clear_blocks,
         note: format!(
-            "已根据附近扫描把地基放在 y={}，并会先处理 {} 个{}，",
+            "{}已根据附近扫描把地基放在 y={}，并会先处理 {} 个{}，",
+            shifted_note,
             origin_y,
             all_collisions.len(),
             collision_label
         ),
     }
+}
+
+fn choose_placement_candidate(
+    input: &PlannerInput,
+    scan: &WorldScan,
+    bounds: Option<&BlueprintBounds>,
+    blocks: &[crate::domain::types::BlueprintBlock],
+) -> Option<PlacementCandidate> {
+    let (offset_x, offset_z) = blueprint_center_offset(bounds);
+    let radius = scan.radius.min(10) as i32;
+    let mut best: Option<PlacementCandidate> = None;
+
+    for distance in 0..=radius {
+        for dx in -distance..=distance {
+            for dz in -distance..=distance {
+                if dx.abs().max(dz.abs()) != distance {
+                    continue;
+                }
+
+                let origin_x = scan.center_x + dx - offset_x;
+                let origin_z = scan.center_z + dz - offset_z;
+                let ground_y = ground_y_for_footprint(input, scan, origin_x, origin_z, bounds);
+                let origin_y = ground_y.map_or_else(
+                    || {
+                        input
+                            .position
+                            .as_ref()
+                            .map(|position| position.y.round() as i32)
+                            .unwrap_or(scan.center_y)
+                    },
+                    |ground_y| ground_y + 1,
+                );
+                let candidate = placement_candidate(
+                    scan,
+                    BlockOrigin {
+                        world: Some(scan.world.clone()),
+                        x: origin_x,
+                        y: origin_y,
+                        z: origin_z,
+                    },
+                    ground_y.is_some(),
+                    bounds,
+                    blocks,
+                );
+
+                let replace = best
+                    .as_ref()
+                    .map(|best| {
+                        placement_candidate_score(&candidate) < placement_candidate_score(best)
+                    })
+                    .unwrap_or(true);
+                if replace {
+                    best = Some(candidate);
+                }
+            }
+        }
+
+        if best
+            .as_ref()
+            .map(|candidate| collision_count(candidate) == 0)
+            .unwrap_or(false)
+        {
+            break;
+        }
+    }
+
+    best
+}
+
+fn placement_candidate(
+    scan: &WorldScan,
+    origin: BlockOrigin,
+    has_known_ground: bool,
+    bounds: Option<&BlueprintBounds>,
+    blocks: &[crate::domain::types::BlueprintBlock],
+) -> PlacementCandidate {
+    let target_positions = target_position_set(&origin, blocks);
+    let target_collisions = placement_collisions(scan, &target_positions);
+    let volume_collisions = bounds
+        .map(|bounds| placement_volume_collisions(scan, &origin, bounds, &target_positions))
+        .unwrap_or_default();
+    let distance_score = (origin.x - scan.center_x).abs() + (origin.z - scan.center_z).abs();
+
+    PlacementCandidate {
+        origin,
+        target_collisions,
+        volume_collisions,
+        distance_score,
+        has_known_ground,
+    }
+}
+
+fn placement_candidate_score(candidate: &PlacementCandidate) -> (usize, usize, usize, i32) {
+    (
+        usize::from(!candidate.has_known_ground),
+        hard_collision_count(candidate),
+        collision_count(candidate),
+        candidate.distance_score,
+    )
+}
+
+fn collision_count(candidate: &PlacementCandidate) -> usize {
+    candidate.target_collisions.len() + candidate.volume_collisions.len()
+}
+
+fn hard_collision_count(candidate: &PlacementCandidate) -> usize {
+    candidate
+        .target_collisions
+        .iter()
+        .chain(candidate.volume_collisions.iter())
+        .filter(|collision| !is_auto_clear_material(collision.material.as_str()))
+        .count()
+}
+
+fn blueprint_center_offset(bounds: Option<&BlueprintBounds>) -> (i32, i32) {
+    bounds
+        .map(|bounds| {
+            (
+                (bounds.min_x + bounds.max_x) / 2,
+                (bounds.min_z + bounds.max_z) / 2,
+            )
+        })
+        .unwrap_or((0, 0))
 }
 
 fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> BlockOrigin {
@@ -494,14 +604,7 @@ fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> B
             });
     };
 
-    let (offset_x, offset_z) = bounds
-        .map(|bounds| {
-            (
-                (bounds.min_x + bounds.max_x) / 2,
-                (bounds.min_z + bounds.max_z) / 2,
-            )
-        })
-        .unwrap_or((0, 0));
+    let (offset_x, offset_z) = blueprint_center_offset(bounds);
     let x = scan.center_x - offset_x;
     let z = scan.center_z - offset_z;
     let y = ground_y_for_footprint(input, scan, x, z, bounds).map_or_else(
@@ -639,17 +742,6 @@ fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<B
     Some(bounds)
 }
 
-fn wants_clear_existing(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    text.contains("清空")
-        || text.contains("清理")
-        || text.contains("覆盖")
-        || text.contains("拆掉")
-        || text.contains("铲平")
-        || lower.contains("clear")
-        || lower.contains("overwrite")
-}
-
 fn is_auto_clear_material(material: &str) -> bool {
     matches!(
         material,
@@ -676,34 +768,6 @@ fn is_auto_clear_material(material: &str) -> bool {
             | "minecraft:brown_mushroom"
             | "minecraft:red_mushroom"
     )
-}
-
-fn summarize_collisions<'a>(collisions: impl Iterator<Item = &'a PlacementCollision>) -> String {
-    let mut counts = HashMap::<String, u32>::new();
-    let mut samples = Vec::new();
-    for collision in collisions {
-        *counts.entry(collision.material.clone()).or_default() += 1;
-        if samples.len() < 3 {
-            samples.push(format!(
-                "{}@{}/{}/{}",
-                collision.material, collision.x, collision.y, collision.z
-            ));
-        }
-    }
-
-    let mut materials = counts.into_iter().collect::<Vec<_>>();
-    materials.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
-    let material_summary = materials
-        .into_iter()
-        .take(3)
-        .map(|(material, count)| format!("{material} x{count}"))
-        .collect::<Vec<_>>()
-        .join("、");
-    if samples.is_empty() {
-        material_summary
-    } else {
-        format!("{material_summary}；示例 {}", samples.join("、"))
-    }
 }
 
 fn requested_item(original: &str, lower_text: &str) -> Option<RequestedItem> {
@@ -1387,7 +1451,7 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn codex_build_blocks_hard_overlap_without_clear_request() {
+    async fn codex_build_shifts_away_from_hard_overlap() {
         let store = empty_store("codex-site-hard-block").await;
         let planner = planner_with_fake_codex(
             "codex-site-hard-block",
@@ -1416,6 +1480,7 @@ BLOCKWRIGHT_JSON
                         pitch: None,
                     }),
                     nearby_scan: Some(scan_with_blocks(vec![
+                        scan_block(19, 63, 30, "minecraft:grass_block"),
                         scan_block(20, 63, 30, "minecraft:grass_block"),
                         scan_block(20, 64, 30, "minecraft:oak_log"),
                     ])),
@@ -1425,10 +1490,72 @@ BLOCKWRIGHT_JSON
             )
             .await;
 
-        assert_eq!(result.summary, "场地被已有方块占用");
-        assert!(result.reply.contains("清空这里再建"));
-        assert!(matches!(result.actions[0], GameAction::Chat { .. }));
-        assert!(store.get("blocked-room").await.is_none());
+        assert_eq!(result.summary, "建造蓝图 blocked-room");
+        assert!(result.reply.contains("自动选择更合适落点"));
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                origin: BlockOrigin { y: 64, .. },
+                clear_existing: false,
+                ..
+            }
+        ));
+        assert!(store.get("blocked-room").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn codex_build_auto_clears_when_no_better_position_exists() {
+        let store = empty_store("codex-site-auto-clear").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-auto-clear",
+            r#"{
+  "id": "auto-clear-room",
+  "name": "自动清理房间",
+  "description": "测试所有候选点都有硬方块时自动覆盖。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["room"]
+}"#,
+        );
+        let mut blocks = Vec::new();
+        blocks.push(scan_block(20, 63, 30, "minecraft:grass_block"));
+        for x in 12..=28 {
+            for z in 22..=38 {
+                blocks.push(scan_block(x, 64, z, "minecraft:oak_log"));
+            }
+        }
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(blocks)),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 auto-clear-room");
+        assert!(result.reply.contains("已有方块"));
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                clear_existing: true,
+                ..
+            }
+        ));
+        assert!(store.get("auto-clear-room").await.is_some());
     }
 
     #[tokio::test]
