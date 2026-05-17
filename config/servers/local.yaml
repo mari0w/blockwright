@@ -1,0 +1,22 @@
+server:
+  name: local
+  environment: local
+  app_name: blockwright-controller
+  host: 127.0.0.1
+  port: 8765
+
+storage:
+  data_dir: data
+
+minecraft:
+  default_server_id: local-paper
+
+security:
+  shared_token: local-dev-token
+  require_token: false
+
+codex:
+  enabled: false
+  command: codex
+  timeout_seconds: 120
+

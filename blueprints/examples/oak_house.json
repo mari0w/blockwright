@@ -1,0 +1,74 @@
+{
+  "id": "oak-house-small",
+  "name": "小型橡木屋",
+  "description": "第一版示例蓝图：一个 5x4x5 的小木屋轮廓，用来验证自动建造链路。",
+  "size": {
+    "width": 5,
+    "height": 4,
+    "depth": 5
+  },
+  "materials": [
+    {
+      "material": "minecraft:oak_planks",
+      "count": 42
+    },
+    {
+      "material": "minecraft:glass",
+      "count": 4
+    },
+    {
+      "material": "minecraft:oak_door",
+      "count": 1
+    }
+  ],
+  "blocks": [
+    { "x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 0, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 2, "y": 0, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 3, "y": 0, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 0, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 0, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 0, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 2, "y": 0, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 3, "y": 0, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 0, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 0, "z": 1, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 0, "z": 2, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 0, "z": 3, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 0, "z": 1, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 0, "z": 2, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 0, "z": 3, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 1, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 1, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 1, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 1, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 1, "z": 0, "material": "minecraft:glass" },
+    { "x": 3, "y": 1, "z": 0, "material": "minecraft:glass" },
+    { "x": 0, "y": 1, "z": 2, "material": "minecraft:glass" },
+    { "x": 4, "y": 1, "z": 2, "material": "minecraft:glass" },
+    { "x": 2, "y": 1, "z": 4, "material": "minecraft:oak_door" },
+    { "x": 0, "y": 2, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 2, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 2, "y": 2, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 3, "y": 2, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 2, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 2, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 2, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 2, "y": 2, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 3, "y": 2, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 2, "z": 4, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 2, "z": 1, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 2, "z": 2, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 2, "z": 3, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 2, "z": 1, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 2, "z": 2, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 2, "z": 3, "material": "minecraft:oak_planks" },
+    { "x": 0, "y": 3, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 1, "y": 3, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 2, "y": 3, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 3, "y": 3, "z": 0, "material": "minecraft:oak_planks" },
+    { "x": 4, "y": 3, "z": 0, "material": "minecraft:oak_planks" }
+  ],
+  "tags": ["house", "wood", "starter"]
+}
+

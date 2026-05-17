@@ -1,0 +1,15 @@
+name: Blockwright
+version: ${version}
+main: com.charles.blockwright.BlockwrightPlugin
+api-version: "1.21"
+author: charles
+description: Local AI/Codex assistant bridge for Minecraft building and item actions.
+commands:
+  bw:
+    description: Talk to the local Blockwright controller.
+    usage: /bw ask <message>
+    permission: blockwright.use
+permissions:
+  blockwright.use:
+    description: Allows players to use /bw.
+    default: op

@@ -1,0 +1,12 @@
+target/
+data/
+.env
+.env.*
+!.env.example
+.gradle/
+build/
+plugins/paper/build/
+*.log
+*.class
+*.jar
+

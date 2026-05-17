@@ -1,0 +1,5 @@
+controller-url: "http://127.0.0.1:8765"
+server-id: "local-paper"
+shared-token: "local-dev-token"
+poll-interval-ticks: 40
+
