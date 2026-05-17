@@ -40,6 +40,55 @@ http://127.0.0.1:8765
 curl http://127.0.0.1:8765/health
 ```
 
+## 测试和覆盖率
+
+controller 单元测试和 API 集成测试：
+
+```bash
+cargo test --workspace
+```
+
+controller 覆盖率门禁要求不低于 80%：
+
+```bash
+cargo llvm-cov --workspace --all-targets --ignore-filename-regex 'apps/controller/src/main.rs' --fail-under-lines 80
+```
+
+Paper 插件测试：
+
+```bash
+cd plugins/paper
+gradle test
+```
+
+全量本地检查也可以直接跑：
+
+```bash
+make test
+```
+
+## 聊天工具接入
+
+controller 支持把不同聊天入口统一成一类消息，再转成 Minecraft 任务：
+
+- Minecraft 游戏内命令：`/bw <需求>`、`/bw ask <需求>`、`/bw chat <需求>`。
+- 通用本地机器人入口：`POST /api/robot/message`，支持文字和图片附件。
+- 钉钉应用机器人：使用 Stream 模式接收消息，适合本地运行，不需要公网 webhook 回调地址。
+
+真实聊天工具配置默认放在：
+
+```text
+config/chat.local.yaml
+```
+
+这个文件已加入 `.gitignore`，不要提交真实 webhook、client secret 或 token。仓库只保留示例：
+
+```bash
+cp config/chat.example.yaml config/chat.local.yaml
+```
+
+钉钉接入要使用“应用机器人 + Stream 模式”。不要用“群自定义机器人 Webhook”作为接收入口，因为它只能发群消息，不能接收用户消息，也不适合本地 Minecraft 场景。
+
 模拟游戏内命令：
 
 ```bash

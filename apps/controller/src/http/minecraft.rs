@@ -59,6 +59,7 @@ async fn handle_message(
                 text: request.text,
                 player: Some(request.player),
                 position: request.position,
+                attachments: Vec::new(),
             },
             &state.blueprints,
         )

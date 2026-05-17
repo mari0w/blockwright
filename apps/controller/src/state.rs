@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    config::AppConfig,
+    config::{self, AppConfig, ChatRuntimeConfig},
     integrations::codex::CodexClient,
     services::{blueprint_store::BlueprintStore, job_queue::JobQueue, planner::Planner},
 };
@@ -13,6 +13,7 @@ pub struct AppState {
     pub jobs: JobQueue,
     pub planner: Planner,
     pub codex: CodexClient,
+    pub chat: ChatRuntimeConfig,
 }
 
 impl AppState {
@@ -20,6 +21,7 @@ impl AppState {
         let config = Arc::new(config);
         let blueprints = BlueprintStore::new(config.storage.data_dir.join("blueprints")).await?;
         seed_default_blueprint(&blueprints).await?;
+        let chat = config::load_chat_runtime_config(&config.chat.config_path)?;
 
         Ok(Self {
             codex: CodexClient::new(config.codex.clone()),
@@ -27,6 +29,7 @@ impl AppState {
             blueprints,
             jobs: JobQueue::default(),
             planner: Planner::default(),
+            chat,
         })
     }
 }

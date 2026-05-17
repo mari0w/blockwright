@@ -3,11 +3,9 @@ package com.charles.blockwright;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -26,7 +24,8 @@ public final class ControllerClient {
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
         this.gson = new Gson();
-        this.controllerUrl = trimTrailingSlash(plugin.getConfig().getString("controller-url", "http://127.0.0.1:8765"));
+        this.controllerUrl =
+                ControllerPaths.trimTrailingSlash(plugin.getConfig().getString("controller-url", "http://127.0.0.1:8765"));
         this.serverId = plugin.getConfig().getString("server-id", "local-paper");
         this.sharedToken = plugin.getConfig().getString("shared-token", "local-dev-token");
     }
@@ -40,7 +39,7 @@ public final class ControllerClient {
         request.text = text;
         request.position = JsonModels.PlayerPosition.fromLocation(location);
 
-        HttpRequest httpRequest = baseRequest("/api/minecraft/message")
+        HttpRequest httpRequest = baseRequest(ControllerPaths.minecraftMessagePath())
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(request)))
                 .build();
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -49,9 +48,7 @@ public final class ControllerClient {
     }
 
     public JsonModels.NextJobResponse nextJob() throws IOException, InterruptedException {
-        String path = "/api/minecraft/jobs/next?server_id=" +
-                URLEncoder.encode(serverId, StandardCharsets.UTF_8);
-        HttpRequest httpRequest = baseRequest(path).GET().build();
+        HttpRequest httpRequest = baseRequest(ControllerPaths.nextJobPath(serverId)).GET().build();
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response);
         return gson.fromJson(response.body(), JsonModels.NextJobResponse.class);
@@ -63,7 +60,7 @@ public final class ControllerClient {
         request.ok = ok;
         request.message = message;
 
-        HttpRequest httpRequest = baseRequest("/api/minecraft/jobs/" + jobId + "/result")
+        HttpRequest httpRequest = baseRequest(ControllerPaths.jobResultPath(jobId))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(request)))
                 .build();
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -81,12 +78,5 @@ public final class ControllerClient {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException("controller returned " + response.statusCode() + ": " + response.body());
         }
-    }
-
-    private static String trimTrailingSlash(String value) {
-        if (value.endsWith("/")) {
-            return value.substring(0, value.length() - 1);
-        }
-        return value;
     }
 }

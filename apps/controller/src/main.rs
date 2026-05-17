@@ -1,12 +1,4 @@
-mod app;
-mod config;
-mod domain;
-mod http;
-mod integrations;
-mod services;
-mod state;
-
-use state::AppState;
+use blockwright_controller::{app, config, state::AppState};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]

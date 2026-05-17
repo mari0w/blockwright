@@ -20,3 +20,5 @@ codex:
   command: codex
   timeout_seconds: 120
 
+chat:
+  config_path: config/chat.local.yaml

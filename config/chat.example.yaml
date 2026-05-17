@@ -1,0 +1,20 @@
+tools:
+  - name: dingtalk-local
+    platform: dingtalk
+    enabled: true
+    inbound: stream
+    default_server_id: local-paper
+    default_target_player: Steve
+    dingtalk:
+      client_id_env: DINGTALK_CLIENT_ID
+      client_secret_env: DINGTALK_CLIENT_SECRET
+      robot_code: dingxxxxxxxx
+
+  - name: minecraft-command
+    platform: minecraft
+    enabled: true
+    inbound: local_command
+    default_server_id: local-paper
+
+  # Telegram 后续接入时应使用 polling/getUpdates 一类的本地拉取方式。
+  # 不要在本地 Minecraft 场景启用 webhook-only 工具。

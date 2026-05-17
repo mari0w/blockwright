@@ -1,5 +1,9 @@
 target/
+.tools/
 data/
+config/chat.local.yaml
+config/chat.*.local.yaml
+config/secrets/
 .env
 .env.*
 !.env.example
@@ -9,4 +13,3 @@ plugins/paper/build/
 *.log
 *.class
 *.jar
-

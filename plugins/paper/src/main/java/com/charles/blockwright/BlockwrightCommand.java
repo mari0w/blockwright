@@ -1,6 +1,5 @@
 package com.charles.blockwright;
 
-import java.util.Arrays;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -23,14 +22,15 @@ public final class BlockwrightCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+        if (BlockwrightCommandText.isReload(args)) {
             plugin.reloadBlockwrightConfig();
             sender.sendMessage("Blockwright 配置已重新加载。");
             return true;
         }
 
-        if (args.length < 2 || !args[0].equalsIgnoreCase("ask")) {
-            sender.sendMessage("用法：/bw ask <你想要的物品或建筑>");
+        String text = BlockwrightCommandText.extractChatText(args);
+        if (text == null || text.isBlank()) {
+            sender.sendMessage(BlockwrightCommandText.usage());
             return true;
         }
 
@@ -39,7 +39,6 @@ public final class BlockwrightCommand implements CommandExecutor {
             return true;
         }
 
-        String text = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
         sender.sendMessage("Blockwright 正在处理你的需求...");
 
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -61,4 +60,3 @@ public final class BlockwrightCommand implements CommandExecutor {
         return true;
     }
 }
-

@@ -2,7 +2,8 @@ use axum::{extract::State, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{GameJob, PlayerPosition},
+    domain::types::{ChatAttachment, GameJob, PlayerPosition},
+    services::chat::IncomingChatMessage,
     services::planner::PlannerInput,
     state::AppState,
 };
@@ -16,6 +17,8 @@ pub struct RobotMessageRequest {
     pub target_player: Option<String>,
     pub text: String,
     pub position: Option<PlayerPosition>,
+    #[serde(default)]
+    pub attachments: Vec<ChatAttachment>,
 }
 
 #[derive(Debug, Serialize)]
@@ -32,20 +35,43 @@ async fn handle_message(
     State(state): State<AppState>,
     Json(request): Json<RobotMessageRequest>,
 ) -> Json<RobotMessageResponse> {
-    let target_player = request.target_player.clone();
+    Json(
+        queue_chat_message(
+            &state,
+            IncomingChatMessage {
+                platform: request.platform,
+                conversation_id: request.conversation_id,
+                sender: request.sender,
+                server_id: request.server_id,
+                target_player: request.target_player,
+                text: request.text,
+                position: request.position,
+                attachments: request.attachments,
+            },
+        )
+        .await,
+    )
+}
+
+pub(crate) async fn queue_chat_message(
+    state: &AppState,
+    message: IncomingChatMessage,
+) -> RobotMessageResponse {
+    let target_player = message.target_player.clone();
     let plan = state
         .planner
         .plan(
             PlannerInput {
-                text: request.text,
+                text: message.text,
                 player: target_player.clone(),
-                position: request.position,
+                position: message.position,
+                attachments: message.attachments,
             },
             &state.blueprints,
         )
         .await;
 
-    let server_id = request
+    let server_id = message
         .server_id
         .unwrap_or_else(|| state.config.minecraft.default_server_id.clone());
     let queued_job = if plan.actions.is_empty() {
@@ -60,15 +86,15 @@ async fn handle_message(
     };
 
     tracing::info!(
-        platform = %request.platform,
-        conversation_id = %request.conversation_id,
-        sender = %request.sender,
+        platform = %message.platform,
+        conversation_id = %message.conversation_id,
+        sender = %message.sender,
         queued = queued_job.is_some(),
         "handled robot message"
     );
 
-    Json(RobotMessageResponse {
+    RobotMessageResponse {
         reply: plan.reply,
         queued_job,
-    })
+    }
 }
