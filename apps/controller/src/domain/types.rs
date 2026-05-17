@@ -118,10 +118,16 @@ pub enum GameAction {
         blueprint_id: Option<String>,
         origin: BlockOrigin,
         blocks: Vec<BlueprintBlock>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        clear_existing: bool,
     },
     Chat {
         message: String,
     },
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

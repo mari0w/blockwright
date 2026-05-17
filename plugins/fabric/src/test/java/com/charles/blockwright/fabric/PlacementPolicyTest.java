@@ -9,13 +9,14 @@ import org.junit.jupiter.api.Test;
 final class PlacementPolicyTest {
     @Test
     void protectsExistingBlocksByDefaultPolicy() {
-        assertFalse(PlacementPolicy.canPlace(true, true));
-        assertTrue(PlacementPolicy.canPlace(false, true));
+        assertFalse(PlacementPolicy.canPlace(true, true, false));
+        assertTrue(PlacementPolicy.canPlace(false, true, false));
     }
 
     @Test
     void canAllowOverwriteWhenExplicitlyConfigured() {
-        assertTrue(PlacementPolicy.canPlace(true, false));
+        assertTrue(PlacementPolicy.canPlace(true, false, false));
+        assertTrue(PlacementPolicy.canPlace(true, true, true));
     }
 
     @Test

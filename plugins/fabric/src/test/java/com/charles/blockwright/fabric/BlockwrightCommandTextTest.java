@@ -30,6 +30,8 @@ final class BlockwrightCommandTextTest {
     @Test
     void detectsModificationRequestsThatNeedWorldScan() {
         assertTrue(BlockwrightCommandText.needsWorldScan("把我面前这个房子的窗户换成蓝色玻璃"));
-        assertFalse(BlockwrightCommandText.needsWorldScan("帮我盖一个木屋"));
+        assertTrue(BlockwrightCommandText.needsWorldScan("帮我盖一个木屋"));
+        assertTrue(BlockwrightCommandText.needsWorldScan("我要生成一个树屋"));
+        assertFalse(BlockwrightCommandText.needsWorldScan("给我钻石剑"));
     }
 }

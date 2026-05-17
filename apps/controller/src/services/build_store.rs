@@ -190,6 +190,7 @@ fn expected_actions(actions: &[GameAction]) -> Vec<ExpectedBuildAction> {
                 blueprint_id,
                 origin,
                 blocks,
+                ..
             } => Some(ExpectedBuildAction {
                 blueprint_id: blueprint_id.clone(),
                 origin: origin.clone(),
@@ -288,6 +289,7 @@ mod tests {
                     material: "minecraft:oak_planks".to_string(),
                 },
             ],
+            clear_existing: false,
         }
     }
 

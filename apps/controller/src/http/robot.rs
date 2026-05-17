@@ -65,6 +65,7 @@ pub(crate) async fn queue_chat_message(
                 text: message.text,
                 player: target_player.clone(),
                 position: message.position,
+                nearby_scan: None,
                 attachments: message.attachments,
             },
             &state.blueprints,

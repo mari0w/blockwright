@@ -55,6 +55,8 @@ public final class JsonModels {
         public String blueprintId;
         public BlockOrigin origin;
         public List<BlueprintBlock> blocks;
+        @SerializedName("clear_existing")
+        public boolean clearExisting;
     }
 
     public static final class PlayerPosition {

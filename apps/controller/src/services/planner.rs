@@ -1,17 +1,20 @@
 use crate::{
     domain::types::{
         BlockOrigin, Blueprint, ChatAttachment, ChatAttachmentKind, GameAction, PlayerPosition,
+        WorldScan,
     },
     integrations::codex::CodexClient,
     services::blueprint_store::BlueprintStore,
 };
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
     pub text: String,
     pub player: Option<String>,
     pub position: Option<PlayerPosition>,
+    pub nearby_scan: Option<WorldScan>,
     pub attachments: Vec<ChatAttachment>,
 }
 
@@ -141,16 +144,32 @@ impl Planner {
         }
 
         let blueprint = blueprints.first_by_tag("house").await?;
-        let origin = input
-            .position
-            .as_ref()
-            .map(origin_in_front_of_player)
-            .unwrap_or(BlockOrigin {
-                world: None,
-                x: 0,
-                y: 64,
-                z: 0,
+        let placement = assess_placement(input, &blueprint);
+        let PlacementDecision::Ready {
+            origin,
+            clear_existing,
+            pre_clear_blocks,
+            note: _,
+        } = placement
+        else {
+            return None;
+        };
+
+        let mut actions = Vec::new();
+        if !pre_clear_blocks.is_empty() {
+            actions.push(GameAction::PlaceBlocks {
+                blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
+                origin: origin.clone(),
+                blocks: pre_clear_blocks,
+                clear_existing: true,
             });
+        }
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: Some(blueprint.id.clone()),
+            origin,
+            blocks: blueprint.blocks.clone(),
+            clear_existing,
+        });
 
         Some(PlanResult {
             reply: format!(
@@ -158,11 +177,7 @@ impl Planner {
                 blueprint.name
             ),
             summary: format!("建造蓝图 {}", blueprint.id),
-            actions: vec![GameAction::PlaceBlocks {
-                blueprint_id: Some(blueprint.id),
-                origin,
-                blocks: blueprint.blocks,
-            }],
+            actions,
         })
     }
 
@@ -193,6 +208,21 @@ impl Planner {
                 return None;
             }
         };
+        let placement = match assess_placement(input, &blueprint) {
+            PlacementDecision::Ready {
+                origin,
+                clear_existing,
+                pre_clear_blocks,
+                note,
+            } => (origin, clear_existing, pre_clear_blocks, note),
+            PlacementDecision::Blocked(message) => {
+                return Some(PlanResult {
+                    reply: message.clone(),
+                    summary: "场地被已有方块占用".to_string(),
+                    actions: vec![GameAction::Chat { message }],
+                });
+            }
+        };
         let blueprint = match blueprints.save(blueprint).await {
             Ok(blueprint) => blueprint,
             Err(error) => {
@@ -205,28 +235,30 @@ impl Planner {
             block_count = blueprint.blocks.len(),
             "planned with codex blueprint planner"
         );
-        let origin = input
-            .position
-            .as_ref()
-            .map(origin_in_front_of_player)
-            .unwrap_or(BlockOrigin {
-                world: None,
-                x: 0,
-                y: 64,
-                z: 0,
+        let (origin, clear_existing, pre_clear_blocks, placement_note) = placement;
+        let mut actions = Vec::new();
+        if !pre_clear_blocks.is_empty() {
+            actions.push(GameAction::PlaceBlocks {
+                blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
+                origin: origin.clone(),
+                blocks: pre_clear_blocks,
+                clear_existing: true,
             });
+        }
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: Some(blueprint.id.clone()),
+            origin,
+            blocks: blueprint.blocks.clone(),
+            clear_existing,
+        });
 
         Some(PlanResult {
             reply: format!(
-                "我已经生成并保存蓝图 `{}`，会按这份蓝图在你面前建造。",
-                blueprint.name
+                "我已经生成并保存蓝图 `{}`，{}会按这份蓝图在你面前建造。",
+                blueprint.name, placement_note
             ),
             summary: format!("建造蓝图 {}", blueprint.id),
-            actions: vec![GameAction::PlaceBlocks {
-                blueprint_id: Some(blueprint.id),
-                origin,
-                blocks: blueprint.blocks,
-            }],
+            actions,
         })
     }
 
@@ -275,6 +307,344 @@ struct RequestedItem {
     summary_name: &'static str,
     reply_name: &'static str,
     count: u32,
+}
+
+struct BlueprintBounds {
+    min_x: i32,
+    max_x: i32,
+    min_y: i32,
+    max_y: i32,
+    min_z: i32,
+    max_z: i32,
+}
+
+struct PlacementCollision {
+    x: i32,
+    y: i32,
+    z: i32,
+    material: String,
+}
+
+enum PlacementDecision {
+    Ready {
+        origin: BlockOrigin,
+        clear_existing: bool,
+        pre_clear_blocks: Vec<crate::domain::types::BlueprintBlock>,
+        note: String,
+    },
+    Blocked(String),
+}
+
+fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDecision {
+    let bounds = blueprint_bounds(&blueprint.blocks);
+    let origin = placement_origin(input, bounds.as_ref());
+    let Some(scan) = input.nearby_scan.as_ref() else {
+        return PlacementDecision::Ready {
+            origin,
+            clear_existing: false,
+            pre_clear_blocks: Vec::new(),
+            note: "这次没有收到场地扫描数据，按玩家当前位置估算落点，".to_string(),
+        };
+    };
+    if blueprint.blocks.is_empty() {
+        return PlacementDecision::Ready {
+            origin,
+            clear_existing: false,
+            pre_clear_blocks: Vec::new(),
+            note: "蓝图没有方块，".to_string(),
+        };
+    }
+
+    let target_positions = target_position_set(&origin, &blueprint.blocks);
+    let target_collisions = placement_collisions(scan, &target_positions);
+    let volume_collisions = bounds
+        .as_ref()
+        .map(|bounds| placement_volume_collisions(scan, &origin, bounds, &target_positions))
+        .unwrap_or_default();
+    let all_collisions = target_collisions
+        .iter()
+        .chain(volume_collisions.iter())
+        .collect::<Vec<_>>();
+
+    if all_collisions.is_empty() {
+        let origin_y = origin.y;
+        return PlacementDecision::Ready {
+            origin,
+            clear_existing: false,
+            pre_clear_blocks: Vec::new(),
+            note: format!(
+                "已根据附近扫描把地基放在 y={}，目标区域没有检测到重叠方块，",
+                origin_y
+            ),
+        };
+    }
+
+    let explicit_clear = wants_clear_existing(&input.text);
+    let blocking = all_collisions
+        .iter()
+        .copied()
+        .filter(|collision| !explicit_clear && !is_auto_clear_material(collision.material.as_str()))
+        .collect::<Vec<_>>();
+    if !blocking.is_empty() {
+        return PlacementDecision::Blocked(format!(
+            "我已经生成了建筑方案，但你面前目标区域会和 {} 个已有方块重叠（{}）。我不会直接覆盖这些方块；请换个空地，或者明确说“清空这里再建”。",
+            blocking.len(),
+            summarize_collisions(blocking.iter().copied())
+        ));
+    }
+
+    let pre_clear_blocks = volume_collisions
+        .iter()
+        .map(|collision| crate::domain::types::BlueprintBlock {
+            x: collision.x - origin.x,
+            y: collision.y - origin.y,
+            z: collision.z - origin.z,
+            material: "minecraft:air".to_string(),
+        })
+        .collect::<Vec<_>>();
+    let origin_y = origin.y;
+    let collision_label = if explicit_clear {
+        "已有方块"
+    } else {
+        "软阻挡方块"
+    };
+    PlacementDecision::Ready {
+        origin,
+        clear_existing: !target_collisions.is_empty(),
+        pre_clear_blocks,
+        note: format!(
+            "已根据附近扫描把地基放在 y={}，并会先处理 {} 个{}，",
+            origin_y,
+            all_collisions.len(),
+            collision_label
+        ),
+    }
+}
+
+fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> BlockOrigin {
+    let Some(scan) = input.nearby_scan.as_ref() else {
+        return input
+            .position
+            .as_ref()
+            .map(origin_in_front_of_player)
+            .unwrap_or(BlockOrigin {
+                world: None,
+                x: 0,
+                y: 64,
+                z: 0,
+            });
+    };
+
+    let (offset_x, offset_z) = bounds
+        .map(|bounds| {
+            (
+                (bounds.min_x + bounds.max_x) / 2,
+                (bounds.min_z + bounds.max_z) / 2,
+            )
+        })
+        .unwrap_or((0, 0));
+    let x = scan.center_x - offset_x;
+    let z = scan.center_z - offset_z;
+    let y = ground_y_for_footprint(input, scan, x, z, bounds).map_or_else(
+        || {
+            input
+                .position
+                .as_ref()
+                .map(|position| position.y.round() as i32)
+                .unwrap_or(scan.center_y)
+        },
+        |ground_y| ground_y + 1,
+    );
+
+    BlockOrigin {
+        world: Some(scan.world.clone()),
+        x,
+        y,
+        z,
+    }
+}
+
+fn ground_y_for_footprint(
+    input: &PlannerInput,
+    scan: &WorldScan,
+    origin_x: i32,
+    origin_z: i32,
+    bounds: Option<&BlueprintBounds>,
+) -> Option<i32> {
+    let max_ground_y = input
+        .position
+        .as_ref()
+        .map(|position| position.y.floor() as i32 - 1)
+        .unwrap_or(scan.center_y - 1);
+    let (min_x, max_x, min_z, max_z) = bounds
+        .map(|bounds| {
+            (
+                origin_x + bounds.min_x,
+                origin_x + bounds.max_x,
+                origin_z + bounds.min_z,
+                origin_z + bounds.max_z,
+            )
+        })
+        .unwrap_or((scan.center_x, scan.center_x, scan.center_z, scan.center_z));
+
+    scan.blocks
+        .iter()
+        .filter(|block| {
+            block.x >= min_x
+                && block.x <= max_x
+                && block.z >= min_z
+                && block.z <= max_z
+                && block.y <= max_ground_y
+        })
+        .map(|block| block.y)
+        .max()
+}
+
+fn target_position_set(
+    origin: &BlockOrigin,
+    blocks: &[crate::domain::types::BlueprintBlock],
+) -> HashSet<(i32, i32, i32)> {
+    blocks
+        .iter()
+        .map(|block| (origin.x + block.x, origin.y + block.y, origin.z + block.z))
+        .collect()
+}
+
+fn placement_collisions(
+    scan: &WorldScan,
+    target_positions: &HashSet<(i32, i32, i32)>,
+) -> Vec<PlacementCollision> {
+    scan.blocks
+        .iter()
+        .filter(|block| target_positions.contains(&(block.x, block.y, block.z)))
+        .map(|block| PlacementCollision {
+            x: block.x,
+            y: block.y,
+            z: block.z,
+            material: block.material.clone(),
+        })
+        .collect()
+}
+
+fn placement_volume_collisions(
+    scan: &WorldScan,
+    origin: &BlockOrigin,
+    bounds: &BlueprintBounds,
+    target_positions: &HashSet<(i32, i32, i32)>,
+) -> Vec<PlacementCollision> {
+    let min_x = origin.x + bounds.min_x;
+    let max_x = origin.x + bounds.max_x;
+    let min_y = origin.y + bounds.min_y;
+    let max_y = origin.y + bounds.max_y;
+    let min_z = origin.z + bounds.min_z;
+    let max_z = origin.z + bounds.max_z;
+
+    scan.blocks
+        .iter()
+        .filter(|block| {
+            block.x >= min_x
+                && block.x <= max_x
+                && block.y >= min_y
+                && block.y <= max_y
+                && block.z >= min_z
+                && block.z <= max_z
+                && !target_positions.contains(&(block.x, block.y, block.z))
+        })
+        .map(|block| PlacementCollision {
+            x: block.x,
+            y: block.y,
+            z: block.z,
+            material: block.material.clone(),
+        })
+        .collect()
+}
+
+fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<BlueprintBounds> {
+    let first = blocks.first()?;
+    let mut bounds = BlueprintBounds {
+        min_x: first.x,
+        max_x: first.x,
+        min_y: first.y,
+        max_y: first.y,
+        min_z: first.z,
+        max_z: first.z,
+    };
+    for block in blocks.iter().skip(1) {
+        bounds.min_x = bounds.min_x.min(block.x);
+        bounds.max_x = bounds.max_x.max(block.x);
+        bounds.min_y = bounds.min_y.min(block.y);
+        bounds.max_y = bounds.max_y.max(block.y);
+        bounds.min_z = bounds.min_z.min(block.z);
+        bounds.max_z = bounds.max_z.max(block.z);
+    }
+    Some(bounds)
+}
+
+fn wants_clear_existing(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    text.contains("清空")
+        || text.contains("清理")
+        || text.contains("覆盖")
+        || text.contains("拆掉")
+        || text.contains("铲平")
+        || lower.contains("clear")
+        || lower.contains("overwrite")
+}
+
+fn is_auto_clear_material(material: &str) -> bool {
+    matches!(
+        material,
+        "minecraft:grass"
+            | "minecraft:short_grass"
+            | "minecraft:tall_grass"
+            | "minecraft:fern"
+            | "minecraft:large_fern"
+            | "minecraft:dead_bush"
+            | "minecraft:snow"
+            | "minecraft:vine"
+            | "minecraft:dandelion"
+            | "minecraft:poppy"
+            | "minecraft:blue_orchid"
+            | "minecraft:allium"
+            | "minecraft:azure_bluet"
+            | "minecraft:red_tulip"
+            | "minecraft:orange_tulip"
+            | "minecraft:white_tulip"
+            | "minecraft:pink_tulip"
+            | "minecraft:oxeye_daisy"
+            | "minecraft:cornflower"
+            | "minecraft:lily_of_the_valley"
+            | "minecraft:brown_mushroom"
+            | "minecraft:red_mushroom"
+    )
+}
+
+fn summarize_collisions<'a>(collisions: impl Iterator<Item = &'a PlacementCollision>) -> String {
+    let mut counts = HashMap::<String, u32>::new();
+    let mut samples = Vec::new();
+    for collision in collisions {
+        *counts.entry(collision.material.clone()).or_default() += 1;
+        if samples.len() < 3 {
+            samples.push(format!(
+                "{}@{}/{}/{}",
+                collision.material, collision.x, collision.y, collision.z
+            ));
+        }
+    }
+
+    let mut materials = counts.into_iter().collect::<Vec<_>>();
+    materials.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    let material_summary = materials
+        .into_iter()
+        .take(3)
+        .map(|(material, count)| format!("{material} x{count}"))
+        .collect::<Vec<_>>()
+        .join("、");
+    if samples.is_empty() {
+        material_summary
+    } else {
+        format!("{material_summary}；示例 {}", samples.join("、"))
+    }
 }
 
 fn requested_item(original: &str, lower_text: &str) -> Option<RequestedItem> {
@@ -457,6 +827,7 @@ fn origin_in_front_of_player(position: &PlayerPosition) -> BlockOrigin {
 fn build_blueprint_prompt(input: &PlannerInput) -> String {
     let attachments =
         serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
+    let site_context = build_site_context(input);
     format!(
         r#"你是 Blockwright 的 Minecraft 建筑规划器。请把用户需求规划成一个可保存、可执行、可校验的蓝图 JSON。
 
@@ -471,15 +842,67 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
 - description 用中文简短写清楚设计思路和处理方式。
 - 玩家说“生成/建造/做一个/我要一个 + 建筑物名”时，直接生成可执行小型蓝图，不要返回聊天提示。
+- 你会收到 controller 的场地摘要；生成蓝图时要假设 controller 会把蓝图放在扫描中心附近的地面上，并会在下发前做重叠校验。
 
 用户文字：
 {text}
+
+场地摘要：
+{site_context}
 
 附件元数据：
 {attachments}
 "#,
         text = input.text.trim(),
+        site_context = site_context,
         attachments = attachments
+    )
+}
+
+fn build_site_context(input: &PlannerInput) -> String {
+    let Some(scan) = input.nearby_scan.as_ref() else {
+        return "未收到附近场地扫描；只能按玩家位置估算地面和落点。".to_string();
+    };
+    let max_ground_y = input
+        .position
+        .as_ref()
+        .map(|position| position.y.floor() as i32 - 1)
+        .unwrap_or(scan.center_y - 1);
+    let ground_y = scan
+        .blocks
+        .iter()
+        .filter(|block| block.y <= max_ground_y)
+        .map(|block| block.y)
+        .max();
+    let mut material_counts = HashMap::<String, u32>::new();
+    for block in &scan.blocks {
+        *material_counts.entry(block.material.clone()).or_default() += 1;
+    }
+    let mut materials = material_counts.into_iter().collect::<Vec<_>>();
+    materials.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    let material_summary = materials
+        .into_iter()
+        .take(6)
+        .map(|(material, count)| format!("{material} x{count}"))
+        .collect::<Vec<_>>()
+        .join("、");
+
+    format!(
+        "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。",
+        scan.world,
+        scan.center_x,
+        scan.center_y,
+        scan.center_z,
+        scan.radius,
+        scan.blocks.len(),
+        ground_y
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "未知".to_string()),
+        if material_summary.is_empty() {
+            "无".to_string()
+        } else {
+            material_summary
+        }
     )
 }
 
@@ -539,6 +962,7 @@ mod tests {
         config::CodexConfig,
         domain::types::{
             Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentSource, MaterialCount,
+            WorldScanBlock,
         },
     };
     use std::{
@@ -629,6 +1053,26 @@ BLOCKWRIGHT_JSON
         }
     }
 
+    fn scan_with_blocks(blocks: Vec<WorldScanBlock>) -> WorldScan {
+        WorldScan {
+            world: "minecraft:overworld".to_string(),
+            center_x: 20,
+            center_y: 64,
+            center_z: 30,
+            radius: 8,
+            blocks,
+        }
+    }
+
+    fn scan_block(x: i32, y: i32, z: i32, material: &str) -> WorldScanBlock {
+        WorldScanBlock {
+            x,
+            y,
+            z,
+            material: material.to_string(),
+        }
+    }
+
     #[tokio::test]
     async fn plans_diamond_sword() {
         let store = empty_store("sword").await;
@@ -638,6 +1082,7 @@ BLOCKWRIGHT_JSON
                     text: "给我一把钻石剑".to_string(),
                     player: Some("Steve".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -664,6 +1109,7 @@ BLOCKWRIGHT_JSON
                     text: "give me diamonds".to_string(),
                     player: Some("Alex".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -689,6 +1135,7 @@ BLOCKWRIGHT_JSON
                     text: "我要一个钻石稿子".to_string(),
                     player: Some("Alex".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -730,6 +1177,7 @@ BLOCKWRIGHT_JSON
                     text: "我要生成一个树屋".to_string(),
                     player: Some("Steve".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -773,6 +1221,7 @@ BLOCKWRIGHT_JSON
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -790,6 +1239,106 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
+    async fn codex_build_uses_scan_ground_and_soft_clear_policy() {
+        let store = empty_store("codex-site-soft-clear").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-soft-clear",
+            r#"{
+  "id": "site-aware-room",
+  "name": "场地感知房间",
+  "description": "根据当前地面高度生成一个小房间。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["room"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(vec![
+                        scan_block(20, 63, 30, "minecraft:grass_block"),
+                        scan_block(20, 64, 30, "minecraft:short_grass"),
+                    ])),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert!(result.reply.contains("地基放在 y=64"));
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                origin: BlockOrigin {
+                    x: 20,
+                    y: 64,
+                    z: 30,
+                    ..
+                },
+                clear_existing: true,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn codex_build_blocks_hard_overlap_without_clear_request() {
+        let store = empty_store("codex-site-hard-block").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-hard-block",
+            r#"{
+  "id": "blocked-room",
+  "name": "会重叠的房间",
+  "description": "测试硬方块重叠。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["room"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(vec![
+                        scan_block(20, 63, 30, "minecraft:grass_block"),
+                        scan_block(20, 64, 30, "minecraft:oak_log"),
+                    ])),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "场地被已有方块占用");
+        assert!(result.reply.contains("清空这里再建"));
+        assert!(matches!(result.actions[0], GameAction::Chat { .. }));
+        assert!(store.get("blocked-room").await.is_none());
+    }
+
+    #[tokio::test]
     async fn plans_house_from_blueprint_tag() {
         let store = empty_store("house").await;
         store
@@ -803,6 +1352,7 @@ BLOCKWRIGHT_JSON
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -833,6 +1383,7 @@ BLOCKWRIGHT_JSON
                         yaw: None,
                         pitch: None,
                     }),
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -862,6 +1413,7 @@ BLOCKWRIGHT_JSON
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -881,6 +1433,7 @@ BLOCKWRIGHT_JSON
                     text: "帮我根据图片复刻建筑".to_string(),
                     player: None,
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -892,6 +1445,7 @@ BLOCKWRIGHT_JSON
                     text: "你好".to_string(),
                     player: None,
                     position: None,
+                    nearby_scan: None,
                     attachments: Vec::new(),
                 },
                 &store,
@@ -915,6 +1469,7 @@ BLOCKWRIGHT_JSON
                     text: "照这个做".to_string(),
                     player: None,
                     position: None,
+                    nearby_scan: None,
                     attachments: vec![ChatAttachment {
                         kind: ChatAttachmentKind::Image,
                         source: ChatAttachmentSource::Url {
@@ -937,6 +1492,7 @@ BLOCKWRIGHT_JSON
             text: "照图片盖一个小塔".to_string(),
             player: None,
             position: None,
+            nearby_scan: None,
             attachments: Vec::new(),
         });
 
@@ -952,6 +1508,7 @@ BLOCKWRIGHT_JSON
             text: "我要钻石稿子".to_string(),
             player: Some("Steve".to_string()),
             position: None,
+            nearby_scan: None,
             attachments: Vec::new(),
         });
 

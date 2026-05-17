@@ -76,6 +76,7 @@ async fn handle_message(
                 text: request.text,
                 player: Some(request.player.clone()),
                 position: request.position,
+                nearby_scan: request.nearby_scan.clone(),
                 attachments: Vec::new(),
             },
             &state.blueprints,
@@ -306,6 +307,7 @@ fn planned_window_replacement(
         blueprint_id: Some(format!("{}:window-modification", candidate.record.id)),
         origin: action.origin.clone(),
         blocks,
+        clear_existing: false,
     }))
 }
 

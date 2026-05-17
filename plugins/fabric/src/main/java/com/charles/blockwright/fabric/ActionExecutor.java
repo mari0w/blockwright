@@ -108,7 +108,7 @@ public final class ActionExecutor {
             Block block = blockFromId(blockItem.material);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
             boolean occupied = !world.getBlockState(targetPos).isAir();
-            if (!PlacementPolicy.canPlace(occupied, config.protectExistingBlocks)) {
+            if (!PlacementPolicy.canPlace(occupied, config.protectExistingBlocks, action.clearExisting)) {
                 skippedExisting++;
                 continue;
             }
@@ -221,7 +221,8 @@ public final class ActionExecutor {
     private Block blockFromId(String blockId) {
         Identifier id = requireIdentifier(blockId, "方块");
         Block block = Registries.BLOCK.get(id);
-        if (Registries.BLOCK.getId(block).equals(Identifier.of("minecraft", "air"))) {
+        if (Registries.BLOCK.getId(block).equals(Identifier.of("minecraft", "air"))
+                && !id.equals(Identifier.of("minecraft", "air"))) {
             throw new IllegalArgumentException("不支持的 Minecraft 方块：" + blockId);
         }
         return block;

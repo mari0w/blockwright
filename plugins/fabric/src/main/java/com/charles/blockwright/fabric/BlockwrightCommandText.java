@@ -54,7 +54,33 @@ final class BlockwrightCommandText {
                 || text.contains("建筑")
                 || lower.contains("nearby")
                 || lower.contains("this");
-        return modifies && referencesNearby;
+        return (modifies && referencesNearby) || isBuildRequest(text, lower);
+    }
+
+    private static boolean isBuildRequest(String text, String lower) {
+        return text.contains("盖")
+                || text.contains("建造")
+                || text.contains("修建")
+                || text.contains("搭建")
+                || text.contains("造一个")
+                || text.contains("做一个")
+                || text.contains("生成")
+                || text.contains("房子")
+                || text.contains("木屋")
+                || text.contains("树屋")
+                || text.contains("房间")
+                || text.contains("建筑")
+                || text.contains("城堡")
+                || text.contains("塔")
+                || text.contains("桥")
+                || lower.contains("build")
+                || lower.contains("house")
+                || lower.contains("treehouse")
+                || lower.contains("tree house")
+                || lower.contains("room")
+                || lower.contains("castle")
+                || lower.contains("tower")
+                || lower.contains("bridge");
     }
 
     private static String join(String[] args, int start) {
