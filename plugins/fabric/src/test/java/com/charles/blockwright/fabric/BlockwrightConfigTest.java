@@ -16,6 +16,8 @@ final class BlockwrightConfigTest {
 
         assertEquals("http://127.0.0.1:8765", config.controllerUrl);
         assertEquals("hmcl-lan", config.serverId);
+        assertEquals(5, config.connectTimeoutSeconds);
+        assertEquals(180, config.requestTimeoutSeconds);
         assertTrue(config.protectExistingBlocks);
         assertEquals(5000, config.maxBlocksPerAction);
         assertEquals(8, config.scanRadius);
@@ -34,6 +36,8 @@ final class BlockwrightConfigTest {
                   "controllerUrl": "http://127.0.0.1:8765/",
                   "serverId": "",
                   "sharedToken": null,
+                  "connectTimeoutSeconds": 0,
+                  "requestTimeoutSeconds": 5,
                   "maxBlocksPerAction": 100000,
                   "scanRadius": 1,
                   "scanForwardBlocks": 100,
@@ -47,6 +51,8 @@ final class BlockwrightConfigTest {
         assertEquals("http://127.0.0.1:8765", config.controllerUrl);
         assertEquals("hmcl-lan", config.serverId);
         assertEquals("", config.sharedToken);
+        assertEquals(1, config.connectTimeoutSeconds);
+        assertEquals(30, config.requestTimeoutSeconds);
         assertEquals(50_000, config.maxBlocksPerAction);
         assertEquals(3, config.scanRadius);
         assertEquals(12, config.scanForwardBlocks);

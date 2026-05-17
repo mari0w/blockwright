@@ -1,5 +1,6 @@
 controller-url: "http://127.0.0.1:8765"
 server-id: "local-paper"
 shared-token: "local-dev-token"
+connect-timeout-seconds: 5
+request-timeout-seconds: 180
 poll-interval-ticks: 40
-

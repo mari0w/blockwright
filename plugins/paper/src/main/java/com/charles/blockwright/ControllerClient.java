@@ -17,11 +17,15 @@ public final class ControllerClient {
     private final String controllerUrl;
     private final String serverId;
     private final String sharedToken;
+    private final long connectTimeoutSeconds;
+    private final long requestTimeoutSeconds;
 
     public ControllerClient(BlockwrightPlugin plugin) {
         this.plugin = plugin;
+        this.connectTimeoutSeconds = plugin.getConfig().getLong("connect-timeout-seconds", 5L);
+        this.requestTimeoutSeconds = plugin.getConfig().getLong("request-timeout-seconds", 180L);
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
+                .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
                 .build();
         this.gson = new Gson();
         this.controllerUrl =
@@ -74,7 +78,7 @@ public final class ControllerClient {
 
     private HttpRequest.Builder baseRequest(String path) {
         return HttpRequest.newBuilder(URI.create(controllerUrl + path))
-                .timeout(Duration.ofSeconds(20))
+                .timeout(Duration.ofSeconds(requestTimeoutSeconds))
                 .header("Content-Type", "application/json")
                 .header("X-Blockwright-Token", sharedToken);
     }

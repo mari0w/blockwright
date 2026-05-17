@@ -136,6 +136,8 @@ data/builds/
   "controllerUrl": "http://127.0.0.1:8765",
   "serverId": "hmcl-lan",
   "sharedToken": "local-dev-token",
+  "connectTimeoutSeconds": 5,
+  "requestTimeoutSeconds": 180,
   "protectExistingBlocks": true,
   "maxBlocksPerAction": 5000,
   "scanRadius": 8,
@@ -147,6 +149,8 @@ data/builds/
 ```
 
 正常本机使用不用改。只有 controller 地址或 token 改了才需要改。
+
+`requestTimeoutSeconds` 默认 180 秒，因为启用 Codex CLI 或本地模型后，第一次理解请求可能明显超过 20 秒。游戏里如果提示请求超时，优先确认这个值是否还是旧配置里的 20 秒，必要时改成 180 后执行 `/bw reload` 或重启游戏。
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
 

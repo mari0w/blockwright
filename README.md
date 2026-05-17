@@ -165,6 +165,16 @@ cargo run -p blockwright-controller
 
 controller 地址默认是 `http://127.0.0.1:8765`。因为 Fabric 模组运行在房主电脑上，所以这个地址不用改成局域网 IP；其他玩家也不需要访问自己的 `127.0.0.1`。
 
+第一次接入 Codex CLI 或本地模型时，规划可能超过 20 秒。Fabric 配置里的 `requestTimeoutSeconds` 默认是 180；如果你的 `.minecraft/config/blockwright.json` 是旧版本生成的，手动补上或改成：
+
+```json
+{
+  "requestTimeoutSeconds": 180
+}
+```
+
+改完后执行 `/bw reload` 或重启游戏。
+
 Fabric 模组源码在：
 
 ```text
@@ -258,6 +268,8 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 - 执行结果必须通过 `data/builds/` 的逐块校验报告确认。
 
 如果本机暂时没有登录或安装 Codex CLI，可以把 `config/servers/local.yaml` 里的 `codex.enabled` 改成 `false`，controller 会退回内置规则兜底。
+
+请求进入 controller 后会先打印 `received minecraft message`；开始调用模型时会打印 `starting codex cli request`，结束时会打印 `finished codex cli request`。如果游戏里显示请求失败但 controller 没有这两类日志，先检查游戏里的 `controllerUrl` 是否指向 `http://127.0.0.1:8765`。
 
 如果你要让 Codex CLI 走本地模型，可以把 `command` 配成带参数的形式，例如：
 

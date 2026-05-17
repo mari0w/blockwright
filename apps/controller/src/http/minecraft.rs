@@ -57,6 +57,14 @@ async fn handle_message(
     State(state): State<AppState>,
     Json(request): Json<MinecraftMessageRequest>,
 ) -> Result<Json<MinecraftMessageResponse>, (StatusCode, String)> {
+    tracing::info!(
+        server_id = %request.server_id,
+        player = %request.player,
+        text = %request.text,
+        has_nearby_scan = request.nearby_scan.is_some(),
+        "received minecraft message"
+    );
+
     if let Some(response) = handle_existing_build_modification(&state, &request).await {
         return response.map(Json);
     }

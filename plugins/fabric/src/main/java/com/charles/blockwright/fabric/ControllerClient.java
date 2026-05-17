@@ -15,7 +15,7 @@ public final class ControllerClient {
 
     public ControllerClient(BlockwrightConfig config) {
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
+                .connectTimeout(Duration.ofSeconds(config.connectTimeoutSeconds))
                 .build();
         this.gson = new Gson();
         this.config = config;
@@ -68,7 +68,7 @@ public final class ControllerClient {
 
     private HttpRequest.Builder baseRequest(String path) {
         return HttpRequest.newBuilder(URI.create(config.controllerUrl + path))
-                .timeout(Duration.ofSeconds(20))
+                .timeout(Duration.ofSeconds(config.requestTimeoutSeconds))
                 .header("Content-Type", "application/json")
                 .header("X-Blockwright-Token", config.sharedToken);
     }

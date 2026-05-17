@@ -28,13 +28,33 @@ impl CodexClient {
         let (program, args) = command_parts(&self.config.command)?;
         let mut command = Command::new(program);
         command.args(args);
+        tracing::info!(
+            command = %self.config.command,
+            timeout_seconds = self.config.timeout_seconds,
+            "starting codex cli request"
+        );
+
+        let started_at = std::time::Instant::now();
         let output = timeout(
             Duration::from_secs(self.config.timeout_seconds),
             command.arg("exec").arg("--").arg(prompt).output(),
         )
-        .await??;
+        .await
+        .map_err(|_| {
+            format!(
+                "codex command timed out after {} seconds",
+                self.config.timeout_seconds
+            )
+        })??;
+        let elapsed_ms = started_at.elapsed().as_millis();
 
         if !output.status.success() {
+            tracing::warn!(
+                command = %self.config.command,
+                elapsed_ms,
+                status = %output.status,
+                "codex cli request failed"
+            );
             return Err(format!(
                 "codex command exited with {}: {}",
                 output.status,
@@ -43,6 +63,11 @@ impl CodexClient {
             .into());
         }
 
+        tracing::info!(
+            command = %self.config.command,
+            elapsed_ms,
+            "finished codex cli request"
+        );
         Ok(Some(
             String::from_utf8_lossy(&output.stdout).trim().to_string(),
         ))
