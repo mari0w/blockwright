@@ -57,46 +57,32 @@ impl Planner {
             };
         }
 
-        if wants_house(text, &lower_text) {
-            if let Some(blueprint) = blueprints.first_by_tag("house").await {
-                let origin = input
-                    .position
-                    .as_ref()
-                    .map(origin_in_front_of_player)
-                    .unwrap_or(BlockOrigin {
-                        world: None,
-                        x: 0,
-                        y: 64,
-                        z: 0,
-                    });
+        if wants_build_request(text, &lower_text, &input.attachments) {
+            if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
+                return result;
+            }
 
+            if self.codex_enabled() {
                 return PlanResult {
-                    reply: format!(
-                        "可以，我会按蓝图 `{}` 在你面前生成一个木屋。",
-                        blueprint.name
-                    ),
-                    summary: format!("建造蓝图 {}", blueprint.id),
-                    actions: vec![GameAction::PlaceBlocks {
-                        blueprint_id: Some(blueprint.id),
-                        origin,
-                        blocks: blueprint.blocks,
+                    reply: "大模型没有生成有效蓝图，所以我没有下发建筑动作。你可以换一种说法，或者检查 controller 的 Codex CLI 日志。".to_string(),
+                    summary: "大模型建筑规划失败".to_string(),
+                    actions: vec![GameAction::Chat {
+                        message: "建筑没有执行：大模型未返回有效蓝图。".to_string(),
                     }],
                 };
             }
 
-            return PlanResult {
-                reply: "现在还没有可用的房屋蓝图，需要先导入或保存一个蓝图。".to_string(),
-                summary: "缺少房屋蓝图".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: "没有找到 house 标签的蓝图。".to_string(),
-                }],
-            };
-        }
-
-        if wants_custom_build(text, &lower_text) {
-            if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
+            if let Some(result) = self.try_builtin_house_blueprint(&input, blueprints).await {
                 return result;
             }
+
+            return PlanResult {
+                reply: "当前没有启用大模型，也没有匹配到可用的本地建筑蓝图。".to_string(),
+                summary: "缺少建筑规划能力".to_string(),
+                actions: vec![GameAction::Chat {
+                    message: "没有启用 Codex，也没有找到可用建筑蓝图。".to_string(),
+                }],
+            };
         }
 
         if let Some(result) = self.try_codex_action_plan(&input).await {
@@ -134,6 +120,50 @@ impl Planner {
                 message: "当前支持：给我钻石剑、给我钻石、帮我盖一个木屋。".to_string(),
             }],
         }
+    }
+
+    fn codex_enabled(&self) -> bool {
+        self.codex
+            .as_ref()
+            .map(CodexClient::enabled)
+            .unwrap_or(false)
+    }
+
+    async fn try_builtin_house_blueprint(
+        &self,
+        input: &PlannerInput,
+        blueprints: &BlueprintStore,
+    ) -> Option<PlanResult> {
+        let text = input.text.trim();
+        let lower_text = text.to_lowercase();
+        if !wants_house(text, &lower_text) {
+            return None;
+        }
+
+        let blueprint = blueprints.first_by_tag("house").await?;
+        let origin = input
+            .position
+            .as_ref()
+            .map(origin_in_front_of_player)
+            .unwrap_or(BlockOrigin {
+                world: None,
+                x: 0,
+                y: 64,
+                z: 0,
+            });
+
+        Some(PlanResult {
+            reply: format!(
+                "可以，我会按蓝图 `{}` 在你面前生成一个木屋。",
+                blueprint.name
+            ),
+            summary: format!("建造蓝图 {}", blueprint.id),
+            actions: vec![GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint.id),
+                origin,
+                blocks: blueprint.blocks,
+            }],
+        })
     }
 
     async fn try_codex_blueprint(
@@ -359,6 +389,48 @@ fn wants_image_pipeline(original: &str, lower_text: &str, attachments: &[ChatAtt
             .any(|item| item.kind == ChatAttachmentKind::Image)
 }
 
+fn wants_build_request(original: &str, lower_text: &str, attachments: &[ChatAttachment]) -> bool {
+    !wants_image_pipeline(original, lower_text, attachments)
+        && (wants_house(original, lower_text)
+            || wants_custom_build(original, lower_text)
+            || [
+                "建造",
+                "修建",
+                "搭建",
+                "造一个",
+                "做一个",
+                "房间",
+                "树屋",
+                "小屋",
+                "屋子",
+                "别墅",
+                "高楼",
+                "城墙",
+                "桥",
+                "花园",
+                "庭院",
+                "农场",
+                "仓库",
+                "码头",
+            ]
+            .iter()
+            .any(|keyword| original.contains(keyword))
+            || [
+                "tree house",
+                "treehouse",
+                "room",
+                "cabin",
+                "building",
+                "bridge",
+                "garden",
+                "farm",
+                "warehouse",
+                "dock",
+            ]
+            .iter()
+            .any(|keyword| lower_text.contains(keyword)))
+}
+
 fn wants_house(original: &str, lower_text: &str) -> bool {
     original.contains("房子") || original.contains("木屋") || lower_text.contains("house")
 }
@@ -396,6 +468,9 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 先生成蓝图，再由执行端按同一份 blocks 放置；不要输出命令步骤、背包操作或玩家右键操作。
 - 第一阶段蓝图规模控制在 500 个方块以内，优先用常见原版方块。
 - materials 必须和 blocks 统计一致。
+- 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
+- description 用中文简短写清楚设计思路和处理方式。
+- 玩家说“生成/建造/做一个/我要一个 + 建筑物名”时，直接生成可执行小型蓝图，不要返回聊天提示。
 
 用户文字：
 {text}
@@ -423,7 +498,8 @@ fn build_action_plan_prompt(input: &PlannerInput) -> String {
 - 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
 - 例如“钻石剑/diamond sword”应是 minecraft:diamond_sword。
 - 例如“给我钻石”才是 minecraft:diamond，count 为 64。
-- 建筑、图片复刻、改造已有建筑由其他流程处理；如果用户请求这类复杂建筑而不是物品，请返回 chat 提示“需要走建筑规划流程”。
+- 这个动作理解器只处理物品和普通聊天；建筑需求会在进入这里之前由蓝图规划器处理。
+- 如果用户文字不是物品需求，不要猜测发物品，返回一个普通 chat 提示。
 - item 必须使用 Minecraft 命名空间 ID，count 必须大于 0。
 
 玩家名：
@@ -459,10 +535,15 @@ fn extract_json_object(output: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::{
-        Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentSource, MaterialCount,
+    use crate::{
+        config::CodexConfig,
+        domain::types::{
+            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentSource, MaterialCount,
+        },
     };
     use std::{
+        fs,
+        os::unix::fs::PermissionsExt,
         path::PathBuf,
         sync::atomic::{AtomicU64, Ordering},
     };
@@ -479,6 +560,49 @@ mod tests {
 
     async fn empty_store(name: &str) -> BlueprintStore {
         BlueprintStore::new(temp_dir(name)).await.unwrap()
+    }
+
+    fn planner_with_fake_codex(name: &str, final_message: &str) -> Planner {
+        let dir = temp_dir(name);
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex.sh");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+last_message=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{final_message}
+BLOCKWRIGHT_JSON
+"#
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        Planner::new(CodexClient::new(CodexConfig {
+            enabled: true,
+            command: script_path.to_string_lossy().to_string(),
+            timeout_seconds: 5,
+        }))
     }
 
     fn test_blueprint(id: &str, tags: Vec<&str>) -> Blueprint {
@@ -582,6 +706,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn codex_blueprint_handles_treehouse_request() {
+        let store = empty_store("codex-treehouse").await;
+        let planner = planner_with_fake_codex(
+            "codex-treehouse",
+            r#"{
+  "id": "generated-tree-house",
+  "name": "树屋",
+  "description": "先用橡木原木做树干和支撑，再用木板生成小平台和房间。",
+  "size": {"width": 2, "height": 2, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 2}],
+  "blocks": [
+    {"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+    {"x": 1, "y": 0, "z": 0, "material": "minecraft:oak_planks"}
+  ],
+  "tags": ["tree_house"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "我要生成一个树屋".to_string(),
+                    player: Some("Steve".to_string()),
+                    position: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 generated-tree-house");
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(ref blueprint_id),
+                ..
+            } if blueprint_id == "generated-tree-house"
+        ));
+        assert!(store.get("generated-tree-house").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn codex_blueprint_takes_precedence_over_builtin_house_template() {
+        let store = empty_store("codex-house-first").await;
+        store
+            .save(test_blueprint("test-house", vec!["house"]))
+            .await
+            .unwrap();
+        let planner = planner_with_fake_codex(
+            "codex-house-first",
+            r#"{
+  "id": "codex-wood-cabin",
+  "name": "大模型木屋",
+  "description": "根据玩家描述重新规划一个小木屋，而不是复用内置模板。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["house"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "帮我盖一个木屋".to_string(),
+                    player: Some("Steve".to_string()),
+                    position: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 codex-wood-cabin");
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(ref blueprint_id),
+                ..
+            } if blueprint_id == "codex-wood-cabin"
+        ));
+    }
+
+    #[tokio::test]
     async fn plans_house_from_blueprint_tag() {
         let store = empty_store("house").await;
         store
@@ -660,7 +868,7 @@ mod tests {
             )
             .await;
 
-        assert_eq!(result.summary, "缺少房屋蓝图");
+        assert_eq!(result.summary, "缺少建筑规划能力");
         assert!(matches!(result.actions[0], GameAction::Chat { .. }));
     }
 
@@ -735,6 +943,7 @@ mod tests {
         assert!(prompt.contains("只输出一个 JSON 对象"));
         assert!(prompt.contains("相对坐标"));
         assert!(prompt.contains("同一份 blocks 放置"));
+        assert!(prompt.contains("设计思路"));
     }
 
     #[test]
@@ -748,6 +957,7 @@ mod tests {
 
         assert!(prompt.contains("不能只因为文本包含“钻石”"));
         assert!(prompt.contains("minecraft:diamond_pickaxe"));
+        assert!(!prompt.contains("需要走建筑规划流程"));
     }
 
     #[test]

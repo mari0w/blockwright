@@ -266,6 +266,8 @@ data/builds/
 
 本地配置 `config/servers/local.yaml` 默认 `codex.enabled: true`，controller 会优先调用本机 `codex exec` 理解玩家自然语言。比如“钻石稿子/钻石镐子/diamond pickaxe”应由 Codex CLI 理解成 `minecraft:diamond_pickaxe`，不会只因为包含“钻石”就发 64 个钻石。
 
+建筑类需求会优先走 Codex 蓝图规划，而不是先匹配内置关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先让 Codex 生成新的蓝图 JSON，保存后再按同一份 blocks 下发给 Minecraft。只有 `codex.enabled: false` 或 Codex 不可用时，controller 才会退回本地内置蓝图兜底。
+
 默认命令是：
 
 ```yaml
@@ -282,6 +284,7 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 - 只输出蓝图 JSON，不输出命令步骤。
 - 方块坐标必须是相对坐标。
 - 材质必须是 `minecraft:xxx`。
+- 建筑需求先由大模型理解和规划，不要只靠“木屋/房子”关键词套模板。
 - 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。
 - 执行结果必须通过 `data/builds/` 的逐块校验报告确认。
 

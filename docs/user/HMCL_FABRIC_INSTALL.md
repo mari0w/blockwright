@@ -188,6 +188,8 @@ Paper 插件仍然保留在 `plugins/paper`，但那是给独立 Paper 服务器
 
 默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。修改 `config/servers/local.yaml` 后，需要重启 controller。
 
+建筑类需求默认先走 Codex 蓝图规划，不会先套本地关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先生成并保存新的蓝图，再由模组放置和校验；只有 Codex 关闭或不可用时，才会使用本地内置蓝图兜底。
+
 启用 Codex 后，图片/复杂文字需求会在 controller 里规划成蓝图 JSON：先保存蓝图，再下发同一份方块清单给 Fabric 模组，最后走上面的逐块校验。也就是说，即使后续接入大模型，游戏里实际盖的内容也必须和保存的蓝图/构建记录一致。
 
 ## 改造已有建筑
