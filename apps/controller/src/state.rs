@@ -3,13 +3,17 @@ use std::sync::Arc;
 use crate::{
     config::{self, AppConfig, ChatRuntimeConfig},
     integrations::codex::CodexClient,
-    services::{blueprint_store::BlueprintStore, job_queue::JobQueue, planner::Planner},
+    services::{
+        blueprint_store::BlueprintStore, build_store::BuildStore, job_queue::JobQueue,
+        planner::Planner,
+    },
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
     pub blueprints: BlueprintStore,
+    pub builds: BuildStore,
     pub jobs: JobQueue,
     pub planner: Planner,
     pub codex: CodexClient,
@@ -20,15 +24,18 @@ impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let config = Arc::new(config);
         let blueprints = BlueprintStore::new(config.storage.data_dir.join("blueprints")).await?;
+        let builds = BuildStore::new(config.storage.data_dir.join("builds")).await?;
         seed_default_blueprint(&blueprints).await?;
         let chat = config::load_chat_runtime_config(&config.chat.config_path)?;
+        let codex = CodexClient::new(config.codex.clone());
 
         Ok(Self {
-            codex: CodexClient::new(config.codex.clone()),
+            codex: codex.clone(),
             config,
             blueprints,
+            builds,
             jobs: JobQueue::default(),
-            planner: Planner::default(),
+            planner: Planner::new(codex),
             chat,
         })
     }

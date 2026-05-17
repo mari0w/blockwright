@@ -9,7 +9,7 @@ storage:
   data_dir: data
 
 minecraft:
-  default_server_id: local-paper
+  default_server_id: hmcl-lan
 
 security:
   shared_token: local-dev-token

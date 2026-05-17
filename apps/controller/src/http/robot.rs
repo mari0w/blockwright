@@ -77,10 +77,37 @@ pub(crate) async fn queue_chat_message(
     let queued_job = if plan.actions.is_empty() {
         None
     } else {
+        let job_id = state.jobs.reserve_job_id();
+        if has_build_action(&plan.actions) {
+            if let Err(error) = state
+                .builds
+                .register_planned(
+                    job_id.clone(),
+                    server_id.clone(),
+                    target_player.clone(),
+                    plan.summary.clone(),
+                    &plan.actions,
+                )
+                .await
+            {
+                tracing::error!(error = %error, "failed to register planned robot build");
+                return RobotMessageResponse {
+                    reply: "构建记录保存失败，已取消下发建筑任务。".to_string(),
+                    queued_job: None,
+                };
+            }
+        }
+
         Some(
             state
                 .jobs
-                .enqueue(server_id, target_player, plan.summary.clone(), plan.actions)
+                .enqueue_with_id(
+                    job_id,
+                    server_id,
+                    target_player,
+                    plan.summary.clone(),
+                    plan.actions,
+                )
                 .await,
         )
     };
@@ -97,4 +124,10 @@ pub(crate) async fn queue_chat_message(
         reply: plan.reply,
         queued_job,
     }
+}
+
+fn has_build_action(actions: &[crate::domain::types::GameAction]) -> bool {
+    actions
+        .iter()
+        .any(|action| matches!(action, crate::domain::types::GameAction::PlaceBlocks { .. }))
 }

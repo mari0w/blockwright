@@ -45,3 +45,24 @@ jobs:
       - name: Run plugin tests and build
         working-directory: plugins/paper
         run: gradle build --no-daemon
+
+  fabric-mod:
+    name: Fabric mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.12"
+
+      - name: Run Fabric tests and build
+        working-directory: plugins/fabric
+        run: gradle build --no-daemon

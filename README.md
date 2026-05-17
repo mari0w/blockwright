@@ -4,8 +4,9 @@
 
 目标不是把 AI 逻辑塞进 Minecraft 插件里，而是拆成两层：
 
-- `apps/controller`：Rust/Axum 本地控制器，负责聊天机器人入口、Codex CLI 适配、蓝图数据库、任务队列和规划逻辑。
-- `plugins/paper`：Minecraft Paper 服务端插件，负责游戏内命令、发物品、放方块、轮询外部机器人下发的任务。
+- `apps/controller`：Rust/Axum 本地控制器，负责聊天机器人入口、Codex CLI 适配、蓝图数据库、构建记录、任务队列和规划逻辑。
+- `plugins/fabric`：HMCL/单人存档/局域网开放世界使用的 Fabric 模组，负责游戏内命令、发物品、放方块、轮询外部机器人下发的任务。
+- `plugins/paper`：独立 Paper 服务端插件，保留给真正跑 Paper 服务器的场景。
 
 这样做的好处是后面要接 Telegram、Discord、企业微信、图片分析、数据库、Codex 命令行，都在 controller 里扩展；Minecraft 插件只保留稳定的游戏内执行能力。
 
@@ -13,13 +14,15 @@
 
 - 游戏内执行 `/bw ask <需求>`，把需求发给本地 controller。
 - 外部机器人可以调用 `POST /api/robot/message`，controller 会把任务放进 Minecraft 任务队列。
-- Paper 插件定时轮询 `GET /api/minecraft/jobs/next`，拿到任务后在服务器里执行。
+- Fabric/Paper 执行端定时轮询 `GET /api/minecraft/jobs/next`，拿到任务后在当前世界里执行。
 - 支持基础动作：
   - `give_item`：给玩家物品。
   - `place_blocks`：按蓝图放置方块。
   - `chat`：返回说明消息。
 - 蓝图以 JSON 文件保存，能表达材料清单、尺寸、相对坐标和标签。
-- 预留 Codex CLI 适配层，后续可把自然语言和图片分析交给本地 Codex 执行。
+- 建筑任务会保存构建记录，执行端放置后逐块校验世界状态，并把校验报告回写 controller。
+- 对“改造面前建筑”这类需求，Fabric 会扫描附近非空气方块，controller 会先匹配已保存构建记录；匹配不唯一或部位不明确时只追问，不直接下发改造。
+- 预留 Codex CLI 适配层；启用后 controller 会把蓝图 JSON 规范、相对坐标和一致性规则写进规划 prompt，模型产出的蓝图会先保存再下发执行。
 
 ## 快速启动 controller
 
@@ -97,6 +100,12 @@ curl -X POST http://127.0.0.1:8765/api/minecraft/message \
   -d '{"server_id":"local-paper","player":"Steve","text":"给我一把钻石剑","position":{"world":"world","x":0,"y":64,"z":0}}'
 ```
 
+如果返回里带有 `job_id`，说明这次包含建筑动作。执行端会在放置后回传校验结果；也可以用接口查看构建记录：
+
+```bash
+curl http://127.0.0.1:8765/api/builds/hm-job-1
+```
+
 模拟外部机器人下发建造任务：
 
 ```bash
@@ -105,7 +114,72 @@ curl -X POST http://127.0.0.1:8765/api/robot/message \
   -d '{"platform":"telegram","conversation_id":"local","sender":"charles","server_id":"local-paper","target_player":"Steve","text":"帮我盖一个木屋"}'
 ```
 
+## HMCL / Fabric 模组
+
+如果你是用 HMCL 打开现有单人存档，然后“开放到局域网”给别人加入，应该使用 Fabric 模组，不需要新建 Paper 服务端，也不需要迁移地图。
+
+局域网玩法下，只需要房主这台电脑安装 Blockwright 模组并运行 controller。其他玩家加入你的局域网世界后，可以直接在聊天栏使用 `/bw ...` 调用你这台电脑上的本地 controller 和模型，不需要每个人电脑都装 Blockwright。前提是当前只使用原版方块/物品和服务端命令能力；如果以后加入自定义方块、客户端界面或专属资源包，才需要让其他玩家同步安装对应客户端内容。
+
+### 房主部署步骤
+
+1. 在 HMCL 里选择或安装 Minecraft `1.21.8` 的 Fabric Loader。
+2. 把 Fabric API 放进当前游戏目录的 `mods/`。
+3. 在项目目录构建 Blockwright 模组：
+
+```bash
+./scripts/build-hmcl-mod.sh
+```
+
+4. 把生成的 jar 安装到 HMCL 当前游戏目录：
+
+```bash
+./scripts/install-hmcl-mod.sh <HMCL当前游戏目录>
+```
+
+例如默认 `.minecraft`：
+
+```bash
+./scripts/install-hmcl-mod.sh ~/.minecraft
+```
+
+5. 启动本地 controller：
+
+```bash
+cargo run -p blockwright-controller
+```
+
+6. 用 HMCL 进入你原来的单人存档，正常“开放到局域网”。
+7. 你或加入局域网的玩家在聊天栏输入：
+
+```text
+/bw 给我一把钻石剑
+/bw 帮我盖一个木屋
+/bw 把我面前这个房子的窗户换成蓝色玻璃
+```
+
+controller 地址默认是 `http://127.0.0.1:8765`。因为 Fabric 模组运行在房主电脑上，所以这个地址不用改成局域网 IP；其他玩家也不需要访问自己的 `127.0.0.1`。
+
+Fabric 模组源码在：
+
+```text
+plugins/fabric
+```
+
+构建脚本生成的 jar 路径：
+
+```text
+plugins/fabric/build/libs/blockwright-fabric-0.1.0.jar
+```
+
+详细步骤见：
+
+```text
+docs/user/HMCL_FABRIC_INSTALL.md
+```
+
 ## Paper 插件
+
+如果你单独运行 Paper 服务端，才使用这个方式。HMCL 单人存档/局域网开放世界不需要走 Paper。
 
 插件源码在 `plugins/paper`。
 
@@ -155,10 +229,32 @@ blueprints/examples/oak_house.json
 data/blueprints/
 ```
 
+建筑执行记录默认放在：
+
+```text
+data/builds/
+```
+
+这里保存的是每次实际下发的方块清单和执行端校验报告。规则是：controller 先保存构建记录，再下发同一份 `place_blocks`；Fabric/Paper 放置后会读取世界里的实际方块，如果 `verified_count` 不等于计划数量，或者出现 `mismatches`，该构建记录会标记为失败。
+
+改造已有建筑时不会只按“玩家面前大概有个房子”来猜。HMCL/Fabric 模组会在改造类指令里自动附带附近扫描结果，controller 再用这个扫描结果匹配 `data/builds/` 中状态为 `succeeded` 的构建记录。只有匹配唯一、目标部位能定位时，才会生成新的改造构建记录并执行。
+
+## AI 规划边界
+
+默认配置里 `codex.enabled: false`，所以当前可稳定验证的是规则规划：钻石、钻石剑、木屋蓝图、图片入口说明。
+
+启用 Codex 后，controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
+
+- 只输出蓝图 JSON，不输出命令步骤。
+- 方块坐标必须是相对坐标。
+- 材质必须是 `minecraft:xxx`。
+- 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。
+- 执行结果必须通过 `data/builds/` 的逐块校验报告确认。
+
 ## 后续扩展方向
 
 1. 把 controller 的规则规划器替换/增强为 Codex CLI 调用。
-2. 接入 Telegram/Discord/企业微信机器人 webhook。
+2. 接入 Telegram/Discord/企业微信等机器人，优先选择 polling、stream 或 local_command 这类本地友好的入口。
 3. 加图片分析流水线：图片 -> 结构识别 -> 材料映射 -> 蓝图 JSON。
 4. 插件增加建筑扫描能力：玩家面前区域 -> 方块矩阵 -> 识别已有蓝图 -> 局部修改。
 5. 数据层从 JSON 文件升级为 SQLite/Postgres，保留同一套蓝图领域模型。

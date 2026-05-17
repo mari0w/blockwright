@@ -45,10 +45,15 @@ public final class JobPoller {
     private void executeJob(JsonModels.GameJob job) {
         boolean ok = true;
         String message = "ok";
+        JsonModels.JobExecutionReport report = null;
 
         try {
             Location origin = defaultOrigin(job.targetPlayer);
-            actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
+            report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
+            ok = report.isOk();
+            if (!ok) {
+                message = "建筑校验失败，已回传差异报告";
+            }
         } catch (Exception error) {
             ok = false;
             message = error.getMessage();
@@ -57,9 +62,10 @@ public final class JobPoller {
 
         boolean resultOk = ok;
         String resultMessage = message;
+        JsonModels.JobExecutionReport resultReport = report;
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                controllerClient.sendJobResult(job.id, resultOk, resultMessage);
+                controllerClient.sendJobResult(job.id, resultOk, resultMessage, resultReport);
             } catch (Exception error) {
                 plugin.getLogger().warning("send job result failed: " + error.getMessage());
             }
@@ -76,4 +82,3 @@ public final class JobPoller {
         return plugin.getServer().getWorlds().get(0).getSpawnLocation();
     }
 }
-

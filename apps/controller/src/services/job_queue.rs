@@ -24,7 +24,19 @@ impl JobQueue {
         summary: String,
         actions: Vec<GameAction>,
     ) -> GameJob {
-        let id = self.next_job_id();
+        let id = self.reserve_job_id();
+        self.enqueue_with_id(id, server_id, target_player, summary, actions)
+            .await
+    }
+
+    pub async fn enqueue_with_id(
+        &self,
+        id: String,
+        server_id: String,
+        target_player: Option<String>,
+        summary: String,
+        actions: Vec<GameAction>,
+    ) -> GameJob {
         let job = GameJob {
             id,
             server_id,
@@ -42,7 +54,7 @@ impl JobQueue {
         items.remove(index)
     }
 
-    fn next_job_id(&self) -> String {
+    pub fn reserve_job_id(&self) -> String {
         let number = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         format!("hm-job-{number}")
     }
@@ -81,6 +93,25 @@ mod tests {
 
         assert_eq!(first.id, "hm-job-1");
         assert_eq!(second.id, "hm-job-2");
+    }
+
+    #[tokio::test]
+    async fn enqueue_with_reserved_id_preserves_id() {
+        let queue = JobQueue::default();
+        let id = queue.reserve_job_id();
+
+        let job = queue
+            .enqueue_with_id(
+                id.clone(),
+                "local-paper".to_string(),
+                None,
+                "指定任务".to_string(),
+                chat_action("one"),
+            )
+            .await;
+
+        assert_eq!(job.id, id);
+        assert_eq!(queue.pop_next("local-paper").await.unwrap().id, "hm-job-1");
     }
 
     #[tokio::test]

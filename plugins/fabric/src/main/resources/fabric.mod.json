@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "blockwright",
+  "version": "${version}",
+  "name": "Blockwright",
+  "description": "本地 Minecraft 建造助手，适合 HMCL/Fabric 单人存档和局域网开放世界。",
+  "authors": [
+    "charles"
+  ],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.charles.blockwright.fabric.BlockwrightFabricMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.14",
+    "minecraft": "1.21.8",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod blueprints;
+pub mod builds;
 pub mod chat;
 pub mod health;
 pub mod minecraft;
@@ -15,5 +16,6 @@ pub fn router() -> Router<AppState> {
         .merge(minecraft::router())
         .merge(robot::router())
         .merge(chat::router())
+        .merge(builds::router())
         .merge(blueprints::router())
 }

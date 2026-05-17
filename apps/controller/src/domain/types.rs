@@ -6,6 +6,28 @@ pub struct PlayerPosition {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub yaw: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pitch: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldScan {
+    pub world: String,
+    pub center_x: i32,
+    pub center_y: i32,
+    pub center_z: i32,
+    pub radius: u32,
+    pub blocks: Vec<WorldScanBlock>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorldScanBlock {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub material: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -115,4 +137,66 @@ pub struct GameJob {
 pub struct JobResultRequest {
     pub ok: bool,
     pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report: Option<JobExecutionReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobExecutionReport {
+    pub actions: Vec<ActionExecutionReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionExecutionReport {
+    pub action_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blueprint_id: Option<String>,
+    pub expected_count: u32,
+    pub placed_count: u32,
+    pub skipped_existing_count: u32,
+    pub skipped_limit_count: u32,
+    pub verified_count: u32,
+    pub mismatch_count: u32,
+    #[serde(default)]
+    pub mismatches: Vec<BlockMismatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockMismatch {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub expected: String,
+    pub actual: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildStatus {
+    Planned,
+    Succeeded,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildRecord {
+    pub id: String,
+    pub server_id: String,
+    pub target_player: Option<String>,
+    pub summary: String,
+    pub status: BuildStatus,
+    pub expected_actions: Vec<ExpectedBuildAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<JobExecutionReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpectedBuildAction {
+    pub blueprint_id: Option<String>,
+    pub origin: BlockOrigin,
+    pub expected_count: u32,
+    pub materials: Vec<MaterialCount>,
+    pub blocks: Vec<BlueprintBlock>,
 }

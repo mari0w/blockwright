@@ -54,11 +54,16 @@ public final class ControllerClient {
         return gson.fromJson(response.body(), JsonModels.NextJobResponse.class);
     }
 
-    public void sendJobResult(String jobId, boolean ok, String message)
+    public void sendJobResult(
+            String jobId,
+            boolean ok,
+            String message,
+            JsonModels.JobExecutionReport report)
             throws IOException, InterruptedException {
         JsonModels.JobResultRequest request = new JsonModels.JobResultRequest();
         request.ok = ok;
         request.message = message;
+        request.report = report;
 
         HttpRequest httpRequest = baseRequest(ControllerPaths.jobResultPath(jobId))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(request)))

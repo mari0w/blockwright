@@ -3,7 +3,7 @@ tools:
     platform: dingtalk
     enabled: true
     inbound: stream
-    default_server_id: local-paper
+    default_server_id: hmcl-lan
     default_target_player: Steve
     dingtalk:
       client_id_env: DINGTALK_CLIENT_ID

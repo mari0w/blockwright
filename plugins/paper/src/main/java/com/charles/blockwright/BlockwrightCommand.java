@@ -48,7 +48,7 @@ public final class BlockwrightCommand implements CommandExecutor {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     player.sendMessage(response.reply);
                     Location origin = player.getLocation();
-                    actionExecutor.executeActions(response.actions, player.getName(), origin);
+                    executeActionsAndReport(response, player.getName(), origin);
                 });
             } catch (Exception error) {
                 plugin.getLogger().warning("controller request failed: " + error.getMessage());
@@ -58,5 +58,50 @@ public final class BlockwrightCommand implements CommandExecutor {
         });
 
         return true;
+    }
+
+    private void executeActionsAndReport(
+            JsonModels.MinecraftMessageResponse response,
+            String playerName,
+            Location origin) {
+        boolean ok = true;
+        String message = "ok";
+        JsonModels.JobExecutionReport report = null;
+
+        try {
+            report = actionExecutor.executeActions(response.actions, playerName, origin);
+            ok = report.isOk();
+            if (!ok) {
+                message = "建筑校验失败，已回传差异报告";
+                sendPlayerMessage(playerName, message);
+            }
+        } catch (Exception error) {
+            ok = false;
+            message = error.getMessage();
+            plugin.getLogger().warning("action execute failed: " + error.getMessage());
+            sendPlayerMessage(playerName, "Blockwright 执行失败：" + message);
+        }
+
+        if (response.jobId == null || response.jobId.isBlank()) {
+            return;
+        }
+
+        boolean resultOk = ok;
+        String resultMessage = message;
+        JsonModels.JobExecutionReport resultReport = report;
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                controllerClient.sendJobResult(response.jobId, resultOk, resultMessage, resultReport);
+            } catch (Exception error) {
+                plugin.getLogger().warning("send direct job result failed: " + error.getMessage());
+            }
+        });
+    }
+
+    private void sendPlayerMessage(String playerName, String message) {
+        Player player = plugin.getServer().getPlayerExact(playerName);
+        if (player != null) {
+            player.sendMessage(message);
+        }
     }
 }

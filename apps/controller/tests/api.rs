@@ -188,6 +188,230 @@ async fn robot_message_queues_job_for_minecraft_poller() {
 }
 
 #[tokio::test]
+async fn build_job_result_updates_persisted_build_record() {
+    let app = test_app(true).await;
+    let robot_request = json!({
+        "platform": "telegram",
+        "conversation_id": "local",
+        "sender": "charles",
+        "target_player": "Steve",
+        "text": "帮我盖一个木屋"
+    });
+
+    let robot_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/robot/message",
+            Some(robot_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let robot_body = response_json(robot_response).await;
+    let job_id = robot_body["queued_job"]["id"].as_str().unwrap();
+
+    let result_request = json!({
+        "ok": true,
+        "message": "ok",
+        "report": {
+            "actions": [
+                {
+                    "action_type": "place_blocks",
+                    "blueprint_id": "oak-house-small",
+                    "expected_count": 46,
+                    "placed_count": 46,
+                    "skipped_existing_count": 0,
+                    "skipped_limit_count": 0,
+                    "verified_count": 46,
+                    "mismatch_count": 0,
+                    "mismatches": []
+                }
+            ]
+        }
+    });
+
+    let result_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(result_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let result_body = response_json(result_response).await;
+
+    let build_response = app
+        .oneshot(request(
+            "GET",
+            &format!("/api/builds/{job_id}"),
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let build_body = response_json(build_response).await;
+
+    assert_eq!(result_body["ok"], true);
+    assert_eq!(build_body["status"], "succeeded");
+    assert_eq!(build_body["expected_actions"][0]["expected_count"], 46);
+    assert_eq!(build_body["result"]["actions"][0]["verified_count"], 46);
+}
+
+#[tokio::test]
+async fn minecraft_build_message_returns_job_id_for_direct_verification() {
+    let app = test_app(true).await;
+    let minecraft_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "帮我盖一个木屋",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        }
+    });
+
+    let message_response = app
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(minecraft_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let message_body = response_json(message_response).await;
+    let job_id = message_body["job_id"].as_str().unwrap();
+
+    assert_eq!(message_body["actions"][0]["type"], "place_blocks");
+    assert!(job_id.starts_with("hm-job-"));
+}
+
+#[tokio::test]
+async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
+    let app = test_app(true).await;
+    let build_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "帮我盖一个木屋",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        }
+    });
+
+    let build_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(build_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let build_body = response_json(build_response).await;
+    let job_id = build_body["job_id"].as_str().unwrap();
+    let build_action = &build_body["actions"][0];
+    let origin = &build_action["origin"];
+    let blocks = build_action["blocks"].as_array().unwrap();
+
+    let scan_blocks = blocks
+        .iter()
+        .map(|block| {
+            json!({
+                "x": origin["x"].as_i64().unwrap() + block["x"].as_i64().unwrap(),
+                "y": origin["y"].as_i64().unwrap() + block["y"].as_i64().unwrap(),
+                "z": origin["z"].as_i64().unwrap() + block["z"].as_i64().unwrap(),
+                "material": block["material"]
+            })
+        })
+        .collect::<Vec<_>>();
+    let result_request = json!({
+        "ok": true,
+        "message": "ok",
+        "report": {
+            "actions": [
+                {
+                    "action_type": "place_blocks",
+                    "blueprint_id": "oak-house-small",
+                    "expected_count": 46,
+                    "placed_count": 46,
+                    "skipped_existing_count": 0,
+                    "skipped_limit_count": 0,
+                    "verified_count": 46,
+                    "mismatch_count": 0,
+                    "mismatches": []
+                }
+            ]
+        }
+    });
+    app.clone()
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(result_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    let modification_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "把我面前这个房子的窗户换成蓝色玻璃",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        },
+        "nearby_scan": {
+            "world": "world",
+            "center_x": 2,
+            "center_y": 64,
+            "center_z": 2,
+            "radius": 8,
+            "blocks": scan_blocks
+        }
+    });
+
+    let modification_response = app
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(modification_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let modification_body = response_json(modification_response).await;
+
+    assert_eq!(modification_body["actions"][0]["type"], "place_blocks");
+    assert_eq!(
+        modification_body["actions"][0]["blocks"][0]["material"],
+        "minecraft:blue_stained_glass"
+    );
+    assert_eq!(
+        modification_body["actions"][0]["blocks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert!(modification_body["job_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("hm-job-"));
+}
+
+#[tokio::test]
 async fn minecraft_message_returns_actions_without_queueing_a_job() {
     let app = test_app(true).await;
     let minecraft_request = json!({
