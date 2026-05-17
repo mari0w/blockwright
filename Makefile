@@ -1,6 +1,13 @@
 GRADLE ?= gradle
+HMCL_DIR ?= $(HOME)/.minecraft
+.DEFAULT_GOAL := install-hmcl
 
-.PHONY: test test-controller test-paper test-fabric build-fabric coverage coverage-controller
+.PHONY: install install-hmcl test test-controller test-paper test-fabric build-fabric coverage coverage-controller
+
+install: install-hmcl
+
+install-hmcl:
+	./scripts/install-hmcl-mod.sh "$(HMCL_DIR)"
 
 test: test-controller test-paper test-fabric
 

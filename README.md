@@ -76,6 +76,18 @@ gradle test
 make test
 ```
 
+项目根目录直接执行 `make` 会重新编译并安装 HMCL/Fabric 模组到默认 `.minecraft`：
+
+```bash
+make
+```
+
+如果 HMCL 当前实例目录不是默认位置，可以覆盖安装目录：
+
+```bash
+make HMCL_DIR=~/HMCL/.minecraft/versions/1.21.8-fabric
+```
+
 ## 聊天工具接入
 
 controller 支持把不同聊天入口统一成一类消息，再转成 Minecraft 任务：
@@ -130,16 +142,16 @@ curl -X POST http://127.0.0.1:8765/api/robot/message \
 
 1. 在 HMCL 里选择或安装 Minecraft `1.21.8` 的 Fabric Loader。
 2. 把 Fabric API 放进当前游戏目录的 `mods/`。
-3. 执行安装脚本。这个脚本每次都会重新编译 Blockwright 模组，并覆盖安装到当前游戏目录的 `mods/`：
+3. 在项目根目录执行 `make`。这个命令等价于安装到默认 `~/.minecraft`，每次都会重新编译 Blockwright 模组，并覆盖安装到当前游戏目录的 `mods/`：
 
 ```bash
-./scripts/install-hmcl-mod.sh <HMCL当前游戏目录>
+make
 ```
 
-例如默认 `.minecraft`：
+如果 HMCL 当前游戏目录不是默认 `.minecraft`：
 
 ```bash
-./scripts/install-hmcl-mod.sh ~/.minecraft
+make HMCL_DIR=<HMCL当前游戏目录>
 ```
 
 4. 启动本地 controller：
