@@ -58,6 +58,8 @@ mods/
 ./scripts/install-hmcl-mod.sh <HMCL当前游戏目录>
 ```
 
+这个脚本每次执行都会重新编译 Fabric 模组，并覆盖安装到目标 `mods/` 目录。目标目录里之前已经有 Blockwright jar 时，也会先删除旧的 `blockwright-fabric-*.jar`，再放入本次新编译出来的 jar。
+
 例如：
 
 ```bash

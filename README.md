@@ -130,13 +130,7 @@ curl -X POST http://127.0.0.1:8765/api/robot/message \
 
 1. 在 HMCL 里选择或安装 Minecraft `1.21.8` 的 Fabric Loader。
 2. 把 Fabric API 放进当前游戏目录的 `mods/`。
-3. 在项目目录构建 Blockwright 模组：
-
-```bash
-./scripts/build-hmcl-mod.sh
-```
-
-4. 把生成的 jar 安装到 HMCL 当前游戏目录：
+3. 执行安装脚本。这个脚本每次都会重新编译 Blockwright 模组，并覆盖安装到当前游戏目录的 `mods/`：
 
 ```bash
 ./scripts/install-hmcl-mod.sh <HMCL当前游戏目录>
@@ -148,14 +142,15 @@ curl -X POST http://127.0.0.1:8765/api/robot/message \
 ./scripts/install-hmcl-mod.sh ~/.minecraft
 ```
 
-5. 启动本地 controller：
+4. 启动本地 controller：
 
 ```bash
 cargo run -p blockwright-controller
 ```
 
-6. 用 HMCL 进入你原来的单人存档，正常“开放到局域网”。
-7. 你或加入局域网的玩家在聊天栏输入：
+5. 用 HMCL 进入你原来的单人存档，正常“开放到局域网”。
+
+6. 你或加入局域网的玩家在聊天栏输入：
 
 ```text
 /bw 给我一把钻石剑

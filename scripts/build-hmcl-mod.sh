@@ -9,7 +9,7 @@ fi
 
 (
   cd plugins/fabric
-  gradle build --no-daemon
+  gradle clean build --no-daemon
 )
 
 echo
