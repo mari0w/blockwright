@@ -37,6 +37,12 @@ cargo run -p blockwright-controller
 http://127.0.0.1:8765
 ```
 
+默认日志级别是 `info`，不会打印 Fabric 每 2 秒一次的任务轮询请求。需要临时排查 HTTP 请求时再这样启动：
+
+```bash
+RUST_LOG=info,tower_http=debug cargo run -p blockwright-controller
+```
+
 健康检查：
 
 ```bash
