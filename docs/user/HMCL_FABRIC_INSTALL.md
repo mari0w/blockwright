@@ -188,6 +188,8 @@ Paper 插件仍然保留在 `plugins/paper`，但那是给独立 Paper 服务器
 
 默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=low"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--output-schema` 约束模型最终 JSON、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。默认低思考强度，优先保证游戏内响应速度；修改 `config/servers/local.yaml` 后，需要重启 controller。
 
+controller 日志不会打印模型原始思考链路，但会打印可排查的阶段进度：`starting codex cli request`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。如果 120 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
+
 建筑类需求默认先走 Codex 蓝图规划，不会先套本地关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先生成并保存新的蓝图，再由模组放置和校验；只有你主动把 `codex.enabled` 改成 `false`，才会使用本地内置蓝图兜底。
 
 游戏内 `/bw ...` 发起新建筑时，Fabric 模组会把玩家面前的附近方块扫描给 controller。controller 会先估算地面高度和落点，再检查目标体积是否和已有方块重叠。草、花、雪这类软阻挡可以自动覆盖；木头、石头、箱子、已有建筑等硬方块不会直接覆盖。如果提示区域被占用，可以换空地，或者明确说“清空这里再建”。

@@ -8,10 +8,12 @@ use serde_json::Value;
 use tokio::{
     io::AsyncWriteExt,
     process::Command,
-    time::{timeout, Duration},
+    time::{sleep, Duration, Instant as TokioInstant},
 };
 
 use crate::config::CodexConfig;
+
+const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
 
 #[derive(Clone)]
 pub struct CodexClient {
@@ -25,6 +27,13 @@ pub enum CodexResponseSchema {
 }
 
 impl CodexResponseSchema {
+    fn label(self) -> &'static str {
+        match self {
+            CodexResponseSchema::ActionPlan => "action_plan",
+            CodexResponseSchema::Blueprint => "blueprint",
+        }
+    }
+
     fn path(self) -> PathBuf {
         let file_name = match self {
             CodexResponseSchema::ActionPlan => "action-plan.schema.json",
@@ -57,29 +66,35 @@ impl CodexClient {
         prompt: &str,
         schema: CodexResponseSchema,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, Some(schema.path())).await
+        self.ask_inner(prompt, Some(schema)).await
     }
 
     async fn ask_inner(
         &self,
         prompt: &str,
-        schema_path: Option<PathBuf>,
+        schema: Option<CodexResponseSchema>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(None);
         }
 
+        let schema_label = schema.map(CodexResponseSchema::label).unwrap_or("none");
+        let schema_path = schema.map(CodexResponseSchema::path);
         let (program, args) = command_parts(&self.config.command)?;
         let last_message_path = codex_last_message_path();
         tracing::info!(
             command = %self.config.command,
+            schema = schema_label,
             timeout_seconds = self.config.timeout_seconds,
             "starting codex cli request"
         );
 
         let started_at = std::time::Instant::now();
-        let output = timeout(
-            Duration::from_secs(self.config.timeout_seconds),
+        let output = run_codex_exec_with_progress(
+            started_at,
+            self.config.timeout_seconds,
+            &self.config.command,
+            schema_label,
             run_codex_exec(
                 program,
                 &args,
@@ -88,19 +103,14 @@ impl CodexClient {
                 schema_path.as_deref(),
             ),
         )
-        .await
-        .map_err(|_| {
-            format!(
-                "codex command timed out after {} seconds",
-                self.config.timeout_seconds
-            )
-        })??;
+        .await?;
         let elapsed_ms = started_at.elapsed().as_millis();
 
         if !output.status.success() {
             let _ = tokio::fs::remove_file(&last_message_path).await;
             tracing::warn!(
                 command = %self.config.command,
+                schema = schema_label,
                 elapsed_ms,
                 status = %output.status,
                 "codex cli request failed"
@@ -121,10 +131,49 @@ impl CodexClient {
 
         tracing::info!(
             command = %self.config.command,
+            schema = schema_label,
             elapsed_ms,
             "finished codex cli request"
         );
         Ok(Some(answer.to_string()))
+    }
+}
+
+async fn run_codex_exec_with_progress(
+    started_at: std::time::Instant,
+    timeout_seconds: u64,
+    command: &str,
+    schema_label: &str,
+    exec: impl std::future::Future<Output = std::io::Result<std::process::Output>>,
+) -> Result<std::process::Output, Box<dyn std::error::Error + Send + Sync>> {
+    let timeout_duration = Duration::from_secs(timeout_seconds);
+    let deadline = sleep(timeout_duration);
+    let next_progress = sleep(Duration::from_secs(CODEX_PROGRESS_INTERVAL_SECONDS));
+    tokio::pin!(deadline);
+    tokio::pin!(next_progress);
+    tokio::pin!(exec);
+
+    loop {
+        tokio::select! {
+            result = &mut exec => return result.map_err(Into::into),
+            _ = &mut deadline => {
+                return Err(format!("codex command timed out after {timeout_seconds} seconds").into());
+            }
+            _ = &mut next_progress => {
+                let elapsed_seconds = started_at.elapsed().as_secs();
+                let remaining_seconds = timeout_seconds.saturating_sub(elapsed_seconds);
+                tracing::info!(
+                    command = %command,
+                    schema = schema_label,
+                    elapsed_seconds,
+                    remaining_seconds,
+                    "codex cli request still running"
+                );
+                next_progress.as_mut().reset(
+                    TokioInstant::now() + Duration::from_secs(CODEX_PROGRESS_INTERVAL_SECONDS)
+                );
+            }
+        }
     }
 }
 

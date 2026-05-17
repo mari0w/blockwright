@@ -201,6 +201,17 @@ impl Planner {
             return None;
         }
 
+        tracing::info!(
+            has_nearby_scan = input.nearby_scan.is_some(),
+            scan_block_count = input
+                .nearby_scan
+                .as_ref()
+                .map(|scan| scan.blocks.len())
+                .unwrap_or_default(),
+            attachment_count = input.attachments.len(),
+            "starting codex blueprint planner"
+        );
+
         let prompt = build_blueprint_prompt(input);
         let output = match codex
             .ask_with_schema(&prompt, CodexResponseSchema::Blueprint)
@@ -213,6 +224,10 @@ impl Planner {
                 return None;
             }
         };
+        tracing::info!(
+            response_bytes = output.len(),
+            "codex blueprint response received; parsing blueprint json"
+        );
 
         let blueprint = match parse_blueprint_response(&output) {
             Some(blueprint) => blueprint,
@@ -221,14 +236,37 @@ impl Planner {
                 return None;
             }
         };
+        tracing::info!(
+            blueprint_id = %blueprint.id,
+            block_count = blueprint.blocks.len(),
+            material_count = blueprint.materials.len(),
+            "codex blueprint json parsed"
+        );
         let placement = match assess_placement(input, &blueprint) {
             PlacementDecision::Ready {
                 origin,
                 clear_existing,
                 pre_clear_blocks,
                 note,
-            } => (origin, clear_existing, pre_clear_blocks, note),
+            } => {
+                tracing::info!(
+                    blueprint_id = %blueprint.id,
+                    world = ?origin.world,
+                    origin_x = origin.x,
+                    origin_y = origin.y,
+                    origin_z = origin.z,
+                    clear_existing,
+                    pre_clear_count = pre_clear_blocks.len(),
+                    "codex blueprint placement assessed"
+                );
+                (origin, clear_existing, pre_clear_blocks, note)
+            }
             PlacementDecision::Blocked(message) => {
+                tracing::warn!(
+                    blueprint_id = %blueprint.id,
+                    reason = %message,
+                    "codex blueprint placement blocked"
+                );
                 return Some(PlanResult {
                     reply: message.clone(),
                     summary: "场地被已有方块占用".to_string(),
@@ -281,6 +319,7 @@ impl Planner {
             return None;
         }
 
+        tracing::info!("starting codex action planner");
         let prompt = build_action_plan_prompt(input);
         let output = match codex
             .ask_with_schema(&prompt, CodexResponseSchema::ActionPlan)
@@ -293,6 +332,10 @@ impl Planner {
                 return None;
             }
         };
+        tracing::info!(
+            response_bytes = output.len(),
+            "codex action response received; parsing action json"
+        );
 
         let plan = match parse_action_plan_response(&output) {
             Some(plan) => plan,

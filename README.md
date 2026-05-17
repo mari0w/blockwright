@@ -297,7 +297,7 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 
 如果本机暂时没有登录或安装 Codex CLI，可以把 `config/servers/local.yaml` 里的 `codex.enabled` 改成 `false`，controller 才会退回内置规则兜底。默认启用 Codex 时，不再用本地关键词规则冒充大模型理解。
 
-请求进入 controller 后会先打印 `received minecraft message`；开始调用模型时会打印 `starting codex cli request`，结束时会打印 `finished codex cli request`。如果游戏里显示请求失败但 controller 没有这两类日志，先检查游戏里的 `controllerUrl` 是否指向 `http://127.0.0.1:8765`。
+请求进入 controller 后会先打印 `received minecraft message`；开始调用模型时会打印 `starting codex cli request`，等待期间每 10 秒打印 `codex cli request still running`，结束时会打印 `finished codex cli request`。蓝图类需求还会打印 `starting codex blueprint planner`、`codex blueprint json parsed`、`codex blueprint placement assessed` 等阶段日志，用来判断卡在模型返回、JSON 解析、场地校验还是保存下发。controller 不会打印模型原始思考链路，避免泄露 prompt 和上下文。如果游戏里显示请求失败但 controller 没有这些日志，先检查游戏里的 `controllerUrl` 是否指向 `http://127.0.0.1:8765`。
 
 如果你要让 Codex CLI 走本地模型，可以把 `command` 改成带参数的形式，例如：
 
