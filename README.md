@@ -22,7 +22,7 @@
 - 蓝图以 JSON 文件保存，能表达材料清单、尺寸、相对坐标和标签。
 - 建筑任务会保存构建记录，执行端放置后逐块校验世界状态，并把校验报告回写 controller。
 - 对“改造面前建筑”这类需求，Fabric 会扫描附近非空气方块，controller 会先匹配已保存构建记录；匹配不唯一或部位不明确时只追问，不直接下发改造。
-- 预留 Codex CLI 适配层；启用后 controller 会把蓝图 JSON 规范、相对坐标和一致性规则写进规划 prompt，模型产出的蓝图会先保存再下发执行。
+- 默认接入 Codex CLI 做自然语言理解；controller 会把动作 JSON、蓝图 JSON、相对坐标和一致性规则写进规划 prompt，模型产出的蓝图会先保存再下发执行。
 
 ## 快速启动 controller
 
@@ -247,9 +247,9 @@ data/builds/
 
 ## AI 规划边界
 
-默认配置里 `codex.enabled: false`，所以当前可稳定验证的是规则规划：钻石、钻石剑、木屋蓝图、图片入口说明。
+本地配置 `config/servers/local.yaml` 默认 `codex.enabled: true`，controller 会优先调用本机 `codex exec` 理解玩家自然语言。比如“钻石稿子/钻石镐子/diamond pickaxe”应由 Codex CLI 理解成 `minecraft:diamond_pickaxe`，不会只因为包含“钻石”就发 64 个钻石。
 
-启用 Codex 后，controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
+controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
 
 - 只输出蓝图 JSON，不输出命令步骤。
 - 方块坐标必须是相对坐标。
@@ -257,10 +257,29 @@ data/builds/
 - 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。
 - 执行结果必须通过 `data/builds/` 的逐块校验报告确认。
 
+如果本机暂时没有登录或安装 Codex CLI，可以把 `config/servers/local.yaml` 里的 `codex.enabled` 改成 `false`，controller 会退回内置规则兜底。
+
+如果你要让 Codex CLI 走本地模型，可以把 `command` 配成带参数的形式，例如：
+
+```yaml
+codex:
+  enabled: true
+  command: "codex --oss"
+  timeout_seconds: 120
+```
+
+也可以用你自己的 Codex profile：
+
+```yaml
+codex:
+  enabled: true
+  command: "codex --profile local"
+  timeout_seconds: 120
+```
+
 ## 后续扩展方向
 
-1. 把 controller 的规则规划器替换/增强为 Codex CLI 调用。
-2. 接入 Telegram/Discord/企业微信等机器人，优先选择 polling、stream 或 local_command 这类本地友好的入口。
-3. 加图片分析流水线：图片 -> 结构识别 -> 材料映射 -> 蓝图 JSON。
-4. 插件增加建筑扫描能力：玩家面前区域 -> 方块矩阵 -> 识别已有蓝图 -> 局部修改。
-5. 数据层从 JSON 文件升级为 SQLite/Postgres，保留同一套蓝图领域模型。
+1. 接入 Telegram/Discord/企业微信等机器人，优先选择 polling、stream 或 local_command 这类本地友好的入口。
+2. 加图片分析流水线：图片 -> 结构识别 -> 材料映射 -> 蓝图 JSON。
+3. 扩展更多改造指令：楼层、朝向、局部区域、材质替换和撤销。
+4. 数据层从 JSON 文件升级为 SQLite/Postgres，保留同一套蓝图领域模型。

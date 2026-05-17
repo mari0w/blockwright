@@ -16,7 +16,7 @@ security:
   require_token: false
 
 codex:
-  enabled: false
+  enabled: true
   command: codex
   timeout_seconds: 120
 

@@ -5,6 +5,7 @@ use crate::{
     integrations::codex::CodexClient,
     services::blueprint_store::BlueprintStore,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
@@ -21,6 +22,13 @@ pub struct PlanResult {
     pub actions: Vec<GameAction>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CodexActionPlan {
+    reply: String,
+    summary: String,
+    actions: Vec<GameAction>,
+}
+
 #[derive(Clone, Default)]
 pub struct Planner {
     codex: Option<CodexClient>,
@@ -34,30 +42,6 @@ impl Planner {
     pub async fn plan(&self, input: PlannerInput, blueprints: &BlueprintStore) -> PlanResult {
         let text = input.text.trim();
         let lower_text = text.to_lowercase();
-
-        if wants_diamond_sword(text, &lower_text) {
-            return PlanResult {
-                reply: "可以，已经准备给你一把钻石剑。".to_string(),
-                summary: "发放钻石剑".to_string(),
-                actions: vec![GameAction::GiveItem {
-                    player: input.player,
-                    item: "minecraft:diamond_sword".to_string(),
-                    count: 1,
-                }],
-            };
-        }
-
-        if wants_diamonds(text, &lower_text) {
-            return PlanResult {
-                reply: "可以，已经准备给你 64 个钻石。".to_string(),
-                summary: "发放钻石".to_string(),
-                actions: vec![GameAction::GiveItem {
-                    player: input.player,
-                    item: "minecraft:diamond".to_string(),
-                    count: 64,
-                }],
-            };
-        }
 
         if wants_image_pipeline(text, &lower_text, &input.attachments) {
             if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
@@ -115,6 +99,34 @@ impl Planner {
             }
         }
 
+        if let Some(result) = self.try_codex_action_plan(&input).await {
+            return result;
+        }
+
+        if let Some(item) = requested_item(text, &lower_text) {
+            return PlanResult {
+                reply: format!("可以，已经准备给你{}。", item.reply_name),
+                summary: format!("发放{}", item.summary_name),
+                actions: vec![GameAction::GiveItem {
+                    player: input.player,
+                    item: item.item_id.to_string(),
+                    count: item.count,
+                }],
+            };
+        }
+
+        if wants_diamonds(text, &lower_text) {
+            return PlanResult {
+                reply: "可以，已经准备给你 64 个钻石。".to_string(),
+                summary: "发放钻石".to_string(),
+                actions: vec![GameAction::GiveItem {
+                    player: input.player,
+                    item: "minecraft:diamond".to_string(),
+                    count: 64,
+                }],
+            };
+        }
+
         PlanResult {
             reply: "我已经收到需求。当前第一版先支持钻石、钻石剑和木屋蓝图，后续会接 Codex 做更完整的理解。".to_string(),
             summary: "普通对话".to_string(),
@@ -158,6 +170,11 @@ impl Planner {
                 return None;
             }
         };
+        tracing::info!(
+            blueprint_id = %blueprint.id,
+            block_count = blueprint.blocks.len(),
+            "planned with codex blueprint planner"
+        );
         let origin = input
             .position
             .as_ref()
@@ -182,10 +199,152 @@ impl Planner {
             }],
         })
     }
+
+    async fn try_codex_action_plan(&self, input: &PlannerInput) -> Option<PlanResult> {
+        let codex = self.codex.as_ref()?;
+        if !codex.enabled() {
+            return None;
+        }
+
+        let prompt = build_action_plan_prompt(input);
+        let output = match codex.ask(&prompt).await {
+            Ok(Some(output)) if !output.trim().is_empty() => output,
+            Ok(_) => return None,
+            Err(error) => {
+                tracing::warn!(error = %error, "codex action planning failed");
+                return None;
+            }
+        };
+
+        let plan = match parse_action_plan_response(&output) {
+            Some(plan) => plan,
+            None => {
+                tracing::warn!("codex action planning returned invalid json");
+                return None;
+            }
+        };
+        if plan.actions.is_empty() {
+            return None;
+        }
+        tracing::info!(
+            summary = %plan.summary,
+            action_count = plan.actions.len(),
+            "planned with codex action planner"
+        );
+
+        Some(PlanResult {
+            reply: plan.reply,
+            summary: plan.summary,
+            actions: plan.actions,
+        })
+    }
 }
 
-fn wants_diamond_sword(original: &str, lower_text: &str) -> bool {
-    original.contains("钻石剑") || lower_text.contains("diamond sword")
+struct RequestedItem {
+    item_id: &'static str,
+    summary_name: &'static str,
+    reply_name: &'static str,
+    count: u32,
+}
+
+fn requested_item(original: &str, lower_text: &str) -> Option<RequestedItem> {
+    let items = [
+        RequestedItem {
+            item_id: "minecraft:diamond_pickaxe",
+            summary_name: "钻石镐",
+            reply_name: "一把钻石镐",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_axe",
+            summary_name: "钻石斧",
+            reply_name: "一把钻石斧",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_shovel",
+            summary_name: "钻石铲",
+            reply_name: "一把钻石铲",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_hoe",
+            summary_name: "钻石锄",
+            reply_name: "一把钻石锄",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_sword",
+            summary_name: "钻石剑",
+            reply_name: "一把钻石剑",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_helmet",
+            summary_name: "钻石头盔",
+            reply_name: "一个钻石头盔",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_chestplate",
+            summary_name: "钻石胸甲",
+            reply_name: "一个钻石胸甲",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_leggings",
+            summary_name: "钻石护腿",
+            reply_name: "一个钻石护腿",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_boots",
+            summary_name: "钻石靴子",
+            reply_name: "一双钻石靴子",
+            count: 1,
+        },
+        RequestedItem {
+            item_id: "minecraft:diamond_block",
+            summary_name: "钻石块",
+            reply_name: "64 个钻石块",
+            count: 64,
+        },
+    ];
+
+    let aliases = [
+        (
+            &items[0],
+            &["钻石镐子", "钻石镐", "钻石稿子", "钻石稿"][..],
+            "diamond pickaxe",
+        ),
+        (&items[1], &["钻石斧子", "钻石斧"][..], "diamond axe"),
+        (&items[2], &["钻石铲子", "钻石铲"][..], "diamond shovel"),
+        (&items[3], &["钻石锄头", "钻石锄"][..], "diamond hoe"),
+        (&items[4], &["钻石剑"][..], "diamond sword"),
+        (&items[5], &["钻石头盔"][..], "diamond helmet"),
+        (&items[6], &["钻石胸甲"][..], "diamond chestplate"),
+        (&items[7], &["钻石护腿"][..], "diamond leggings"),
+        (&items[8], &["钻石靴子", "钻石鞋"][..], "diamond boots"),
+        (&items[9], &["钻石块"][..], "diamond block"),
+    ];
+
+    aliases
+        .iter()
+        .find(|(item, chinese_aliases, english_alias)| {
+            chinese_aliases.iter().any(|alias| original.contains(alias))
+                || lower_text.contains(english_alias)
+                || lower_text.contains(
+                    item.item_id
+                        .strip_prefix("minecraft:")
+                        .unwrap_or(item.item_id),
+                )
+        })
+        .map(|(item, _, _)| RequestedItem {
+            item_id: item.item_id,
+            summary_name: item.summary_name,
+            reply_name: item.reply_name,
+            count: item.count,
+        })
 }
 
 fn wants_diamonds(original: &str, lower_text: &str) -> bool {
@@ -249,7 +408,41 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
     )
 }
 
+fn build_action_plan_prompt(input: &PlannerInput) -> String {
+    format!(
+        r#"你是 Blockwright 的 Minecraft 指令理解器。请把玩家自然语言转换成 Blockwright controller 可执行的动作 JSON。
+
+硬性规则：
+- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
+- JSON 必须符合：{{"reply":"中文回复","summary":"短中文摘要","actions":[...]}}
+- actions 当前只允许：
+  1. 发物品：{{"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}}
+  2. 聊天提示：{{"type":"chat","message":"中文提示"}}
+- 需要识别完整物品名，不能只因为文本包含“钻石”就发 minecraft:diamond。
+- 例如“钻石镐/钻石稿子/diamond pickaxe”应是 minecraft:diamond_pickaxe。
+- 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
+- 例如“钻石剑/diamond sword”应是 minecraft:diamond_sword。
+- 例如“给我钻石”才是 minecraft:diamond，count 为 64。
+- 建筑、图片复刻、改造已有建筑由其他流程处理；如果用户请求这类复杂建筑而不是物品，请返回 chat 提示“需要走建筑规划流程”。
+- item 必须使用 Minecraft 命名空间 ID，count 必须大于 0。
+
+玩家名：
+{player}
+
+用户文字：
+{text}
+"#,
+        player = input.player.as_deref().unwrap_or("unknown"),
+        text = input.text.trim()
+    )
+}
+
 fn parse_blueprint_response(output: &str) -> Option<Blueprint> {
+    let json = extract_json_object(output.trim())?;
+    serde_json::from_str(json).ok()
+}
+
+fn parse_action_plan_response(output: &str) -> Option<CodexActionPlan> {
     let json = extract_json_object(output.trim())?;
     serde_json::from_str(json).ok()
 }
@@ -360,6 +553,31 @@ mod tests {
                 count: 64,
                 ..
             } if item == "minecraft:diamond"
+        ));
+    }
+
+    #[tokio::test]
+    async fn fallback_plans_diamond_pickaxe_before_loose_diamond_match() {
+        let store = empty_store("diamond-pickaxe").await;
+        let result = Planner::default()
+            .plan(
+                PlannerInput {
+                    text: "我要一个钻石稿子".to_string(),
+                    player: Some("Alex".to_string()),
+                    position: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert!(matches!(
+            result.actions[0],
+            GameAction::GiveItem {
+                ref item,
+                count: 1,
+                ..
+            } if item == "minecraft:diamond_pickaxe"
         ));
     }
 
@@ -517,6 +735,42 @@ mod tests {
         assert!(prompt.contains("只输出一个 JSON 对象"));
         assert!(prompt.contains("相对坐标"));
         assert!(prompt.contains("同一份 blocks 放置"));
+    }
+
+    #[test]
+    fn action_plan_prompt_requires_complete_item_understanding() {
+        let prompt = build_action_plan_prompt(&PlannerInput {
+            text: "我要钻石稿子".to_string(),
+            player: Some("Steve".to_string()),
+            position: None,
+            attachments: Vec::new(),
+        });
+
+        assert!(prompt.contains("不能只因为文本包含“钻石”"));
+        assert!(prompt.contains("minecraft:diamond_pickaxe"));
+    }
+
+    #[test]
+    fn parses_codex_action_plan_for_diamond_pickaxe() {
+        let output = r#"{
+  "reply": "可以，已经准备给你一把钻石镐。",
+  "summary": "发放钻石镐",
+  "actions": [
+    {"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}
+  ]
+}"#;
+
+        let plan = parse_action_plan_response(output).unwrap();
+
+        assert_eq!(plan.summary, "发放钻石镐");
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::GiveItem {
+                ref item,
+                count: 1,
+                ..
+            } if item == "minecraft:diamond_pickaxe"
+        ));
     }
 
     #[test]
