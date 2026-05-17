@@ -121,6 +121,9 @@ pub enum GameAction {
         #[serde(default, skip_serializing_if = "is_false")]
         clear_existing: bool,
     },
+    RunCommand {
+        command: String,
+    },
     Chat {
         message: String,
     },

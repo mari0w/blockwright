@@ -50,6 +50,7 @@ public final class JsonModels {
         public String player;
         public String item;
         public int count;
+        public String command;
         public String message;
         @SerializedName("blueprint_id")
         public String blueprintId;

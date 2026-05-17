@@ -66,6 +66,7 @@ controller 不直接操作 Minecraft 世界，只返回动作：
 ```text
 give_item
 place_blocks
+run_command
 chat
 ```
 
@@ -91,4 +92,3 @@ chat
 3. controller 用扫描结果与已保存蓝图做匹配。
 4. 识别出最接近的蓝图和放置原点。
 5. 对局部区域生成修改动作。
-

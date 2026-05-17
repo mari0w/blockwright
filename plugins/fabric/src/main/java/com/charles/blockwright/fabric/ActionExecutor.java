@@ -9,6 +9,7 @@ import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -47,6 +48,10 @@ public final class ActionExecutor {
                     report.actions.add(nonBlockReport("give_item"));
                 }
                 case "place_blocks" -> report.actions.add(placeBlocks(action, defaultPlayer));
+                case "run_command" -> {
+                    runCommand(action, defaultPlayer);
+                    report.actions.add(nonBlockReport("run_command"));
+                }
                 case "chat" -> {
                     sendChat(action, defaultPlayer);
                     report.actions.add(nonBlockReport("chat"));
@@ -71,6 +76,19 @@ public final class ActionExecutor {
         int count = Math.max(action.count, 1);
         player.getInventory().insertStack(new ItemStack(item, count));
         player.sendMessage(Text.literal("Blockwright 已发放：" + Registries.ITEM.getId(item) + " x " + count), false);
+    }
+
+    private void runCommand(JsonModels.GameAction action, ServerPlayerEntity defaultPlayer) {
+        String command = CommandPolicy.normalize(action.command);
+        if (!CommandPolicy.isAllowed(command)) {
+            throw new IllegalArgumentException("不允许执行的 Minecraft 指令：" + action.command);
+        }
+
+        ServerCommandSource source = defaultPlayer.getCommandSource()
+                .withLevel(4)
+                .withSilent();
+        server.getCommandManager().executeWithPrefix(source, "/" + command);
+        defaultPlayer.sendMessage(Text.literal("Blockwright 已执行指令：/" + command), false);
     }
 
     private JsonModels.ActionExecutionReport placeBlocks(

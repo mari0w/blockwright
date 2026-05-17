@@ -915,14 +915,25 @@ fn build_action_plan_prompt(input: &PlannerInput) -> String {
 - JSON 必须符合：{{"reply":"中文回复","summary":"短中文摘要","actions":[...]}}
 - actions 当前只允许：
   1. 发物品：{{"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}}
-  2. 聊天提示：{{"type":"chat","message":"中文提示"}}
+  2. 执行 Minecraft 指令：{{"type":"run_command","command":"time set day"}}
+  3. 聊天提示：{{"type":"chat","message":"中文提示"}}
 - 需要识别完整物品名，不能只因为文本包含“钻石”就发 minecraft:diamond。
 - 例如“钻石镐/钻石稿子/diamond pickaxe”应是 minecraft:diamond_pickaxe。
 - 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
 - 例如“钻石剑/diamond sword”应是 minecraft:diamond_sword。
 - 例如“给我钻石”才是 minecraft:diamond，count 为 64。
 - 这个动作理解器只处理物品和普通聊天；建筑需求会在进入这里之前由蓝图规划器处理。
-- 如果用户文字不是物品需求，不要猜测发物品，返回一个普通 chat 提示。
+- 对能用原版 Minecraft 指令完成的需求，输出 run_command。command 不要带开头的 `/`。
+- 例如“我想白天/天亮吧”应是 time set day。
+- 例如“我想晚上”应是 time set night。
+- 例如“别下雨/天气晴朗”应是 weather clear。
+- 例如“下雨吧”应是 weather rain。
+- 例如“我想创造模式”应是 gamemode creative {player}。
+- 例如“我想回生存”应是 gamemode survival {player}。
+- 例如“给我速度/我要夜视”可用 effect give {player} minecraft:speed 120 1 true / effect give {player} minecraft:night_vision 600 0 true。
+- 允许使用的命令根只包括：time、weather、difficulty、gamerule、gamemode、effect、enchant、experience、xp、tp、teleport、spawnpoint、setworldspawn、summon。
+- 不要输出 op、deop、stop、reload、ban、kick、whitelist、save-all、execute、fill、setblock、data、function 等危险或大范围命令。
+- 如果用户文字不能安全映射成物品或白名单 Minecraft 指令，返回普通 chat 提示。
 - item 必须使用 Minecraft 命名空间 ID，count 必须大于 0。
 
 玩家名：
@@ -1514,6 +1525,8 @@ BLOCKWRIGHT_JSON
 
         assert!(prompt.contains("不能只因为文本包含“钻石”"));
         assert!(prompt.contains("minecraft:diamond_pickaxe"));
+        assert!(prompt.contains("time set day"));
+        assert!(prompt.contains("gamemode creative Steve"));
         assert!(!prompt.contains("需要走建筑规划流程"));
     }
 
@@ -1537,6 +1550,25 @@ BLOCKWRIGHT_JSON
                 count: 1,
                 ..
             } if item == "minecraft:diamond_pickaxe"
+        ));
+    }
+
+    #[test]
+    fn parses_codex_action_plan_for_minecraft_command() {
+        let output = r#"{
+  "reply": "可以，已经切到白天。",
+  "summary": "设置为白天",
+  "actions": [
+    {"type":"run_command","command":"time set day"}
+  ]
+}"#;
+
+        let plan = parse_action_plan_response(output).unwrap();
+
+        assert_eq!(plan.summary, "设置为白天");
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::RunCommand { ref command } if command == "time set day"
         ));
     }
 
