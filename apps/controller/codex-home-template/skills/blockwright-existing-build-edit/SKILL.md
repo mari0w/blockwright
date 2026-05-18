@@ -16,6 +16,9 @@ Use this skill when the request references an existing structure near the player
 5. Produce explicit blocks for the changed area so the controller can save and verify the edit.
 6. Keep the world and stored build information consistent after the edit.
 7. Preserve Minecraft-specific behavior when editing: keep doors as two matching halves, beds as head/foot pairs, persistent leaves on decorative foliage, reachable paths, interior headroom, and lighting.
+8. Preserve the existing building's ground contact and access path. Do not move an edit upward, bury it, or leave a door/window/floor floating unless the player asked for that.
+9. When expanding a structure, place the new footprint on a reasonable adjacent surface and keep it connected to the existing entrance or interior route.
+10. Follow-up requests such as raising, lowering, shifting, reworking the foundation, or making the site look more natural should modify the matched/current build, preserving the player's original target area unless they explicitly ask to relocate it.
 
 ## Safety
 

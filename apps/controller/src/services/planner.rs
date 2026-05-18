@@ -158,11 +158,20 @@ impl Planner {
         let PlacementDecision::Ready {
             origin,
             clear_existing,
+            pre_foundation_blocks,
             pre_clear_blocks,
             note: _,
         } = assess_placement(input, &blueprint);
 
         let mut actions = Vec::new();
+        if !pre_foundation_blocks.is_empty() {
+            actions.push(GameAction::PlaceBlocks {
+                blueprint_id: Some(format!("{}:site-foundation", blueprint.id)),
+                origin: origin.clone(),
+                blocks: pre_foundation_blocks,
+                clear_existing: true,
+            });
+        }
         if !pre_clear_blocks.is_empty() {
             actions.push(GameAction::PlaceBlocks {
                 blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
@@ -246,6 +255,7 @@ impl Planner {
         let PlacementDecision::Ready {
             origin,
             clear_existing,
+            pre_foundation_blocks,
             pre_clear_blocks,
             note,
         } = assess_placement(input, &blueprint);
@@ -256,10 +266,17 @@ impl Planner {
             origin_y = origin.y,
             origin_z = origin.z,
             clear_existing,
+            pre_foundation_count = pre_foundation_blocks.len(),
             pre_clear_count = pre_clear_blocks.len(),
             "codex blueprint placement assessed"
         );
-        let placement = (origin, clear_existing, pre_clear_blocks, note);
+        let placement = (
+            origin,
+            clear_existing,
+            pre_foundation_blocks,
+            pre_clear_blocks,
+            note,
+        );
         let blueprint = match blueprints.save(blueprint).await {
             Ok(blueprint) => blueprint,
             Err(error) => {
@@ -272,8 +289,17 @@ impl Planner {
             block_count = blueprint.blocks.len(),
             "planned with codex blueprint planner"
         );
-        let (origin, clear_existing, pre_clear_blocks, placement_note) = placement;
+        let (origin, clear_existing, pre_foundation_blocks, pre_clear_blocks, placement_note) =
+            placement;
         let mut actions = Vec::new();
+        if !pre_foundation_blocks.is_empty() {
+            actions.push(GameAction::PlaceBlocks {
+                blueprint_id: Some(format!("{}:site-foundation", blueprint.id)),
+                origin: origin.clone(),
+                blocks: pre_foundation_blocks,
+                clear_existing: true,
+            });
+        }
         if !pre_clear_blocks.is_empty() {
             actions.push(GameAction::PlaceBlocks {
                 blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
@@ -380,12 +406,25 @@ struct PlacementCandidate {
     volume_collisions: Vec<PlacementCollision>,
     distance_score: i32,
     has_known_ground: bool,
+    surface_score: PlacementSurfaceScore,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PlacementSurfaceScore {
+    missing_support_count: usize,
+    height_spread: i32,
+}
+
+struct FootprintSurface {
+    ground_y: i32,
+    score: PlacementSurfaceScore,
 }
 
 enum PlacementDecision {
     Ready {
         origin: BlockOrigin,
         clear_existing: bool,
+        pre_foundation_blocks: Vec<crate::domain::types::BlueprintBlock>,
         pre_clear_blocks: Vec<crate::domain::types::BlueprintBlock>,
         note: String,
     },
@@ -398,6 +437,7 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         return PlacementDecision::Ready {
             origin,
             clear_existing: false,
+            pre_foundation_blocks: Vec::new(),
             pre_clear_blocks: Vec::new(),
             note: "这次没有收到场地扫描数据，按玩家当前位置估算落点，".to_string(),
         };
@@ -406,6 +446,7 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         return PlacementDecision::Ready {
             origin,
             clear_existing: false,
+            pre_foundation_blocks: Vec::new(),
             pre_clear_blocks: Vec::new(),
             note: "蓝图没有方块，".to_string(),
         };
@@ -413,7 +454,14 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
 
     let candidate = choose_placement_candidate(input, scan, bounds.as_ref(), &blueprint.blocks)
         .unwrap_or_else(|| {
-            placement_candidate(scan, origin, false, bounds.as_ref(), &blueprint.blocks)
+            placement_candidate(
+                scan,
+                origin,
+                PlacementSurfaceScore::default(),
+                false,
+                bounds.as_ref(),
+                &blueprint.blocks,
+            )
         });
     let shifted_note = if candidate.distance_score > 0 {
         format!(
@@ -426,6 +474,12 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
     let origin = candidate.origin;
     let target_collisions = candidate.target_collisions;
     let volume_collisions = candidate.volume_collisions;
+    let pre_foundation_blocks = if should_prepare_foundation(input, blueprint) {
+        foundation_blocks_for_footprint(scan, &origin, blueprint, bounds.as_ref())
+    } else {
+        Vec::new()
+    };
+    let foundation_note = foundation_note(pre_foundation_blocks.len(), blueprint);
     let all_collisions = target_collisions
         .iter()
         .chain(volume_collisions.iter())
@@ -436,10 +490,11 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         return PlacementDecision::Ready {
             origin,
             clear_existing: false,
+            pre_foundation_blocks,
             pre_clear_blocks: Vec::new(),
             note: format!(
-                "{}已根据附近扫描把地基放在 y={}，目标区域没有检测到重叠方块，",
-                shifted_note, origin_y
+                "{}已根据附近扫描把地基放在 y={}，{}目标区域没有检测到重叠方块，",
+                shifted_note, origin_y, foundation_note
             ),
         };
     }
@@ -465,11 +520,13 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
     PlacementDecision::Ready {
         origin,
         clear_existing: !target_collisions.is_empty(),
+        pre_foundation_blocks,
         pre_clear_blocks,
         note: format!(
-            "{}已根据附近扫描把地基放在 y={}，并会先处理 {} 个{}，",
+            "{}已根据附近扫描把地基放在 y={}，{}并会先处理 {} 个{}，",
             shifted_note,
             origin_y,
+            foundation_note,
             all_collisions.len(),
             collision_label
         ),
@@ -495,8 +552,8 @@ fn choose_placement_candidate(
 
                 let origin_x = scan.center_x + dx - offset_x;
                 let origin_z = scan.center_z + dz - offset_z;
-                let ground_y = ground_y_for_footprint(input, scan, origin_x, origin_z, bounds);
-                let origin_y = ground_y.map_or_else(
+                let surface = surface_for_footprint(input, scan, origin_x, origin_z, bounds);
+                let origin_y = surface.as_ref().map_or_else(
                     || {
                         input
                             .position
@@ -504,7 +561,7 @@ fn choose_placement_candidate(
                             .map(|position| position.y.round() as i32)
                             .unwrap_or(scan.center_y)
                     },
-                    |ground_y| ground_y + 1,
+                    |surface| surface.ground_y + 1,
                 );
                 let candidate = placement_candidate(
                     scan,
@@ -514,7 +571,11 @@ fn choose_placement_candidate(
                         y: origin_y,
                         z: origin_z,
                     },
-                    ground_y.is_some(),
+                    surface
+                        .as_ref()
+                        .map(|surface| surface.score)
+                        .unwrap_or_default(),
+                    surface.is_some(),
                     bounds,
                     blocks,
                 );
@@ -533,7 +594,7 @@ fn choose_placement_candidate(
 
         if best
             .as_ref()
-            .map(|candidate| collision_count(candidate) == 0)
+            .map(placement_candidate_is_ready)
             .unwrap_or(false)
         {
             break;
@@ -546,6 +607,7 @@ fn choose_placement_candidate(
 fn placement_candidate(
     scan: &WorldScan,
     origin: BlockOrigin,
+    surface_score: PlacementSurfaceScore,
     has_known_ground: bool,
     bounds: Option<&BlueprintBounds>,
     blocks: &[crate::domain::types::BlueprintBlock],
@@ -555,7 +617,9 @@ fn placement_candidate(
     let volume_collisions = bounds
         .map(|bounds| placement_volume_collisions(scan, &origin, bounds, &target_positions))
         .unwrap_or_default();
-    let distance_score = (origin.x - scan.center_x).abs() + (origin.z - scan.center_z).abs();
+    let (offset_x, offset_z) = blueprint_center_offset(bounds);
+    let distance_score =
+        (origin.x + offset_x - scan.center_x).abs() + (origin.z + offset_z - scan.center_z).abs();
 
     PlacementCandidate {
         origin,
@@ -563,20 +627,33 @@ fn placement_candidate(
         volume_collisions,
         distance_score,
         has_known_ground,
+        surface_score,
     }
 }
 
-fn placement_candidate_score(candidate: &PlacementCandidate) -> (usize, usize, usize, i32) {
+fn placement_candidate_score(
+    candidate: &PlacementCandidate,
+) -> (usize, i32, usize, usize, usize, usize) {
     (
-        usize::from(!candidate.has_known_ground),
         hard_collision_count(candidate),
-        collision_count(candidate),
         candidate.distance_score,
+        collision_count(candidate),
+        candidate.surface_score.height_spread as usize,
+        candidate.surface_score.missing_support_count,
+        usize::from(!candidate.has_known_ground),
     )
 }
 
 fn collision_count(candidate: &PlacementCandidate) -> usize {
     candidate.target_collisions.len() + candidate.volume_collisions.len()
+}
+
+fn placement_candidate_is_ready(candidate: &PlacementCandidate) -> bool {
+    collision_count(candidate) == 0
+        && (candidate.distance_score == 0
+            || (candidate.has_known_ground
+                && candidate.surface_score.missing_support_count == 0
+                && candidate.surface_score.height_spread <= 1))
 }
 
 fn hard_collision_count(candidate: &PlacementCandidate) -> usize {
@@ -616,7 +693,7 @@ fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> B
     let (offset_x, offset_z) = blueprint_center_offset(bounds);
     let x = scan.center_x - offset_x;
     let z = scan.center_z - offset_z;
-    let y = ground_y_for_footprint(input, scan, x, z, bounds).map_or_else(
+    let y = surface_for_footprint(input, scan, x, z, bounds).map_or_else(
         || {
             input
                 .position
@@ -624,7 +701,7 @@ fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> B
                 .map(|position| position.y.round() as i32)
                 .unwrap_or(scan.center_y)
         },
-        |ground_y| ground_y + 1,
+        |surface| surface.ground_y + 1,
     );
 
     BlockOrigin {
@@ -635,13 +712,13 @@ fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> B
     }
 }
 
-fn ground_y_for_footprint(
+fn surface_for_footprint(
     input: &PlannerInput,
     scan: &WorldScan,
     origin_x: i32,
     origin_z: i32,
     bounds: Option<&BlueprintBounds>,
-) -> Option<i32> {
+) -> Option<FootprintSurface> {
     let max_ground_y = input
         .position
         .as_ref()
@@ -658,17 +735,171 @@ fn ground_y_for_footprint(
         })
         .unwrap_or((scan.center_x, scan.center_x, scan.center_z, scan.center_z));
 
+    let mut support_ys = Vec::new();
+    let mut missing_support_count = 0usize;
+    for x in min_x..=max_x {
+        for z in min_z..=max_z {
+            let support_y = scan
+                .blocks
+                .iter()
+                .filter(|block| block.x == x && block.z == z && block.y <= max_ground_y)
+                .filter(|block| is_build_support_material(block.material.as_str()))
+                .map(|block| block.y)
+                .max();
+
+            if let Some(support_y) = support_y {
+                support_ys.push(support_y);
+            } else {
+                missing_support_count += 1;
+            }
+        }
+    }
+
+    let min_support_y = support_ys.iter().min().copied()?;
+    let max_support_y = support_ys.iter().max().copied()?;
+    Some(FootprintSurface {
+        ground_y: max_support_y,
+        score: PlacementSurfaceScore {
+            missing_support_count,
+            height_spread: max_support_y - min_support_y,
+        },
+    })
+}
+
+fn foundation_blocks_for_footprint(
+    scan: &WorldScan,
+    origin: &BlockOrigin,
+    blueprint: &Blueprint,
+    bounds: Option<&BlueprintBounds>,
+) -> Vec<crate::domain::types::BlueprintBlock> {
+    let Some(bounds) = bounds else {
+        return Vec::new();
+    };
+
+    let materials = foundation_materials_for_blueprint(blueprint);
+    let target_support_y = origin.y + bounds.min_y - 1;
+    let mut blocks = Vec::new();
+    for x in origin.x + bounds.min_x..=origin.x + bounds.max_x {
+        for z in origin.z + bounds.min_z..=origin.z + bounds.max_z {
+            let safe_support_y = highest_safe_support_y_at(scan, x, z, target_support_y);
+            if safe_support_y == Some(target_support_y) {
+                continue;
+            }
+
+            let start_y = safe_support_y
+                .map(|value| value + 1)
+                .unwrap_or(target_support_y);
+            for y in start_y..=target_support_y {
+                blocks.push(crate::domain::types::BlueprintBlock {
+                    x: x - origin.x,
+                    y: y - origin.y,
+                    z: z - origin.z,
+                    material: materials.material_for_layer(y, target_support_y),
+                });
+            }
+        }
+    }
+    blocks
+}
+
+struct FoundationMaterials {
+    support: String,
+    cap: String,
+    label: &'static str,
+}
+
+impl FoundationMaterials {
+    fn material_for_layer(&self, y: i32, target_support_y: i32) -> String {
+        if y == target_support_y {
+            self.cap.clone()
+        } else {
+            self.support.clone()
+        }
+    }
+}
+
+fn foundation_materials_for_blueprint(blueprint: &Blueprint) -> FoundationMaterials {
+    let materials = blueprint
+        .blocks
+        .iter()
+        .map(|block| material_id(block.material.as_str()))
+        .chain(
+            blueprint
+                .materials
+                .iter()
+                .map(|item| material_id(item.material.as_str())),
+        )
+        .collect::<Vec<_>>();
+
+    if let Some(prefix) = dominant_wood_prefix(&materials) {
+        return FoundationMaterials {
+            support: format!("minecraft:{prefix}_log[axis=y]"),
+            cap: format!("minecraft:{prefix}_planks"),
+            label: "木桩平台",
+        };
+    }
+
+    FoundationMaterials {
+        support: "minecraft:stone_bricks".to_string(),
+        cap: "minecraft:stone_bricks".to_string(),
+        label: "石砖基座",
+    }
+}
+
+fn dominant_wood_prefix(materials: &[&str]) -> Option<&'static str> {
+    let prefixes = [
+        "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry",
+    ];
+
+    prefixes.into_iter().find(|prefix| {
+        materials.iter().any(|material| {
+            material.contains(&format!("{prefix}_planks"))
+                || material.contains(&format!("{prefix}_log"))
+                || material.contains(&format!("{prefix}_wood"))
+                || material.contains(&format!("{prefix}_stairs"))
+                || material.contains(&format!("{prefix}_slab"))
+        })
+    })
+}
+
+fn highest_safe_support_y_at(scan: &WorldScan, x: i32, z: i32, max_y: i32) -> Option<i32> {
     scan.blocks
         .iter()
-        .filter(|block| {
-            block.x >= min_x
-                && block.x <= max_x
-                && block.z >= min_z
-                && block.z <= max_z
-                && block.y <= max_ground_y
-        })
+        .filter(|block| block.x == x && block.z == z && block.y <= max_y)
+        .filter(|block| is_build_support_material(block.material.as_str()))
         .map(|block| block.y)
         .max()
+}
+
+fn should_prepare_foundation(input: &PlannerInput, blueprint: &Blueprint) -> bool {
+    let text = input.text.to_lowercase();
+    let special_span_request = input.text.contains('桥')
+        || input.text.contains("码头")
+        || input.text.contains("栈桥")
+        || input.text.contains("树屋")
+        || text.contains("bridge")
+        || text.contains("dock")
+        || text.contains("pier")
+        || text.contains("treehouse")
+        || text.contains("tree house");
+    let special_span_tag = blueprint.tags.iter().any(|tag| {
+        let tag = tag.to_lowercase();
+        matches!(
+            tag.as_str(),
+            "bridge" | "dock" | "pier" | "treehouse" | "tree_house"
+        )
+    });
+
+    !special_span_request && !special_span_tag
+}
+
+fn foundation_note(count: usize, blueprint: &Blueprint) -> String {
+    if count == 0 {
+        String::new()
+    } else {
+        let materials = foundation_materials_for_blueprint(blueprint);
+        format!("会先做 {} 个融入地形的{}方块，", count, materials.label)
+    }
 }
 
 fn target_position_set(
@@ -752,6 +983,7 @@ fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<B
 }
 
 fn is_auto_clear_material(material: &str) -> bool {
+    let material = material_id(material);
     matches!(
         material,
         "minecraft:grass"
@@ -777,6 +1009,44 @@ fn is_auto_clear_material(material: &str) -> bool {
             | "minecraft:brown_mushroom"
             | "minecraft:red_mushroom"
     )
+}
+
+fn is_build_support_material(material: &str) -> bool {
+    let material = material_id(material);
+    !is_auto_clear_material(material) && !is_unsuitable_support_material(material)
+}
+
+fn is_unsuitable_support_material(material: &str) -> bool {
+    material == "minecraft:water"
+        || material == "minecraft:lava"
+        || material == "minecraft:fire"
+        || material == "minecraft:soul_fire"
+        || material == "minecraft:cactus"
+        || material == "minecraft:bamboo"
+        || material == "minecraft:chest"
+        || material == "minecraft:trapped_chest"
+        || material == "minecraft:barrel"
+        || material == "minecraft:crafting_table"
+        || material == "minecraft:furnace"
+        || material == "minecraft:door"
+        || material.ends_with("_door")
+        || material.ends_with("_bed")
+        || material.ends_with("_leaves")
+        || material.ends_with("_log")
+        || material.ends_with("_stem")
+        || material.ends_with("_hyphae")
+        || material.ends_with("_sapling")
+        || material.ends_with("_torch")
+        || material.ends_with("_lantern")
+        || material.ends_with("_sign")
+        || material.ends_with("_crop")
+}
+
+fn material_id(material: &str) -> &str {
+    material
+        .split_once('[')
+        .map(|(id, _)| id)
+        .unwrap_or(material)
 }
 
 fn requested_item(original: &str, lower_text: &str) -> Option<RequestedItem> {
@@ -973,6 +1243,9 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 第一阶段蓝图规模控制在 500 个方块以内，优先用常见原版方块。
 - materials 必须和 blocks 统计一致。
 - 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
+- 蓝图最低的普通地板/地基层默认从相对 y=0 开始；不要把世界绝对高度写进 blocks，也不要无故使用负 y。
+- 默认假设 controller 会把蓝图 y=0 放在玩家面向目标点附近的第一层空气上，优先使用玩家正面目标点，而不是随便搬到远处空地。
+- 如果目标点是坑、水边、坡地或奇怪地形，不要拒绝；要把地形融入设计，让建筑通过平台、露台、木桩、石砖基座、楼梯、桥接或挡土墙自然贴合场地。
 - 住宅、木屋、树屋、房间这类可居住建筑，默认要能实际使用：至少有完整地板、墙、屋顶、可通行入口、两格高室内空间、床、照明和基础窗户，除非玩家明确只要外观模型。
 - 门要按两格结构输出上下两块，例如同一个位置 y=1 用 minecraft:oak_door[half=lower,facing=south]，y=2 用 minecraft:oak_door[half=upper,facing=south]，并让入口前后留出通行空间。
 - 床要按 head/foot 两块输出，朝向一致，周围至少留一格可站立空间。
@@ -980,10 +1253,13 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 室内不能被实心方块填满；家具、床、火把、梯子、楼梯等要留出玩家移动路径，不要只生成封闭外壳。
 - 照明优先用 torch、lantern、glowstone 等稳定光源，封闭建筑内部至少放一个光源，避免夜晚不可用。
 - 悬空建筑、树屋和二楼必须有可到达路径，例如梯子、楼梯或台阶；不要生成玩家无法进入的房间。
+- 入口要面向或连通玩家侧的室外路径，不能把唯一入口贴在墙、悬崖、水面、坑洞或不可通行区域上；如果目标地形复杂，要设计台阶、平台或桥接让入口可达。
+- 较宽建筑要有完整地板或美观地基，让它看起来坐落在地形里；不要只靠一个角或一根柱子支撑普通房屋。
 - 水、岩浆、火、沙子/沙砾、红石机关、门、床、告示牌等有特殊状态或物理特性的方块，只有能明确表达状态和安全放置时才使用。
 - description 用中文简短写清楚设计思路和处理方式。
 - 玩家说“生成/建造/做一个/我要一个 + 建筑物名”时，直接生成可执行小型蓝图，不要返回聊天提示。
-- 你会收到 controller 的场地摘要；生成蓝图时要假设 controller 会把蓝图放在扫描中心附近的地面上，并会在下发前做重叠校验。
+- 你会收到 controller 的场地摘要；生成蓝图时要假设扫描中心就是玩家面前想要处理的位置。controller 会尽量在这个目标点或很小范围内落位；地形不理想时会优先做场地融合和美观支撑，而不是直接拒绝或远距离迁移。
+- 如果这是同一会话里的后续反馈，例如“抬高一点”“往左一点”“纠正地基”“重新设计入口”，要理解成对当前建筑的调整思路，而不是重新换一块地。
 
 用户文字：
 {text}
@@ -1029,7 +1305,7 @@ fn build_site_context(input: &PlannerInput) -> String {
         .join("、");
 
     format!(
-        "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。",
+        "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。落点原则：扫描中心是玩家面前目标点，优先在这里或小范围内创建；地形不理想时做美观的场地融合、支撑、台阶或平台，入口要保留可达路径。",
         scan.world,
         scan.center_x,
         scan.center_y,
@@ -1530,6 +1806,240 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
+    async fn codex_build_keeps_front_target_and_integrates_water_surface() {
+        let store = empty_store("codex-site-water").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-water",
+            r#"{
+  "id": "water-aware-room",
+  "name": "避开水面的房间",
+  "description": "测试不要把水面当地面。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["room"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(vec![
+                        scan_block(20, 63, 30, "minecraft:water[level=0]"),
+                        scan_block(21, 63, 30, "minecraft:grass_block[snowy=false]"),
+                    ])),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 water-aware-room");
+        assert!(result.reply.contains("融入地形的木桩平台"));
+        assert_eq!(result.actions.len(), 2);
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    x: 20,
+                    y: 64,
+                    z: 30,
+                    ..
+                },
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "water-aware-room:site-foundation"
+                && blocks.len() == 1
+                && blocks[0].y == -1
+                && blocks[0].material == "minecraft:oak_planks"
+        ));
+        assert!(matches!(
+            &result.actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    x: 20,
+                    y: 64,
+                    z: 30,
+                    ..
+                },
+                ..
+            } if blueprint_id == "water-aware-room"
+        ));
+    }
+
+    #[tokio::test]
+    async fn codex_build_prepares_foundation_when_no_good_surface_exists() {
+        let store = empty_store("codex-site-foundation").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-foundation",
+            r#"{
+  "id": "foundation-room",
+  "name": "自动补地基房间",
+  "description": "测试不因地面不适合而拒绝。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["room"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(vec![scan_block(
+                        20,
+                        63,
+                        30,
+                        "minecraft:water[level=0]",
+                    )])),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 foundation-room");
+        assert!(result.reply.contains("融入地形的木桩平台"));
+        assert_eq!(result.actions.len(), 2);
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    x: 20,
+                    y: 64,
+                    z: 30,
+                    ..
+                },
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "foundation-room:site-foundation"
+                && blocks.len() == 1
+                && blocks[0].y == -1
+                && blocks[0].material == "minecraft:oak_planks"
+        ));
+        assert!(matches!(
+            &result.actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                ..
+            } if blueprint_id == "foundation-room"
+        ));
+    }
+
+    #[tokio::test]
+    async fn codex_build_keeps_front_target_and_prepares_supported_footprint() {
+        let store = empty_store("codex-site-supported-footprint").await;
+        let planner = planner_with_fake_codex(
+            "codex-site-supported-footprint",
+            r#"{
+  "id": "supported-floor-room",
+  "name": "有支撑的房间",
+  "description": "测试普通房间优先选择完整地面支撑。",
+  "size": {"width": 3, "height": 1, "depth": 3},
+  "materials": [{"material": "minecraft:oak_planks", "count": 9}],
+  "blocks": [
+    {"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+    {"x": 0, "y": 0, "z": 1, "material": "minecraft:oak_planks"},
+    {"x": 0, "y": 0, "z": 2, "material": "minecraft:oak_planks"},
+    {"x": 1, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+    {"x": 1, "y": 0, "z": 1, "material": "minecraft:oak_planks"},
+    {"x": 1, "y": 0, "z": 2, "material": "minecraft:oak_planks"},
+    {"x": 2, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+    {"x": 2, "y": 0, "z": 1, "material": "minecraft:oak_planks"},
+    {"x": 2, "y": 0, "z": 2, "material": "minecraft:oak_planks"}
+  ],
+  "tags": ["room"]
+}"#,
+        );
+        let mut blocks = vec![scan_block(20, 63, 30, "minecraft:grass_block")];
+        for x in 22..=24 {
+            for z in 29..=31 {
+                blocks.push(scan_block(x, 63, z, "minecraft:grass_block"));
+            }
+        }
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "生成一个房间".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 18.0,
+                        y: 64.0,
+                        z: 28.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(scan_with_blocks(blocks)),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 supported-floor-room");
+        assert!(result.reply.contains("融入地形的木桩平台"));
+        assert_eq!(result.actions.len(), 2);
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    x: 19,
+                    y: 64,
+                    z: 29,
+                    ..
+                },
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "supported-floor-room:site-foundation"
+                && blocks.len() == 8
+                && blocks.iter().all(|block| block.y == -1)
+                && blocks.iter().all(|block| block.material == "minecraft:oak_planks")
+        ));
+        assert!(matches!(
+            &result.actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    x: 19,
+                    y: 64,
+                    z: 29,
+                    ..
+                },
+                ..
+            } if blueprint_id == "supported-floor-room"
+        ));
+    }
+
+    #[tokio::test]
     async fn codex_build_auto_clears_when_no_better_position_exists() {
         let store = empty_store("codex-site-auto-clear").await;
         let planner = planner_with_fake_codex(
@@ -1760,6 +2270,10 @@ BLOCKWRIGHT_JSON
         assert!(prompt.contains("床"));
         assert!(prompt.contains("两格高室内空间"));
         assert!(prompt.contains("half=lower"));
+        assert!(prompt.contains("玩家面向目标点"));
+        assert!(prompt.contains("相对 y=0"));
+        assert!(prompt.contains("入口要面向或连通玩家侧"));
+        assert!(prompt.contains("同一会话里的后续反馈"));
     }
 
     #[test]

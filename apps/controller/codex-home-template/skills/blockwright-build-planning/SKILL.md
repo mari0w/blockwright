@@ -17,6 +17,8 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 6. Keep the first-phase blueprint under 500 blocks unless the controller explicitly allows more.
 7. Make `materials` match the exact block counts in `blocks`.
 8. Use block states inside `material` when Minecraft needs them, for example `minecraft:oak_leaves[persistent=true]`, `minecraft:oak_door[half=lower,facing=south]`, and `minecraft:red_bed[part=foot,facing=north]`.
+9. Treat blueprint `y=0` as the first placed layer on top of the selected ground surface. Do not encode absolute world height in the blueprint.
+10. Keep the lowest normal floor/foundation at `y=0`; use negative `y` only if the player explicitly asks for underground parts.
 
 ## Minecraft Playability Rules
 
@@ -29,6 +31,10 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 - Add ladders, stairs, slabs, or a similar path for elevated rooms, second floors, and treehouses.
 - Use stable lighting such as torches, lanterns, or glowstone inside enclosed spaces.
 - Avoid gravity, fluid, fire, redstone, and other special-physics blocks unless the required state and safe placement are clear.
+- Plan the entrance so it can connect naturally to the player-facing side of the site. Avoid putting the only door against a wall, cliff, water, or a one-block pit.
+- Prefer a compact, supported footprint. If the target terrain is a pit, slope, water edge, or odd surface, make the build feel intentionally integrated with a terrace, deck, bridge, stairs, wooden piles, stone-brick base, or retaining wall.
+- Do not create terrain-clearing helper blocks inside the blueprint. The controller handles clearing and placement; the blueprint should describe the final structure.
+- Do not reject a build because the current terrain may be imperfect. Assume the controller will prefer the player's facing target and can prepare the site with tasteful clearing/foundation when needed.
 
 ## Output Requirements
 
@@ -36,3 +42,8 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 - Do not explain outside JSON.
 - Do not ask the player to install a mod, create a new world, or run a separate server.
 - Assume the controller will place the blueprint into the current local/LAN world.
+- Assume the controller chooses the player-facing target from scan data, with only small adjustments when needed. Your blueprint should be origin-safe: when placed at that target, it should stand naturally and be usable immediately.
+
+## Follow-up Adjustments
+
+If the player continues in the same conversation with feedback like "raise it", "lower it", "move it left", "fix the base", "make it more beautiful", or "redo this part", treat that as an edit to the current build rather than a fresh unrelated structure. Keep the original site intent unless the player asks to move away.
