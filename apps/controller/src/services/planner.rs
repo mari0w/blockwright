@@ -968,10 +968,19 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - JSON 必须符合字段：id、name、description、size、materials、blocks、tags。
 - blocks 里的 x/y/z 必须是相对坐标，不能输出世界绝对坐标。
 - 方块材质必须使用 Minecraft 命名空间 ID，例如 minecraft:oak_planks。
+- 需要表达方块状态时可以写在 material 里，例如 minecraft:oak_leaves[persistent=true]、minecraft:oak_door[half=lower,facing=south]。
 - 先生成蓝图，再由执行端按同一份 blocks 放置；不要输出命令步骤、背包操作或玩家右键操作。
 - 第一阶段蓝图规模控制在 500 个方块以内，优先用常见原版方块。
 - materials 必须和 blocks 统计一致。
 - 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
+- 住宅、木屋、树屋、房间这类可居住建筑，默认要能实际使用：至少有完整地板、墙、屋顶、可通行入口、两格高室内空间、床、照明和基础窗户，除非玩家明确只要外观模型。
+- 门要按两格结构输出上下两块，例如同一个位置 y=1 用 minecraft:oak_door[half=lower,facing=south]，y=2 用 minecraft:oak_door[half=upper,facing=south]，并让入口前后留出通行空间。
+- 床要按 head/foot 两块输出，朝向一致，周围至少留一格可站立空间。
+- 树屋、庭院、树冠、装饰树叶必须避免自然凋零：优先使用 minecraft:oak_leaves[persistent=true] 这类 persistent=true 叶子；如果不使用 persistent=true，就必须保证叶子离对应原木足够近。
+- 室内不能被实心方块填满；家具、床、火把、梯子、楼梯等要留出玩家移动路径，不要只生成封闭外壳。
+- 照明优先用 torch、lantern、glowstone 等稳定光源，封闭建筑内部至少放一个光源，避免夜晚不可用。
+- 悬空建筑、树屋和二楼必须有可到达路径，例如梯子、楼梯或台阶；不要生成玩家无法进入的房间。
+- 水、岩浆、火、沙子/沙砾、红石机关、门、床、告示牌等有特殊状态或物理特性的方块，只有能明确表达状态和安全放置时才使用。
 - description 用中文简短写清楚设计思路和处理方式。
 - 玩家说“生成/建造/做一个/我要一个 + 建筑物名”时，直接生成可执行小型蓝图，不要返回聊天提示。
 - 你会收到 controller 的场地摘要；生成蓝图时要假设 controller 会把蓝图放在扫描中心附近的地面上，并会在下发前做重叠校验。
@@ -1747,6 +1756,10 @@ BLOCKWRIGHT_JSON
         assert!(prompt.contains("相对坐标"));
         assert!(prompt.contains("同一份 blocks 放置"));
         assert!(prompt.contains("设计思路"));
+        assert!(prompt.contains("minecraft:oak_leaves[persistent=true]"));
+        assert!(prompt.contains("床"));
+        assert!(prompt.contains("两格高室内空间"));
+        assert!(prompt.contains("half=lower"));
     }
 
     #[test]

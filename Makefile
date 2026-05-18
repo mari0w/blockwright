@@ -1,5 +1,7 @@
 GRADLE ?= gradle
 HMCL_DIR ?= $(HOME)/.minecraft
+JAVA21_HOME ?= $(shell (test -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && echo /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home) || /usr/libexec/java_home -v 21 2>/dev/null || true)
+GRADLE_JAVA21_ENV = $(if $(JAVA21_HOME),JAVA_HOME="$(JAVA21_HOME)")
 .DEFAULT_GOAL := install-hmcl
 
 .PHONY: install install-hmcl test test-controller test-paper test-fabric build-fabric coverage coverage-controller
@@ -18,10 +20,10 @@ test-paper:
 	cd plugins/paper && $(GRADLE) test
 
 test-fabric:
-	cd plugins/fabric && $(GRADLE) test
+	cd plugins/fabric && $(GRADLE_JAVA21_ENV) $(GRADLE) test
 
 build-fabric:
-	cd plugins/fabric && $(GRADLE) build
+	cd plugins/fabric && $(GRADLE_JAVA21_ENV) $(GRADLE) build
 
 coverage: coverage-controller
 

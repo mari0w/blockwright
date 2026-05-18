@@ -238,8 +238,10 @@ poll-interval-ticks: 40
 - 建筑 ID、名称、描述。
 - 尺寸。
 - 材料清单。
-- 每个方块相对原点的位置和 Minecraft 材质名。
+- 每个方块相对原点的位置和 Minecraft 材质名；需要时材质名可以携带方块状态。
 - 标签，例如 `house`、`starter`、`wood`。
+
+例如普通方块写 `minecraft:oak_planks`；有 Minecraft 状态要求的方块写成 `minecraft:oak_leaves[persistent=true]`、`minecraft:oak_door[half=lower,facing=south]`、`minecraft:red_bed[part=foot,facing=north]`。方块状态会一起保存、下发和校验，不能只校验方块 ID。
 
 示例见：
 
@@ -269,6 +271,8 @@ data/builds/
 
 建筑类需求会优先走 Codex 蓝图规划，而不是先匹配内置关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先让 Codex 生成新的蓝图 JSON，保存后再按同一份 blocks 下发给 Minecraft。只要 `codex.enabled: true`，Codex 失败时 controller 会明确提示失败，不会再偷偷退回关键词规则。只有你主动把 `codex.enabled` 改成 `false`，才会启用本地离线兜底。
 
+住宅、木屋、房间、树屋这类建筑默认按“能在 Minecraft 里实际使用”来规划，而不是只做外观壳子。要求包括：完整地板、墙、屋顶、可通行入口、两格高室内空间、床、照明、窗户和可到达路径。门必须用上下两块匹配的门状态；床必须用 head/foot 两块匹配的床状态；树屋、树冠、庭院装饰树叶优先使用 `persistent=true`，避免自然凋零。模型如果要用水、岩浆、火、沙子/沙砾、红石、门、床等有特殊物理或状态的方块，必须能明确表达状态，否则优先换成稳定材料。
+
 从游戏内 `/bw ...` 触发的新建筑会带上附近场地扫描。controller 会先估算地面高度和落点，再在扫描半径内选择冲突最少、离玩家目标最近的位置。草、花、雪这类软阻挡会自动清理；如果所有合适位置仍然和木头、石头、箱子、已有建筑等硬方块冲突，controller 会自动清理目标体积后继续建造，不会把建筑需求直接拒绝掉。
 
 普通游戏操作会走 `run_command`。例如“我想白天”会生成 `time set day`，“别下雨”会生成 `weather clear`，“我想创造模式”会生成 `gamemode creative <玩家名>`。Fabric 执行端会再做命令白名单校验，只允许 `time/weather/difficulty/gamerule/gamemode/effect/enchant/experience/xp/tp/teleport/spawnpoint/setworldspawn/summon` 这类 Minecraft 命令，不执行 `op/stop/execute/fill/setblock` 等高风险命令。
@@ -290,8 +294,9 @@ controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/contro
 
 - 只输出蓝图 JSON，不输出命令步骤。
 - 方块坐标必须是相对坐标。
-- 材质必须是 `minecraft:xxx`。
+- 材质必须是 `minecraft:xxx`，需要时可以带方块状态，例如 `minecraft:oak_leaves[persistent=true]`。
 - 建筑需求先由大模型理解和规划，不要只靠“木屋/房子”关键词套模板。
+- 可居住建筑必须考虑床、入口、照明、室内空间、可达路径、门/床状态和树叶凋零等 Minecraft 机制。
 - 下发前必须结合附近扫描做场地评估：地面高度、目标体积、已有方块重叠、自动择址和必要清理。
 - 普通游戏操作使用 `run_command`，但只能下发白名单内的 Minecraft 命令。
 - 蓝图先保存到 `data/blueprints/`，再生成 `place_blocks`。

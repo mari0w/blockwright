@@ -8,6 +8,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -87,12 +88,12 @@ public final class ActionExecutor {
 
         int placed = 0;
         for (JsonModels.BlueprintBlock blockItem : action.blocks) {
-            Material material = blockMaterialFromId(blockItem.material);
+            BlockData blockData = blockDataFromId(blockItem.material);
             Block block = world.getBlockAt(
                     origin.getBlockX() + blockItem.x,
                     origin.getBlockY() + blockItem.y,
                     origin.getBlockZ() + blockItem.z);
-            block.setType(material, false);
+            block.setBlockData(blockData, false);
             placed++;
         }
 
@@ -116,12 +117,12 @@ public final class ActionExecutor {
             int x = origin.getBlockX() + blockItem.x;
             int y = origin.getBlockY() + blockItem.y;
             int z = origin.getBlockZ() + blockItem.z;
-            String actual = world.getBlockAt(x, y, z).getType().getKey().asString();
-            if (actual.equals(blockItem.material)) {
+            BlockData actual = world.getBlockAt(x, y, z).getBlockData();
+            if (matchesBlockData(actual, blockItem.material)) {
                 report.verifiedCount++;
             } else {
                 report.mismatchCount++;
-                addMismatch(report, x, y, z, blockItem.material, actual);
+                addMismatch(report, x, y, z, blockItem.material, actual.getAsString(false));
             }
         }
     }
@@ -214,5 +215,20 @@ public final class ActionExecutor {
             throw new IllegalArgumentException("不支持的 Minecraft 方块：" + materialId);
         }
         return material;
+    }
+
+    private BlockData blockDataFromId(String materialId) {
+        try {
+            return Bukkit.createBlockData(materialId);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("不支持的 Minecraft 方块状态：" + materialId, error);
+        }
+    }
+
+    private boolean matchesBlockData(BlockData actual, String expectedMaterial) {
+        if (!expectedMaterial.contains("[")) {
+            return actual.getMaterial() == blockMaterialFromId(expectedMaterial);
+        }
+        return blockDataFromId(expectedMaterial).matches(actual);
     }
 }

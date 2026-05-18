@@ -122,7 +122,7 @@ impl BuildStore {
                         continue;
                     };
                     scanned_expected_blocks += 1;
-                    if *actual == block.material {
+                    if materials_match(block.material.as_str(), actual) {
                         matched_blocks += 1;
                     }
                 }
@@ -216,6 +216,36 @@ fn material_counts(blocks: &[crate::domain::types::BlueprintBlock]) -> Vec<Mater
     items
 }
 
+fn materials_match(expected: &str, actual: &str) -> bool {
+    let expected = material_spec(expected);
+    let actual = material_spec(actual);
+    if expected.0 != actual.0 {
+        return false;
+    }
+    if expected.1.is_empty() || actual.1.is_empty() {
+        return true;
+    }
+    expected
+        .1
+        .iter()
+        .all(|(key, value)| actual.1.get(key).is_some_and(|actual| actual == value))
+}
+
+fn material_spec(material: &str) -> (&str, HashMap<&str, &str>) {
+    let Some((id, states)) = material
+        .strip_suffix(']')
+        .and_then(|value| value.split_once('['))
+    else {
+        return (material, HashMap::new());
+    };
+
+    let states = states
+        .split(',')
+        .filter_map(|part| part.split_once('='))
+        .collect::<HashMap<_, _>>();
+    (id, states)
+}
+
 fn report_is_inconsistent(record: &BuildRecord) -> bool {
     let Some(report) = record.result.as_ref() else {
         return true;
@@ -291,6 +321,30 @@ mod tests {
             ],
             clear_existing: false,
         }
+    }
+
+    #[test]
+    fn material_match_accepts_stateful_expected_with_plain_scan_id() {
+        assert!(materials_match(
+            "minecraft:oak_leaves[persistent=true]",
+            "minecraft:oak_leaves"
+        ));
+        assert!(materials_match(
+            "minecraft:oak_door[half=upper,facing=south]",
+            "minecraft:oak_door[half=upper,facing=south]"
+        ));
+        assert!(materials_match(
+            "minecraft:oak_door[half=upper,facing=south]",
+            "minecraft:oak_door[facing=south,half=upper,hinge=left,open=false,powered=false]"
+        ));
+        assert!(!materials_match(
+            "minecraft:oak_door[half=upper,facing=south]",
+            "minecraft:oak_door[half=lower,facing=south]"
+        ));
+        assert!(!materials_match(
+            "minecraft:oak_leaves[persistent=true]",
+            "minecraft:birch_leaves"
+        ));
     }
 
     #[tokio::test]

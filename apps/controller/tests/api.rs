@@ -210,6 +210,10 @@ async fn build_job_result_updates_persisted_build_record() {
         .unwrap();
     let robot_body = response_json(robot_response).await;
     let job_id = robot_body["queued_job"]["id"].as_str().unwrap();
+    let expected_count = robot_body["queued_job"]["actions"][0]["blocks"]
+        .as_array()
+        .unwrap()
+        .len();
 
     let result_request = json!({
         "ok": true,
@@ -219,11 +223,11 @@ async fn build_job_result_updates_persisted_build_record() {
                 {
                     "action_type": "place_blocks",
                     "blueprint_id": "oak-house-small",
-                    "expected_count": 46,
-                    "placed_count": 46,
+                    "expected_count": expected_count,
+                    "placed_count": expected_count,
                     "skipped_existing_count": 0,
                     "skipped_limit_count": 0,
-                    "verified_count": 46,
+                    "verified_count": expected_count,
                     "mismatch_count": 0,
                     "mismatches": []
                 }
@@ -256,8 +260,14 @@ async fn build_job_result_updates_persisted_build_record() {
 
     assert_eq!(result_body["ok"], true);
     assert_eq!(build_body["status"], "succeeded");
-    assert_eq!(build_body["expected_actions"][0]["expected_count"], 46);
-    assert_eq!(build_body["result"]["actions"][0]["verified_count"], 46);
+    assert_eq!(
+        build_body["expected_actions"][0]["expected_count"],
+        expected_count
+    );
+    assert_eq!(
+        build_body["result"]["actions"][0]["verified_count"],
+        expected_count
+    );
 }
 
 #[tokio::test]
@@ -321,6 +331,7 @@ async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
     let build_action = &build_body["actions"][0];
     let origin = &build_action["origin"];
     let blocks = build_action["blocks"].as_array().unwrap();
+    let expected_count = blocks.len();
 
     let scan_blocks = blocks
         .iter()
@@ -341,11 +352,11 @@ async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
                 {
                     "action_type": "place_blocks",
                     "blueprint_id": "oak-house-small",
-                    "expected_count": 46,
-                    "placed_count": 46,
+                    "expected_count": expected_count,
+                    "placed_count": expected_count,
                     "skipped_existing_count": 0,
                     "skipped_limit_count": 0,
-                    "verified_count": 46,
+                    "verified_count": expected_count,
                     "mismatch_count": 0,
                     "mismatches": []
                 }

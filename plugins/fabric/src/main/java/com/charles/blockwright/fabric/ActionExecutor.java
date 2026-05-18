@@ -1,8 +1,12 @@
 package com.charles.blockwright.fabric;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
@@ -12,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Property;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
@@ -123,14 +128,14 @@ public final class ActionExecutor {
                 continue;
             }
 
-            Block block = blockFromId(blockItem.material);
+            BlockState blockState = blockStateFromId(blockItem.material);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
             boolean occupied = !world.getBlockState(targetPos).isAir();
             if (!PlacementPolicy.canPlace(occupied, config.protectExistingBlocks, action.clearExisting)) {
                 skippedExisting++;
                 continue;
             }
-            world.setBlockState(targetPos, block.getDefaultState());
+            world.setBlockState(targetPos, blockState);
             placed++;
         }
 
@@ -155,14 +160,12 @@ public final class ActionExecutor {
             }
 
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
-            String actual = Registries.BLOCK
-                    .getId(world.getBlockState(targetPos).getBlock())
-                    .toString();
-            if (actual.equals(blockItem.material)) {
+            BlockState actualState = world.getBlockState(targetPos);
+            if (matchesBlockState(actualState, blockItem.material)) {
                 report.verifiedCount++;
             } else {
                 report.mismatchCount++;
-                addMismatch(report, targetPos, blockItem.material, actual);
+                addMismatch(report, targetPos, blockItem.material, blockStateToString(actualState));
             }
         }
     }
@@ -246,6 +249,80 @@ public final class ActionExecutor {
         return block;
     }
 
+    private BlockState blockStateFromId(String blockMaterial) {
+        BlockMaterialSpec spec = BlockMaterialSpec.parse(blockMaterial);
+        BlockState state = blockFromId(spec.id()).getDefaultState();
+        for (Map.Entry<String, String> entry : spec.states().entrySet()) {
+            Property<?> property = findProperty(state, entry.getKey());
+            if (property == null) {
+                throw new IllegalArgumentException("方块状态不存在：" + blockMaterial);
+            }
+            state = applyProperty(state, property, entry.getValue(), blockMaterial);
+        }
+        return state;
+    }
+
+    private boolean matchesBlockState(BlockState actualState, String expectedMaterial) {
+        BlockMaterialSpec spec = BlockMaterialSpec.parse(expectedMaterial);
+        Identifier id = Identifier.tryParse(spec.id());
+        if (id == null || !Registries.BLOCK.getId(actualState.getBlock()).equals(id)) {
+            return false;
+        }
+        for (Map.Entry<String, String> entry : spec.states().entrySet()) {
+            Property<?> property = findProperty(actualState, entry.getKey());
+            if (property == null || !propertyValueAsString(property, actualState).equals(entry.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Property<?> findProperty(BlockState state, String name) {
+        for (Property<?> property : state.getProperties()) {
+            if (property.getName().equals(name)) {
+                return property;
+            }
+        }
+        return null;
+    }
+
+    private <T extends Comparable<T>> BlockState applyProperty(
+            BlockState state,
+            Property<T> property,
+            String value,
+            String originalMaterial) {
+        Optional<T> parsed = property.parse(value);
+        if (parsed.isEmpty()) {
+            throw new IllegalArgumentException("非法方块状态：" + originalMaterial);
+        }
+        return state.with(property, parsed.get());
+    }
+
+    private <T extends Comparable<T>> String propertyValueAsString(Property<T> property, BlockState state) {
+        return property.name(state.get(property));
+    }
+
+    private String blockStateToString(BlockState state) {
+        String id = Registries.BLOCK.getId(state.getBlock()).toString();
+        if (state.getEntries().isEmpty()) {
+            return id;
+        }
+
+        List<String> entries = state.getEntries()
+                .entrySet()
+                .stream()
+                .map(entry -> propertyEntryToString(entry.getKey(), entry.getValue()))
+                .sorted()
+                .toList();
+        return id + "[" + String.join(",", entries) + "]";
+    }
+
+    private <T extends Comparable<T>> String propertyEntryToString(Property<T> property, Comparable<?> value) {
+        @SuppressWarnings("unchecked")
+        T typedValue = (T) value;
+        return property.getName() + "=" + property.name(typedValue);
+    }
+
     private Identifier requireIdentifier(String value, String label) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(label + " ID 不能为空");
@@ -256,5 +333,39 @@ public final class ActionExecutor {
             throw new IllegalArgumentException("非法 " + label + " ID：" + value);
         }
         return id;
+    }
+
+    record BlockMaterialSpec(String id, Map<String, String> states) {
+        static BlockMaterialSpec parse(String value) {
+            if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("方块 ID 不能为空");
+            }
+
+            int stateStart = value.indexOf('[');
+            if (stateStart < 0) {
+                return new BlockMaterialSpec(value, Map.of());
+            }
+            if (!value.endsWith("]")) {
+                throw new IllegalArgumentException("非法方块状态：" + value);
+            }
+
+            String id = value.substring(0, stateStart);
+            String stateText = value.substring(stateStart + 1, value.length() - 1);
+            if (id.isBlank() || stateText.isBlank()) {
+                throw new IllegalArgumentException("非法方块状态：" + value);
+            }
+
+            Map<String, String> states = new LinkedHashMap<>();
+            for (String pair : stateText.split(",")) {
+                String[] parts = pair.split("=", 2);
+                if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                    throw new IllegalArgumentException("非法方块状态：" + value);
+                }
+                if (states.put(parts[0], parts[1]) != null) {
+                    throw new IllegalArgumentException("重复方块状态：" + value);
+                }
+            }
+            return new BlockMaterialSpec(id, Map.copyOf(states));
+        }
     }
 }

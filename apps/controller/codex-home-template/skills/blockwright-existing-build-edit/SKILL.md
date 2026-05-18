@@ -15,8 +15,8 @@ Use this skill when the request references an existing structure near the player
 4. Modify only the requested part unless the player asks for a broader remodel.
 5. Produce explicit blocks for the changed area so the controller can save and verify the edit.
 6. Keep the world and stored build information consistent after the edit.
+7. Preserve Minecraft-specific behavior when editing: keep doors as two matching halves, beds as head/foot pairs, persistent leaves on decorative foliage, reachable paths, interior headroom, and lighting.
 
 ## Safety
 
 Avoid guessing which building is meant when the player says "this house" or "the one in front of me" and multiple saved builds match.
-

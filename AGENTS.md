@@ -11,4 +11,6 @@
 - HMCL/单人存档/局域网开放世界的主安装方式是 `plugins/fabric` 生成的 Fabric 模组；不要要求用户迁移地图到 Paper 服务端。`plugins/paper` 只保留给独立 Paper 服务器场景。
 - 建筑执行必须走服务端世界方块 API 放置蓝图方块，不能模拟玩家翻背包、选物品、右键摆放；背包/物品栏只用于 `give_item` 这类发物品动作。
 - 建筑任务必须先在 controller 保存构建记录，再把同一份方块清单下发到 Minecraft；执行端必须逐块读取世界状态生成校验报告，只有报告和构建记录一致才算成功。
+- 建筑规划必须考虑 Minecraft 可玩性和方块特性：住宅/木屋/房间/树屋默认要有地板、墙、屋顶、入口、两格高室内空间、床、照明、窗户和可达路径；门要上下两格状态匹配，床要 head/foot 两块匹配，树叶优先使用 `persistent=true` 避免凋零。
+- 蓝图 `material` 允许携带方块状态，例如 `minecraft:oak_leaves[persistent=true]`、`minecraft:oak_door[half=lower,facing=south]`；执行端和校验端必须把这些状态视为一致性的一部分。
 - 改造现有建筑时必须先扫描玩家附近世界方块，再用扫描结果匹配 `data/builds` 里的构建记录；匹配不到、匹配多个或目标部位不明确时只能追问，不能直接改。

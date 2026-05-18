@@ -59,6 +59,10 @@ Blueprint
 
 `blocks[]` 使用相对坐标，例如 `{x: 0, y: 0, z: 0}`。真正放置时由插件把相对坐标叠加到任务原点。
 
+`material` 可以是普通方块 ID，也可以带 Minecraft 方块状态。普通方块示例：`minecraft:oak_planks`；状态方块示例：`minecraft:oak_leaves[persistent=true]`、`minecraft:oak_door[half=lower,facing=south]`、`minecraft:red_bed[part=head,facing=north]`。方块状态是蓝图一致性的一部分，保存、下发、执行端校验都必须按同一份字符串处理。
+
+住宅、木屋、房间、树屋这类蓝图默认按可居住建筑处理：地板、墙、屋顶、入口、两格高室内空间、床、照明、窗户和可到达路径都属于规划约束。树叶、门、床、楼梯、梯子、火把、水、岩浆、沙子/沙砾、红石等有特殊状态或物理行为的方块，必须在蓝图阶段明确状态或改用更稳定的替代材料。
+
 ### 游戏动作
 
 controller 不直接操作 Minecraft 世界，只返回动作：

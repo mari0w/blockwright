@@ -1,9 +1,12 @@
 package com.charles.blockwright.fabric;
 
 import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.block.BlockState;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Property;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
@@ -45,12 +48,33 @@ final class WorldScanner {
                     block.x = x;
                     block.y = y;
                     block.z = z;
-                    block.material = Registries.BLOCK.getId(state.getBlock()).toString();
+                    block.material = blockStateToString(state);
                     scan.blocks.add(block);
                 }
             }
         }
 
         return scan;
+    }
+
+    private static String blockStateToString(BlockState state) {
+        String id = Registries.BLOCK.getId(state.getBlock()).toString();
+        if (state.getEntries().isEmpty()) {
+            return id;
+        }
+
+        List<String> entries = state.getEntries()
+                .entrySet()
+                .stream()
+                .map(entry -> propertyEntryToString(entry.getKey(), entry.getValue()))
+                .sorted()
+                .toList();
+        return id + "[" + String.join(",", entries) + "]";
+    }
+
+    private static <T extends Comparable<T>> String propertyEntryToString(Property<T> property, Comparable<?> value) {
+        @SuppressWarnings("unchecked")
+        T typedValue = (T) value;
+        return property.getName() + "=" + property.name(typedValue);
     }
 }
