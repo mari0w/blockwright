@@ -1,0 +1,36 @@
+name: Feature request
+description: 提议 Blockwright 的新能力或改进
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 请从玩家、服主、开发者或运营视角描述真实场景。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 如果已经有想法，请描述希望的交互、API 或行为。
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: 影响组件
+      options:
+        - apps/controller
+        - plugins/fabric
+        - plugins/paper
+        - docs
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充信息
