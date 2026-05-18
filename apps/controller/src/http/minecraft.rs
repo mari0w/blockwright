@@ -7,7 +7,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan},
+    domain::types::{
+        BlueprintBlock, GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan,
+    },
     services::build_store::BuildMatch,
     services::planner::PlannerInput,
     state::AppState,
@@ -203,6 +205,37 @@ async fn handle_existing_build_modification(
         ))));
     }
 
+    if let Some(actions) = planned_vertical_shift(&request.text, best) {
+        let job_id = state.jobs.reserve_job_id();
+        let summary = format!("调整构建 {} 的高度", best.record.id);
+        if let Err(error) = state
+            .builds
+            .register_planned(
+                job_id.clone(),
+                request.server_id.clone(),
+                Some(request.player.clone()),
+                summary,
+                &actions,
+            )
+            .await
+        {
+            tracing::error!(error = %error, "failed to register planned vertical shift");
+            return Some(Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "构建记录保存失败，已取消下发调整动作。".to_string(),
+            )));
+        }
+
+        return Some(Ok(MinecraftMessageResponse {
+            reply: format!(
+                "已匹配到建筑 `{}`，会按原方块清单整体调整高度，并在新位置重新校验。",
+                best.record.id
+            ),
+            actions,
+            job_id: Some(job_id),
+        }));
+    }
+
     match planned_window_replacement(&request.text, best) {
         Ok(Some(action)) => {
             let job_id = state.jobs.reserve_job_id();
@@ -248,14 +281,26 @@ fn wants_existing_build_modification(text: &str) -> bool {
         || text.contains("换")
         || text.contains("调整")
         || text.contains("替换")
+        || text.contains("抬高")
+        || text.contains("升高")
+        || text.contains("降低")
+        || text.contains("下降")
         || lower.contains("replace")
-        || lower.contains("modify"))
+        || lower.contains("modify")
+        || lower.contains("raise")
+        || lower.contains("lift")
+        || lower.contains("lower"))
         && (text.contains("面前")
             || text.contains("附近")
             || text.contains("这个")
+            || text.contains("它")
             || text.contains("那栋")
             || text.contains("房子")
             || text.contains("建筑")
+            || text.contains("抬高")
+            || text.contains("升高")
+            || text.contains("降低")
+            || text.contains("下降")
             || lower.contains("nearby")
             || lower.contains("this"))
 }
@@ -312,6 +357,87 @@ fn planned_window_replacement(
     }))
 }
 
+fn planned_vertical_shift(text: &str, candidate: &BuildMatch) -> Option<Vec<GameAction>> {
+    let delta = vertical_delta(text)?;
+    let mut actions = Vec::new();
+
+    for (index, action) in candidate.record.expected_actions.iter().enumerate() {
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: action
+                .blueprint_id
+                .as_ref()
+                .map(|id| format!("{id}:height-clear-{index}")),
+            origin: action.origin.clone(),
+            blocks: action
+                .blocks
+                .iter()
+                .map(|block| BlueprintBlock {
+                    x: block.x,
+                    y: block.y,
+                    z: block.z,
+                    material: "minecraft:air".to_string(),
+                })
+                .collect(),
+            clear_existing: true,
+        });
+
+        let mut shifted_origin = action.origin.clone();
+        shifted_origin.y += delta;
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: action
+                .blueprint_id
+                .as_ref()
+                .map(|id| format!("{id}:height-shift")),
+            origin: shifted_origin,
+            blocks: action.blocks.clone(),
+            clear_existing: true,
+        });
+    }
+
+    Some(actions)
+}
+
+fn vertical_delta(text: &str) -> Option<i32> {
+    let lower = text.to_lowercase();
+    let direction = if text.contains("抬高")
+        || text.contains("升高")
+        || lower.contains("raise")
+        || lower.contains("lift")
+    {
+        1
+    } else if text.contains("降低")
+        || text.contains("下降")
+        || lower.contains("lower")
+        || lower.contains("drop")
+    {
+        -1
+    } else {
+        return None;
+    };
+
+    Some(direction * requested_block_delta(text).min(8))
+}
+
+fn requested_block_delta(text: &str) -> i32 {
+    if text.contains("八") || text.contains("8") {
+        8
+    } else if text.contains("七") || text.contains("7") {
+        7
+    } else if text.contains("六") || text.contains("6") {
+        6
+    } else if text.contains("五") || text.contains("5") {
+        5
+    } else if text.contains("四") || text.contains("4") {
+        4
+    } else if text.contains("三") || text.contains("3") {
+        3
+    } else if text.contains("两") || text.contains("二") || text.contains("2") {
+        2
+    } else {
+        1
+    }
+}
+
 fn replacement_glass_material(text: &str) -> Option<String> {
     let material = if text.contains("玻璃板") {
         "minecraft:glass_pane"
@@ -338,5 +464,85 @@ fn chat_response(message: String) -> MinecraftMessageResponse {
         reply: message.clone(),
         actions: vec![GameAction::Chat { message }],
         job_id: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::types::{BuildRecord, BuildStatus, ExpectedBuildAction, MaterialCount};
+
+    fn matched_build() -> BuildMatch {
+        BuildMatch {
+            record: BuildRecord {
+                id: "hm-job-1".to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: "建造蓝图 test-house".to_string(),
+                status: BuildStatus::Succeeded,
+                expected_actions: vec![ExpectedBuildAction {
+                    blueprint_id: Some("test-house".to_string()),
+                    origin: crate::domain::types::BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x: 10,
+                        y: 64,
+                        z: 20,
+                    },
+                    expected_count: 1,
+                    materials: vec![MaterialCount {
+                        material: "minecraft:oak_planks".to_string(),
+                        count: 1,
+                    }],
+                    blocks: vec![BlueprintBlock {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:oak_planks".to_string(),
+                    }],
+                }],
+                result: None,
+                message: None,
+            },
+            action_index: 0,
+            matched_blocks: 1,
+            scanned_expected_blocks: 1,
+            score: 1.0,
+        }
+    }
+
+    #[test]
+    fn vertical_shift_clears_old_blocks_and_places_at_new_height() {
+        let actions = planned_vertical_shift("把它抬高两格", &matched_build()).unwrap();
+
+        assert_eq!(actions.len(), 2);
+        assert!(matches!(
+            &actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin,
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "test-house:height-clear-0"
+                && origin.y == 64
+                && blocks[0].material == "minecraft:air"
+        ));
+        assert!(matches!(
+            &actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin,
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "test-house:height-shift"
+                && origin.y == 66
+                && blocks[0].material == "minecraft:oak_planks"
+        ));
+    }
+
+    #[test]
+    fn vertical_delta_defaults_to_one_and_supports_lowering() {
+        assert_eq!(vertical_delta("抬高一点"), Some(1));
+        assert_eq!(vertical_delta("降低三格"), Some(-3));
+        assert_eq!(vertical_delta("换成蓝色玻璃"), None);
     }
 }
