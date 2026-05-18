@@ -64,6 +64,7 @@ pub(crate) async fn queue_chat_message(
             PlannerInput {
                 text: message.text,
                 player: target_player.clone(),
+                codex_session_key: Some(format!("robot:{}:{}", message.platform, message.sender)),
                 position: message.position,
                 nearby_scan: None,
                 attachments: message.attachments,

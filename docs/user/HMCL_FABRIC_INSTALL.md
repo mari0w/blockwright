@@ -186,7 +186,9 @@ Paper 插件仍然保留在 `plugins/paper`，但那是给独立 Paper 服务器
 
 当前本地配置默认启用 Codex CLI。controller 会优先调用本机 `codex exec` 理解自然语言；只要 Codex 是启用状态，Codex 失败时会明确提示失败，不会再退回关键词规则冒充理解。
 
-默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=low"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--output-schema` 约束模型最终 JSON、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。默认低思考强度，优先保证游戏内响应速度；修改 `config/servers/local.yaml` 后，需要重启 controller。
+默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=low"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--json` 读取 session id、用 `--output-schema` 约束模型最终 JSON、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。默认低思考强度，优先保证游戏内响应速度；修改 `config/servers/local.yaml` 后，需要重启 controller。
+
+Codex 会话按人隔离：Minecraft 里同一个玩家连续说话会复用同一个 Codex 会话；不同玩家各自独立。机器人入口按发送人隔离，例如同一个钉钉发送人复用自己的会话。会话映射保存在 `data/codex_sessions.json`，`data/` 已经忽略，不会提交到仓库。
 
 controller 日志不会打印模型原始思考链路，但会打印可排查的阶段进度：`starting codex cli request`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。如果 120 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
 

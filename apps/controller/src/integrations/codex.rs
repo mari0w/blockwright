@@ -1,6 +1,8 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -8,6 +10,7 @@ use serde_json::Value;
 use tokio::{
     io::AsyncWriteExt,
     process::Command,
+    sync::{Mutex, OwnedMutexGuard},
     time::{sleep, Duration, Instant as TokioInstant},
 };
 
@@ -18,6 +21,14 @@ const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
 #[derive(Clone)]
 pub struct CodexClient {
     config: CodexConfig,
+    sessions: CodexSessionStore,
+}
+
+#[derive(Clone)]
+struct CodexSessionStore {
+    path: Option<Arc<PathBuf>>,
+    sessions: Arc<Mutex<HashMap<String, String>>>,
+    key_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -47,7 +58,17 @@ impl CodexResponseSchema {
 
 impl CodexClient {
     pub fn new(config: CodexConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            sessions: CodexSessionStore::in_memory(),
+        }
+    }
+
+    pub fn with_session_path(config: CodexConfig, path: PathBuf) -> Self {
+        Self {
+            config,
+            sessions: CodexSessionStore::from_path(path),
+        }
     }
 
     pub fn enabled(&self) -> bool {
@@ -58,26 +79,41 @@ impl CodexClient {
         &self,
         prompt: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, None).await
+        self.ask_inner(prompt, None, None).await
     }
 
     pub async fn ask_with_schema(
         &self,
         prompt: &str,
         schema: CodexResponseSchema,
+        session_key: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, Some(schema)).await
+        self.ask_inner(prompt, Some(schema), session_key).await
     }
 
     async fn ask_inner(
         &self,
         prompt: &str,
         schema: Option<CodexResponseSchema>,
+        session_key: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(None);
         }
 
+        let session_key = session_key
+            .map(normalize_session_key)
+            .filter(|key| !key.is_empty());
+        let _session_guard = if let Some(session_key) = session_key.as_deref() {
+            Some(self.sessions.lock_key(session_key).await)
+        } else {
+            None
+        };
+        let resume_thread_id = if let Some(session_key) = session_key.as_deref() {
+            self.sessions.get(session_key).await
+        } else {
+            None
+        };
         let schema_label = schema.map(CodexResponseSchema::label).unwrap_or("none");
         let schema_path = schema.map(CodexResponseSchema::path);
         let (program, args) = command_parts(&self.config.command)?;
@@ -85,6 +121,8 @@ impl CodexClient {
         tracing::info!(
             command = %self.config.command,
             schema = schema_label,
+            session_key = session_key.as_deref().unwrap_or("ephemeral"),
+            resume_thread_id = resume_thread_id.as_deref().unwrap_or("new"),
             timeout_seconds = self.config.timeout_seconds,
             "starting codex cli request"
         );
@@ -95,12 +133,15 @@ impl CodexClient {
             self.config.timeout_seconds,
             &self.config.command,
             schema_label,
+            session_key.as_deref().unwrap_or("ephemeral"),
             run_codex_exec(
                 program,
                 &args,
                 prompt,
                 &last_message_path,
                 schema_path.as_deref(),
+                resume_thread_id.as_deref(),
+                session_key.is_some(),
             ),
         )
         .await?;
@@ -111,6 +152,7 @@ impl CodexClient {
             tracing::warn!(
                 command = %self.config.command,
                 schema = schema_label,
+                session_key = session_key.as_deref().unwrap_or("ephemeral"),
                 elapsed_ms,
                 status = %output.status,
                 "codex cli request failed"
@@ -128,14 +170,85 @@ impl CodexClient {
         } else {
             last_message.trim()
         };
+        if let (Some(session_key), Some(thread_id)) = (
+            session_key.as_deref(),
+            extract_thread_id_from_json_stdout(&output.stdout),
+        ) {
+            self.sessions.set(session_key, thread_id.as_str()).await?;
+            tracing::info!(
+                session_key = %session_key,
+                thread_id = %thread_id,
+                "saved codex session for speaker"
+            );
+        }
 
         tracing::info!(
             command = %self.config.command,
             schema = schema_label,
+            session_key = session_key.as_deref().unwrap_or("ephemeral"),
             elapsed_ms,
             "finished codex cli request"
         );
         Ok(Some(answer.to_string()))
+    }
+}
+
+impl CodexSessionStore {
+    fn in_memory() -> Self {
+        Self {
+            path: None,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            key_locks: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn from_path(path: PathBuf) -> Self {
+        let sessions = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|source| serde_json::from_str::<HashMap<String, String>>(&source).ok())
+            .unwrap_or_default();
+        Self {
+            path: Some(Arc::new(path)),
+            sessions: Arc::new(Mutex::new(sessions)),
+            key_locks: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    async fn lock_key(&self, key: &str) -> OwnedMutexGuard<()> {
+        let lock = {
+            let mut locks = self.key_locks.lock().await;
+            locks
+                .entry(key.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        lock.lock_owned().await
+    }
+
+    async fn get(&self, key: &str) -> Option<String> {
+        self.sessions.lock().await.get(key).cloned()
+    }
+
+    async fn set(
+        &self,
+        key: &str,
+        thread_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let snapshot = {
+            let mut sessions = self.sessions.lock().await;
+            sessions.insert(key.to_string(), thread_id.to_string());
+            sessions.clone()
+        };
+
+        let Some(path) = self.path.as_ref() else {
+            return Ok(());
+        };
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        let json = serde_json::to_string_pretty(&snapshot)?;
+        tokio::fs::write(path.as_ref(), json).await?;
+        Ok(())
     }
 }
 
@@ -144,6 +257,7 @@ async fn run_codex_exec_with_progress(
     timeout_seconds: u64,
     command: &str,
     schema_label: &str,
+    session_key: &str,
     exec: impl std::future::Future<Output = std::io::Result<std::process::Output>>,
 ) -> Result<std::process::Output, Box<dyn std::error::Error + Send + Sync>> {
     let timeout_duration = Duration::from_secs(timeout_seconds);
@@ -165,6 +279,7 @@ async fn run_codex_exec_with_progress(
                 tracing::info!(
                     command = %command,
                     schema = schema_label,
+                    session_key = session_key,
                     elapsed_seconds,
                     remaining_seconds,
                     "codex cli request still running"
@@ -197,11 +312,20 @@ async fn run_codex_exec(
     prompt: &str,
     last_message_path: &PathBuf,
     schema_path: Option<&Path>,
+    resume_thread_id: Option<&str>,
+    persist_session: bool,
 ) -> std::io::Result<std::process::Output> {
     let mut command = Command::new(program);
-    command.arg("exec").args(args).arg("--ephemeral");
+    command.arg("exec").args(args);
+    if !persist_session {
+        command.arg("--ephemeral");
+    }
+    command.arg("--json");
     if let Some(schema_path) = schema_path {
         command.arg("--output-schema").arg(schema_path);
+    }
+    if let Some(thread_id) = resume_thread_id {
+        command.arg("resume").arg(thread_id);
     }
     command
         .arg("--output-last-message")
@@ -218,6 +342,28 @@ async fn run_codex_exec(
     }
 
     child.wait_with_output().await
+}
+
+fn extract_thread_id_from_json_stdout(stdout: &[u8]) -> Option<String> {
+    let stdout = String::from_utf8_lossy(stdout);
+    for line in stdout.lines() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if value.get("type").and_then(Value::as_str) != Some("thread.started") {
+            continue;
+        }
+        return value
+            .get("thread_id")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
+    }
+
+    None
+}
+
+fn normalize_session_key(key: &str) -> String {
+    key.trim().to_lowercase()
 }
 
 fn codex_last_message_path() -> PathBuf {
@@ -270,7 +416,13 @@ fn extract_codex_api_error(stderr: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::process::ExitStatusExt;
+    use std::{
+        fs,
+        os::unix::{fs::PermissionsExt, process::ExitStatusExt},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static NEXT_DIR_ID: AtomicU64 = AtomicU64::new(1);
 
     fn disabled_client() -> CodexClient {
         CodexClient::new(CodexConfig {
@@ -280,11 +432,99 @@ mod tests {
         })
     }
 
+    fn temp_dir(name: &str) -> PathBuf {
+        let number = NEXT_DIR_ID.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "blockwright-codex-{name}-{}-{number}",
+            std::process::id()
+        ))
+    }
+
     #[tokio::test]
     async fn disabled_client_returns_none_without_running_command() {
         let output = disabled_client().ask("hello").await.unwrap();
 
         assert!(output.is_none());
+    }
+
+    #[tokio::test]
+    async fn session_key_resumes_same_codex_thread() {
+        let dir = temp_dir("session-resume");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex.sh");
+        let args_log = dir.join("args.log");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{}'
+last_message=""
+resume_thread=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    resume)
+      resume_thread="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+thread_id="${{resume_thread:-thread-a}}"
+printf '{{"type":"thread.started","thread_id":"%s"}}\n' "$thread_id"
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","actions":[{{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::with_session_path(
+            CodexConfig {
+                enabled: true,
+                command: script_path.to_string_lossy().to_string(),
+                timeout_seconds: 5,
+            },
+            dir.join("sessions.json"),
+        );
+
+        client
+            .ask_with_schema(
+                "one",
+                CodexResponseSchema::ActionPlan,
+                Some("Minecraft:Steve"),
+            )
+            .await
+            .unwrap();
+        client
+            .ask_with_schema(
+                "two",
+                CodexResponseSchema::ActionPlan,
+                Some("minecraft:steve"),
+            )
+            .await
+            .unwrap();
+
+        let args = fs::read_to_string(args_log).unwrap();
+        let lines = args.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert!(!lines[0].contains("resume thread-a"));
+        assert!(lines[1].contains("resume thread-a"));
     }
 
     #[test]
@@ -307,6 +547,18 @@ mod tests {
     fn response_schema_files_are_packaged_with_controller_source() {
         assert!(CodexResponseSchema::ActionPlan.path().exists());
         assert!(CodexResponseSchema::Blueprint.path().exists());
+    }
+
+    #[test]
+    fn extracts_thread_id_from_json_stdout() {
+        let stdout = br#"{"type":"turn.started"}
+{"type":"thread.started","thread_id":"thread-123"}
+{"type":"turn.completed"}"#;
+
+        assert_eq!(
+            extract_thread_id_from_json_stdout(stdout).as_deref(),
+            Some("thread-123")
+        );
     }
 
     #[test]

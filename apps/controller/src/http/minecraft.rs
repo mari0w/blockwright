@@ -75,6 +75,7 @@ async fn handle_message(
             PlannerInput {
                 text: request.text,
                 player: Some(request.player.clone()),
+                codex_session_key: Some(format!("minecraft:{}", request.player)),
                 position: request.position,
                 nearby_scan: request.nearby_scan.clone(),
                 attachments: Vec::new(),

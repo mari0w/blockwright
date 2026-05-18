@@ -27,7 +27,10 @@ impl AppState {
         let builds = BuildStore::new(config.storage.data_dir.join("builds")).await?;
         seed_default_blueprint(&blueprints).await?;
         let chat = config::load_chat_runtime_config(&config.chat.config_path)?;
-        let codex = CodexClient::new(config.codex.clone());
+        let codex = CodexClient::with_session_path(
+            config.codex.clone(),
+            config.storage.data_dir.join("codex_sessions.json"),
+        );
 
         Ok(Self {
             codex: codex.clone(),

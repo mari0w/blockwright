@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 pub struct PlannerInput {
     pub text: String,
     pub player: Option<String>,
+    pub codex_session_key: Option<String>,
     pub position: Option<PlayerPosition>,
     pub nearby_scan: Option<WorldScan>,
     pub attachments: Vec<ChatAttachment>,
@@ -210,7 +211,11 @@ impl Planner {
 
         let prompt = build_blueprint_prompt(input);
         let output = match codex
-            .ask_with_schema(&prompt, CodexResponseSchema::Blueprint)
+            .ask_with_schema(
+                &prompt,
+                CodexResponseSchema::Blueprint,
+                input.codex_session_key.as_deref(),
+            )
             .await
         {
             Ok(Some(output)) if !output.trim().is_empty() => output,
@@ -303,7 +308,11 @@ impl Planner {
         tracing::info!("starting codex action planner");
         let prompt = build_action_plan_prompt(input);
         let output = match codex
-            .ask_with_schema(&prompt, CodexResponseSchema::ActionPlan)
+            .ask_with_schema(
+                &prompt,
+                CodexResponseSchema::ActionPlan,
+                input.codex_session_key.as_deref(),
+            )
             .await
         {
             Ok(Some(output)) if !output.trim().is_empty() => output,
@@ -1216,6 +1225,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "给我一把钻石剑".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1243,6 +1253,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "give me diamonds".to_string(),
                     player: Some("Alex".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1269,6 +1280,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "我要一个钻石稿子".to_string(),
                     player: Some("Alex".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1297,6 +1309,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "给我钻石".to_string(),
                     player: Some("Alex".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1333,6 +1346,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "我要生成一个树屋".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1377,6 +1391,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1416,6 +1431,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "生成一个房间".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: Some(PlayerPosition {
                         world: "minecraft:overworld".to_string(),
                         x: 18.0,
@@ -1471,6 +1487,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "生成一个房间".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: Some(PlayerPosition {
                         world: "minecraft:overworld".to_string(),
                         x: 18.0,
@@ -1531,6 +1548,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "生成一个房间".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: Some(PlayerPosition {
                         world: "minecraft:overworld".to_string(),
                         x: 18.0,
@@ -1571,6 +1589,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1595,6 +1614,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "build a house".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: Some(PlayerPosition {
                         world: "world_nether".to_string(),
                         x: 10.4,
@@ -1632,6 +1652,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "帮我盖一个木屋".to_string(),
                     player: Some("Steve".to_string()),
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1652,6 +1673,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "帮我根据图片复刻建筑".to_string(),
                     player: None,
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1664,6 +1686,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "你好".to_string(),
                     player: None,
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
@@ -1690,6 +1713,7 @@ BLOCKWRIGHT_JSON
                 PlannerInput {
                     text: "照这个做".to_string(),
                     player: None,
+                    codex_session_key: None,
                     position: None,
                     nearby_scan: None,
                     attachments: vec![ChatAttachment {
@@ -1713,6 +1737,7 @@ BLOCKWRIGHT_JSON
         let prompt = build_blueprint_prompt(&PlannerInput {
             text: "照图片盖一个小塔".to_string(),
             player: None,
+            codex_session_key: None,
             position: None,
             nearby_scan: None,
             attachments: Vec::new(),
@@ -1729,6 +1754,7 @@ BLOCKWRIGHT_JSON
         let prompt = build_action_plan_prompt(&PlannerInput {
             text: "我要钻石稿子".to_string(),
             player: Some("Steve".to_string()),
+            codex_session_key: None,
             position: None,
             nearby_scan: None,
             attachments: Vec::new(),
