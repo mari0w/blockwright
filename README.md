@@ -197,6 +197,18 @@ cp config/chat.example.yaml config/chat.local.yaml
 
 不要提交真实 token、webhook、client secret 或机器人凭证。
 
+## MCP 助手入口
+
+Blockwright 也提供可选 MCP stdio 入口，让 Codex 或其他 MCP 客户端以助手方式调用 Blockwright 高层能力：
+
+```bash
+cargo run -p blockwright-controller -- mcp
+```
+
+MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它不暴露裸 `setBlock`、`fill` 或任意命令，仍然走 controller、构建记录和 Fabric/Paper 校验链路。
+
+详细说明见 [docs/MCP.md](docs/MCP.md)。
+
 ## 开发
 
 常用命令：

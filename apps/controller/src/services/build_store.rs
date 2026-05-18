@@ -37,6 +37,18 @@ impl BuildStore {
         self.items.read().await.get(id).cloned()
     }
 
+    pub async fn list(&self) -> Vec<BuildRecord> {
+        let mut records = self
+            .items
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        records.sort_by(|left, right| left.id.cmp(&right.id));
+        records
+    }
+
     pub async fn register_planned(
         &self,
         id: String,
