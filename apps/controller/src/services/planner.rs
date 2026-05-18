@@ -68,10 +68,16 @@ impl Planner {
 
             if self.codex_enabled() {
                 return PlanResult {
-                    reply: "大模型没有生成有效蓝图，所以我没有下发建筑动作。你可以换一种说法，或者检查 controller 的 Codex CLI 日志。".to_string(),
+                    reply: format!(
+                        "大模型没有生成有效蓝图，所以我没有下发建筑动作。{}",
+                        rephrase_hints_for_build()
+                    ),
                     summary: "大模型建筑规划失败".to_string(),
                     actions: vec![GameAction::Chat {
-                        message: "建筑没有执行：大模型未返回有效蓝图。".to_string(),
+                        message: format!(
+                            "建筑没有执行：大模型未返回有效蓝图。{}",
+                            short_rephrase_hint()
+                        ),
                     }],
                 };
             }
@@ -95,10 +101,16 @@ impl Planner {
 
         if self.codex_enabled() {
             return PlanResult {
-                reply: "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。请看 controller 日志里的 Codex 错误，修好后再试。".to_string(),
+                reply: format!(
+                    "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。{}",
+                    rephrase_hints_for_common_actions()
+                ),
                 summary: "大模型动作理解失败".to_string(),
                 actions: vec![GameAction::Chat {
-                    message: "这次没有执行：Codex 未返回有效动作。".to_string(),
+                    message: format!(
+                        "这次没有执行：Codex 未返回有效动作。{}",
+                        short_rephrase_hint()
+                    ),
                 }],
             };
         }
@@ -375,6 +387,18 @@ impl Planner {
             actions: plan.actions,
         })
     }
+}
+
+fn short_rephrase_hint() -> &'static str {
+    "请用更具体的一句话重试。"
+}
+
+fn rephrase_hints_for_build() -> &'static str {
+    "建议直接给尺寸和材质，例如“在我前方盖一个 7x7 橡木小屋，带门、窗户、床和火把”。也可以先说“先 dry-run 预览，不要执行”。"
+}
+
+fn rephrase_hints_for_common_actions() -> &'static str {
+    "建议改成明确动作，例如“给我一把钻石剑”“把时间调到白天”“把天气改成晴天”。"
 }
 
 struct RequestedItem {
@@ -1605,6 +1629,32 @@ BLOCKWRIGHT_JSON
 
         assert_eq!(result.summary, "大模型动作理解失败");
         assert!(matches!(result.actions[0], GameAction::Chat { .. }));
+        assert!(result.reply.contains("给我一把钻石剑"));
+        assert!(result.reply.contains("把时间调到白天"));
+    }
+
+    #[tokio::test]
+    async fn build_failure_reply_contains_rephrase_hints_when_codex_enabled() {
+        let store = empty_store("codex-invalid-blueprint").await;
+        let planner = planner_with_fake_codex("codex-invalid-blueprint", "not json");
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "帮我盖一个木屋".to_string(),
+                    player: Some("Alex".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "大模型建筑规划失败");
+        assert!(result.reply.contains("7x7"));
+        assert!(result.reply.contains("dry-run 预览"));
     }
 
     #[tokio::test]
