@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     config::{self, AppConfig, ChatRuntimeConfig},
-    integrations::codex::CodexClient,
+    integrations::{codex::CodexClient, codex_home::prepare_project_codex_home},
     services::{
         blueprint_store::BlueprintStore, build_store::BuildStore, job_queue::JobQueue,
         planner::Planner,
@@ -27,9 +27,17 @@ impl AppState {
         let builds = BuildStore::new(config.storage.data_dir.join("builds")).await?;
         seed_default_blueprint(&blueprints).await?;
         let chat = config::load_chat_runtime_config(&config.chat.config_path)?;
-        let codex = CodexClient::with_session_path(
+        let codex_home = config.storage.data_dir.join("codex_home");
+        let codex_home = if config.codex.enabled {
+            prepare_project_codex_home(&codex_home).await?;
+            Some(codex_home)
+        } else {
+            None
+        };
+        let codex = CodexClient::with_session_path_and_home(
             config.codex.clone(),
             config.storage.data_dir.join("codex_sessions.json"),
+            codex_home,
         );
 
         Ok(Self {

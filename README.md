@@ -282,7 +282,9 @@ codex:
   timeout_seconds: 120
 ```
 
-这里的 `command` 只写 `codex exec` 的参数，controller 会自动补上 `exec`、`--json`、`--output-schema` 和 `--output-last-message`。Minecraft 里会按玩家名维护 Codex 会话，例如 `minecraft:charles`；机器人入口会按发送人维护会话，例如 `robot:dingtalk:<sender>`。同一个人连续说话会走 `codex exec resume <thread_id>` 接回原会话，不同人互不污染。会话映射保存在 `data/codex_sessions.json`，这个目录不会提交到 Git。默认 `model_reasoning_effort=low`，优先保证游戏内响应速度；改完这个配置后需要重启 controller。
+这里的 `command` 只写 `codex exec` 的参数，controller 会自动补上 `exec`、`--json`、`--output-schema` 和 `--output-last-message`。controller 启动时会把打包在 `apps/controller/codex-home-template/skills/` 的 Blockwright skills 同步到 `data/codex_home/skills/`，并把本机 `~/.codex/auth.json` 软链接到这个隔离的 Codex home。之后每次 `codex exec` 都会带 `CODEX_HOME=data/codex_home`，所以本次执行只能读到 Blockwright 打包的 skills 和 Codex 系统内置 skills，不会读你全局 `~/.codex/skills` 里的其他项目技能。
+
+Minecraft 里会按玩家名维护 Codex 会话，例如 `minecraft:charles`；机器人入口会按发送人维护会话，例如 `robot:dingtalk:<sender>`。同一个人连续说话会走 `codex exec resume <thread_id>` 接回原会话，不同人互不污染。会话映射保存在 `data/codex_sessions.json`，这个目录不会提交到 Git。默认 `model_reasoning_effort=low`，优先保证游戏内响应速度；改完这个配置后需要重启 controller。
 
 controller 不会把大模型放进 Minecraft 模组里，而是在 `apps/controller` 里调用 Codex CLI。调用时会把这些规则作为 prompt 的硬性约束：
 

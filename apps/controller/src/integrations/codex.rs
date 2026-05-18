@@ -22,6 +22,7 @@ const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
 pub struct CodexClient {
     config: CodexConfig,
     sessions: CodexSessionStore,
+    runtime_home: Option<Arc<PathBuf>>,
 }
 
 #[derive(Clone)]
@@ -61,13 +62,23 @@ impl CodexClient {
         Self {
             config,
             sessions: CodexSessionStore::in_memory(),
+            runtime_home: None,
         }
     }
 
     pub fn with_session_path(config: CodexConfig, path: PathBuf) -> Self {
+        Self::with_session_path_and_home(config, path, None)
+    }
+
+    pub fn with_session_path_and_home(
+        config: CodexConfig,
+        path: PathBuf,
+        runtime_home: Option<PathBuf>,
+    ) -> Self {
         Self {
             config,
             sessions: CodexSessionStore::from_path(path),
+            runtime_home: runtime_home.map(Arc::new),
         }
     }
 
@@ -142,6 +153,7 @@ impl CodexClient {
                 schema_path.as_deref(),
                 resume_thread_id.as_deref(),
                 session_key.is_some(),
+                self.runtime_home.as_deref().map(PathBuf::as_path),
             ),
         )
         .await?;
@@ -314,8 +326,12 @@ async fn run_codex_exec(
     schema_path: Option<&Path>,
     resume_thread_id: Option<&str>,
     persist_session: bool,
+    runtime_home: Option<&Path>,
 ) -> std::io::Result<std::process::Output> {
     let mut command = Command::new(program);
+    if let Some(runtime_home) = runtime_home {
+        command.env("CODEX_HOME", runtime_home);
+    }
     command.arg("exec").args(args);
     if !persist_session {
         command.arg("--ephemeral");
@@ -525,6 +541,70 @@ BLOCKWRIGHT_JSON
         assert_eq!(lines.len(), 2);
         assert!(!lines[0].contains("resume thread-a"));
         assert!(lines[1].contains("resume thread-a"));
+    }
+
+    #[tokio::test]
+    async fn runtime_home_is_passed_as_codex_home() {
+        let dir = temp_dir("runtime-home");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-home.sh");
+        let env_log = dir.join("env.log");
+        let runtime_home = dir.join("codex-home");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "${{CODEX_HOME:-}}" > '{}'
+last_message=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+printf '{{"type":"thread.started","thread_id":"thread-home"}}\n'
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","actions":[{{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                env_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::with_session_path_and_home(
+            CodexConfig {
+                enabled: true,
+                command: script_path.to_string_lossy().to_string(),
+                timeout_seconds: 5,
+            },
+            dir.join("sessions.json"),
+            Some(runtime_home.clone()),
+        );
+
+        client
+            .ask_with_schema(
+                "hello",
+                CodexResponseSchema::ActionPlan,
+                Some("minecraft:steve"),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(env_log).unwrap().trim(),
+            runtime_home.to_string_lossy()
+        );
     }
 
     #[test]
