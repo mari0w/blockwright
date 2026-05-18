@@ -25,4 +25,13 @@ final class PlacementPolicyTest {
         assertEquals(5000, PlacementPolicy.normalizeMaxBlocks(5000));
         assertEquals(50_000, PlacementPolicy.normalizeMaxBlocks(100_000));
     }
+
+    @Test
+    void playerSafetyZoneCoversBodyAndNearbyEscapeSpace() {
+        assertTrue(ActionExecutor.isWithinPlayerSafetyZone(10, 64, 10, 10, 64, 10));
+        assertTrue(ActionExecutor.isWithinPlayerSafetyZone(11, 65, 10, 10, 64, 10));
+        assertFalse(ActionExecutor.isWithinPlayerSafetyZone(12, 64, 10, 10, 64, 10));
+        assertFalse(ActionExecutor.isWithinPlayerSafetyZone(10, 67, 10, 10, 64, 10));
+        assertFalse(ActionExecutor.isWithinPlayerSafetyZone(10, 63, 10, 10, 64, 10));
+    }
 }

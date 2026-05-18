@@ -23,6 +23,8 @@ import net.minecraft.util.math.BlockPos;
 
 public final class ActionExecutor {
     private static final int MAX_REPORTED_MISMATCHES = 20;
+    private static final int PLAYER_SAFETY_RADIUS = 1;
+    private static final int PLAYER_SAFETY_HEIGHT_BLOCKS = 3;
 
     private final MinecraftServer server;
     private final BlockwrightConfig config;
@@ -117,6 +119,7 @@ public final class ActionExecutor {
         int placed = 0;
         int skippedExisting = 0;
         int skippedLimit = 0;
+        int skippedPlayerSafety = 0;
 
         for (int index = 0; index < action.blocks.size(); index++) {
             JsonModels.BlueprintBlock blockItem = action.blocks.get(index);
@@ -130,6 +133,10 @@ public final class ActionExecutor {
 
             BlockState blockState = blockStateFromId(blockItem.material);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
+            if (!blockState.isAir() && isInsidePlayerSafetyZone(targetPos, defaultPlayer, world)) {
+                skippedPlayerSafety++;
+                continue;
+            }
             boolean occupied = !world.getBlockState(targetPos).isAir();
             if (!PlacementPolicy.canPlace(occupied, config.protectExistingBlocks, action.clearExisting)) {
                 skippedExisting++;
@@ -143,8 +150,44 @@ public final class ActionExecutor {
         report.placedCount = placed;
         report.skippedExistingCount = skippedExisting;
         report.skippedLimitCount = skippedLimit;
-        defaultPlayer.sendMessage(Text.literal(new PlacementStats(placed, skippedExisting, skippedLimit).summary()), false);
+        report.skippedPlayerSafetyCount = skippedPlayerSafety;
+        defaultPlayer.sendMessage(Text.literal(new PlacementStats(
+                placed,
+                skippedExisting,
+                skippedLimit,
+                skippedPlayerSafety).summary()), false);
         return report;
+    }
+
+    private boolean isInsidePlayerSafetyZone(
+            BlockPos targetPos,
+            ServerPlayerEntity player,
+            ServerWorld world) {
+        if (player.getWorld() != world) {
+            return false;
+        }
+
+        BlockPos playerPos = player.getBlockPos();
+        return isWithinPlayerSafetyZone(
+                targetPos.getX(),
+                targetPos.getY(),
+                targetPos.getZ(),
+                playerPos.getX(),
+                playerPos.getY(),
+                playerPos.getZ());
+    }
+
+    static boolean isWithinPlayerSafetyZone(
+            int targetX,
+            int targetY,
+            int targetZ,
+            int playerX,
+            int playerY,
+            int playerZ) {
+        return Math.abs(targetX - playerX) <= PLAYER_SAFETY_RADIUS
+                && targetY >= playerY
+                && targetY < playerY + PLAYER_SAFETY_HEIGHT_BLOCKS
+                && Math.abs(targetZ - playerZ) <= PLAYER_SAFETY_RADIUS;
     }
 
     private void verifyPlacedBlocks(
@@ -195,6 +238,7 @@ public final class ActionExecutor {
         report.placedCount = 0;
         report.skippedExistingCount = 0;
         report.skippedLimitCount = 0;
+        report.skippedPlayerSafetyCount = 0;
         report.verifiedCount = 0;
         report.mismatchCount = 0;
         report.mismatches = new ArrayList<>();

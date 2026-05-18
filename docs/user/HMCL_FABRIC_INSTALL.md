@@ -151,7 +151,7 @@ data/builds/
   "serverId": "hmcl-lan",
   "sharedToken": "local-dev-token",
   "connectTimeoutSeconds": 5,
-  "requestTimeoutSeconds": 180,
+  "requestTimeoutSeconds": 1800,
   "protectExistingBlocks": true,
   "maxBlocksPerAction": 5000,
   "scanRadius": 8,
@@ -164,13 +164,13 @@ data/builds/
 
 正常本机使用不用改。只有 controller 地址或 token 改了才需要改。
 
-`requestTimeoutSeconds` 默认 180 秒，因为启用 Codex CLI 或本地模型后，第一次理解请求可能明显超过 20 秒。游戏里如果提示请求超时，优先确认这个值是否还是旧配置里的 20 秒，必要时改成 180 后执行 `/bw reload` 或重启游戏。
+`requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型规划建筑后，复杂建筑可能明显超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
 
 `maxBlocksPerAction` 是单次动作最多放置多少方块，默认 5000，用来防止误生成超大蓝图卡住存档。
 
-`scanRadius` 默认 8，`scanForwardBlocks` 默认 5，`maxScanBlocks` 默认 8000。它们用于“改造面前这个建筑”这类需求：模组会扫描玩家视线前方附近的非空气方块，把结果发给 controller 匹配已保存的构建记录。
+`scanRadius` 默认 8，`scanForwardBlocks` 默认 5，`maxScanBlocks` 默认 8000。Fabric 模组现在每次 `/bw ...` 都会扫描玩家视线前方附近的非空气方块，并把结果发给 controller；controller 再由 Codex 判断这是新建蓝图、发物品/指令，还是改造已有建筑。这样不会因为本地关键词没覆盖到“旋转木马、蛋糕、雕像”等说法而漏掉场地信息。
 
 `pollControllerJobs` 默认是 `true`，意思是 Fabric 模组会主动轮询 controller 里的任务队列。钉钉、通用机器人这类本地聊天入口发来的任务，会通过这个轮询进入你的当前世界，不需要公网 webhook。
 
@@ -186,15 +186,15 @@ Paper 插件仍然保留在 `plugins/paper`，但那是给独立 Paper 服务器
 
 当前本地配置默认启用 Codex CLI。controller 会优先调用本机 `codex exec` 理解自然语言；只要 Codex 是启用状态，Codex 失败时会明确提示失败，不会再退回关键词规则冒充理解。
 
-默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=low"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--json` 读取 session id、用 `--output-schema` 约束模型最终 JSON、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。默认低思考强度，优先保证游戏内响应速度；修改 `config/servers/local.yaml` 后，需要重启 controller。
+默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=medium"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--json` 读取 session id、用 `--output-schema` 约束模型最终 JSON、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。默认中等思考强度，优先保证建筑规划质量；修改 `config/servers/local.yaml` 后，需要重启 controller。
 
 controller 会把项目内置 skills 同步到隔离的 `data/codex_home/skills/`，然后用 `CODEX_HOME=data/codex_home` 运行 Codex CLI。这样游戏里的 Codex 只会看到 Blockwright 打包的建造、择址、校验、图片复刻、改造和安全命令 skills，不会读你全局 `~/.codex/skills` 里的其他项目技能。这个目录会软链接本机 `~/.codex/auth.json`，因此仍然复用你的本机 Codex 登录状态；如果你的登录文件不在默认位置，可以用 `BLOCKWRIGHT_CODEX_AUTH_JSON=/path/to/auth.json` 指定。
 
 Codex 会话按人隔离：Minecraft 里同一个玩家连续说话会复用同一个 Codex 会话；不同玩家各自独立。机器人入口按发送人隔离，例如同一个钉钉发送人复用自己的会话。会话映射保存在 `data/codex_sessions.json`，`data/` 已经忽略，不会提交到仓库。
 
-controller 日志不会打印模型原始思考链路，但会打印可排查的阶段进度：`starting codex cli request`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。如果 120 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
+controller 日志不会打印模型原始思考链路或完整模型正文，但会打印可排查的阶段进度：`starting codex cli request`、实时的 `codex cli progress event`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。`codex cli progress event` 会把 Codex JSON 事件转成“开始分析玩家需求”“准备调用工具”“最终结构化回复已经生成”等阶段说明，并只保留安全的工具/命令名字。如果 1800 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
 
-建筑类需求默认先走 Codex 蓝图规划，不会先套本地关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”都会先生成并保存新的蓝图，再由模组放置和校验；只有你主动把 `codex.enabled` 改成 `false`，才会使用本地内置蓝图兜底。
+controller 会先让 Codex 输出 `intent`，再进入蓝图规划、动作规划或已有建筑改造流程，不再先套本地关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”“给我旋转木马，可以大点”都会由 Codex 判断是否属于新建蓝图；“给我钻石剑”“把时间调到白天”会由 Codex 判断为动作。`codex.enabled=false` 时不会再用本地关键词规则冒充理解，而是直接提示需要启用 Codex。
 
 Blockwright 会要求 Codex 按 Minecraft 可玩性规划建筑：住宅、木屋、房间、树屋默认不是空壳，应该有地板、墙、屋顶、入口、两格高室内空间、床、照明、窗户和可到达路径。树屋或树冠用到树叶时，优先生成 `minecraft:oak_leaves[persistent=true]` 这类持久树叶，避免放完后自然凋零；门和床这类两格结构会带上 `half=lower/upper`、`part=foot/head` 等方块状态，并和普通方块一样进入保存、放置和校验。
 

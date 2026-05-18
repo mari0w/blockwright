@@ -195,6 +195,22 @@ mod tests {
     }
 
     #[test]
+    fn local_server_config_uses_thirty_minute_codex_timeout_and_medium_reasoning() {
+        let config_source = SERVER_CONFIG_DIR
+            .get_file("local.yaml")
+            .and_then(|file| file.contents_utf8())
+            .expect("local server config should be embedded");
+
+        let config = yaml_serde::from_str::<AppConfig>(config_source).unwrap();
+
+        assert_eq!(1800, config.codex.timeout_seconds);
+        assert!(config
+            .codex
+            .command
+            .contains("model_reasoning_effort=medium"));
+    }
+
+    #[test]
     fn rejects_enabled_webhook_only_chat_tool() {
         let config = ChatRuntimeConfig {
             tools: vec![ChatToolConfig {

@@ -11,7 +11,7 @@ use crate::{
         BlueprintBlock, GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan,
     },
     services::build_store::BuildMatch,
-    services::planner::PlannerInput,
+    services::planner::{PlannerInput, PlannerIntentKind},
     state::AppState,
 };
 
@@ -67,23 +67,28 @@ async fn handle_message(
         "received minecraft message"
     );
 
-    if let Some(response) = handle_existing_build_modification(&state, &request).await {
-        return response.map(Json);
+    let planner_input = PlannerInput {
+        text: request.text.clone(),
+        player: Some(request.player.clone()),
+        codex_session_key: Some(format!("minecraft:{}", request.player)),
+        position: request.position.clone(),
+        nearby_scan: request.nearby_scan.clone(),
+        attachments: Vec::new(),
+    };
+    let intent = state.planner.classify_intent(&planner_input).await;
+
+    if matches!(
+        intent.as_ref().map(|item| item.intent),
+        Some(PlannerIntentKind::ExistingBuildEdit)
+    ) {
+        if let Some(response) = handle_existing_build_modification(&state, &request).await {
+            return response.map(Json);
+        }
     }
 
     let plan = state
         .planner
-        .plan(
-            PlannerInput {
-                text: request.text,
-                player: Some(request.player.clone()),
-                codex_session_key: Some(format!("minecraft:{}", request.player)),
-                position: request.position,
-                nearby_scan: request.nearby_scan.clone(),
-                attachments: Vec::new(),
-            },
-            &state.blueprints,
-        )
+        .plan_with_intent(planner_input, &state.blueprints, intent)
         .await;
 
     let job_id = if has_build_action(&plan.actions) {
@@ -169,10 +174,6 @@ async fn handle_existing_build_modification(
     state: &AppState,
     request: &MinecraftMessageRequest,
 ) -> Option<Result<MinecraftMessageResponse, (StatusCode, String)>> {
-    if !wants_existing_build_modification(&request.text) {
-        return None;
-    }
-
     let Some(scan) = request.nearby_scan.as_ref() else {
         return Some(Ok(chat_response(
             "这个需求需要先扫描你附近的建筑。请在游戏内站到目标建筑前面重新执行同一句 `/bw ...`，HMCL/Fabric 模组会自动带上附近方块信息。"
@@ -273,36 +274,6 @@ async fn handle_existing_build_modification(
         ))),
         Err(message) => Some(Ok(chat_response(message))),
     }
-}
-
-fn wants_existing_build_modification(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    (text.contains("改")
-        || text.contains("换")
-        || text.contains("调整")
-        || text.contains("替换")
-        || text.contains("抬高")
-        || text.contains("升高")
-        || text.contains("降低")
-        || text.contains("下降")
-        || lower.contains("replace")
-        || lower.contains("modify")
-        || lower.contains("raise")
-        || lower.contains("lift")
-        || lower.contains("lower"))
-        && (text.contains("面前")
-            || text.contains("附近")
-            || text.contains("这个")
-            || text.contains("它")
-            || text.contains("那栋")
-            || text.contains("房子")
-            || text.contains("建筑")
-            || text.contains("抬高")
-            || text.contains("升高")
-            || text.contains("降低")
-            || text.contains("下降")
-            || lower.contains("nearby")
-            || lower.contains("this"))
 }
 
 fn is_ambiguous_match(best: &BuildMatch, second: Option<&BuildMatch>) -> bool {

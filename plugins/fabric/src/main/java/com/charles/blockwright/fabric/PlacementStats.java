@@ -1,6 +1,6 @@
 package com.charles.blockwright.fabric;
 
-record PlacementStats(int placed, int skippedExisting, int skippedLimit) {
+record PlacementStats(int placed, int skippedExisting, int skippedLimit, int skippedPlayerSafety) {
     String summary() {
         StringBuilder message = new StringBuilder("Blockwright 已放置 ")
                 .append(placed)
@@ -10,6 +10,9 @@ record PlacementStats(int placed, int skippedExisting, int skippedLimit) {
         }
         if (skippedLimit > 0) {
             message.append("，因单次上限跳过 ").append(skippedLimit).append(" 个方块");
+        }
+        if (skippedPlayerSafety > 0) {
+            message.append("，为避免卡住玩家跳过 ").append(skippedPlayerSafety).append(" 个贴近玩家的方块");
         }
         message.append("。");
         return message.toString();

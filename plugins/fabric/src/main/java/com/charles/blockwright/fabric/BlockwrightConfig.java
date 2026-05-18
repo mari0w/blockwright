@@ -9,12 +9,13 @@ import java.nio.file.Path;
 
 public final class BlockwrightConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final int MAX_REQUEST_TIMEOUT_SECONDS = 30 * 60;
 
     public String controllerUrl = "http://127.0.0.1:8765";
     public String serverId = "hmcl-lan";
     public String sharedToken = "local-dev-token";
     public int connectTimeoutSeconds = 5;
-    public int requestTimeoutSeconds = 180;
+    public int requestTimeoutSeconds = MAX_REQUEST_TIMEOUT_SECONDS;
     public boolean protectExistingBlocks = true;
     public int maxBlocksPerAction = 5000;
     public int scanRadius = 8;
@@ -36,6 +37,7 @@ public final class BlockwrightConfig {
             config = new BlockwrightConfig();
         }
         config.normalize();
+        save(path, config);
         return config;
     }
 
@@ -57,7 +59,7 @@ public final class BlockwrightConfig {
             sharedToken = "";
         }
         connectTimeoutSeconds = normalizeBounded(connectTimeoutSeconds, 1, 30);
-        requestTimeoutSeconds = normalizeBounded(requestTimeoutSeconds, 30, 600);
+        requestTimeoutSeconds = normalizeRequestTimeout(requestTimeoutSeconds);
         maxBlocksPerAction = PlacementPolicy.normalizeMaxBlocks(maxBlocksPerAction);
         scanRadius = normalizeBounded(scanRadius, 3, 16);
         scanForwardBlocks = normalizeBounded(scanForwardBlocks, 0, 12);
@@ -70,6 +72,13 @@ public final class BlockwrightConfig {
             return min;
         }
         return Math.min(value, max);
+    }
+
+    private int normalizeRequestTimeout(int value) {
+        if (value != MAX_REQUEST_TIMEOUT_SECONDS) {
+            return MAX_REQUEST_TIMEOUT_SECONDS;
+        }
+        return value;
     }
 
     private int normalizePollIntervalTicks(int value) {

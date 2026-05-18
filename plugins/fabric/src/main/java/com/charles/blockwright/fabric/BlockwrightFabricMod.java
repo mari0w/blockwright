@@ -76,9 +76,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
 
         MinecraftServer server = source.getServer();
         PlayerSnapshot playerSnapshot = PlayerSnapshot.from(player);
-        JsonModels.WorldScan nearbyScan = BlockwrightCommandText.needsWorldScan(text)
-                ? WorldScanner.scan(player, config)
-                : null;
+        JsonModels.WorldScan nearbyScan = WorldScanner.scan(player, config);
         String playerName = playerSnapshot.name();
         player.sendMessage(Text.literal("Blockwright 正在处理你的需求..."), false);
         ControllerClient controllerClient = new ControllerClient(config);

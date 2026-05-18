@@ -8,7 +8,7 @@ Blockwright 是一个本地优先的 Minecraft 智能建造助手。它把自然
 
 - 游戏内通过 `/bw ...` 发送需求，例如发物品、调时间、建造木屋或改造已有建筑。
 - 外部机器人通过 controller 统一接入，再把任务下发到 Minecraft 世界。
-- controller 调用本地 Codex CLI，把自然语言规划成结构化动作或蓝图 JSON。
+- controller 先调用本地 Codex CLI 做意图分类，再把需求规划成结构化动作或蓝图 JSON。
 - 蓝图使用相对坐标，真正放置时再叠加玩家位置或任务原点。
 - 建筑任务先保存构建记录，再下发同一份方块清单到执行端。
 - Fabric/Paper 执行端逐块读取世界状态生成校验报告，报告和构建记录一致才算成功。
@@ -68,7 +68,7 @@ flowchart LR
 - Minecraft 1.21.8 + Fabric Loader。
 - Fabric API。
 - 可选：`cargo-llvm-cov`，用于本地覆盖率门禁。
-- 可选：已登录的 Codex CLI。未安装或未登录时可以把 `codex.enabled` 改成 `false` 使用本地兜底逻辑。
+- 已登录的 Codex CLI。controller 不再用本地关键词规则兜底识别建筑或动作意图。
 
 ### 启动 controller
 
@@ -118,11 +118,11 @@ make HMCL_DIR=<HMCL当前游戏目录>
 /bw reload
 ```
 
-第一次调用 Codex CLI 或本地模型时可能超过 20 秒。Fabric 配置里的 `requestTimeoutSeconds` 默认是 180；旧配置可以手动补上：
+第一次调用 Codex CLI 或本地模型规划建筑时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 
 ```json
 {
-  "requestTimeoutSeconds": 180
+  "requestTimeoutSeconds": 1800
 }
 ```
 

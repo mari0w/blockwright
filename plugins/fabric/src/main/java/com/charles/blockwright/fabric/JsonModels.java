@@ -147,6 +147,8 @@ public final class JsonModels {
         public int skippedExistingCount;
         @SerializedName("skipped_limit_count")
         public int skippedLimitCount;
+        @SerializedName("skipped_player_safety_count")
+        public int skippedPlayerSafetyCount;
         @SerializedName("verified_count")
         public int verifiedCount;
         @SerializedName("mismatch_count")

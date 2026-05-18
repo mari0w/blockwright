@@ -17,7 +17,7 @@ final class BlockwrightConfigTest {
         assertEquals("http://127.0.0.1:8765", config.controllerUrl);
         assertEquals("hmcl-lan", config.serverId);
         assertEquals(5, config.connectTimeoutSeconds);
-        assertEquals(180, config.requestTimeoutSeconds);
+        assertEquals(1800, config.requestTimeoutSeconds);
         assertTrue(config.protectExistingBlocks);
         assertEquals(5000, config.maxBlocksPerAction);
         assertEquals(8, config.scanRadius);
@@ -52,11 +52,41 @@ final class BlockwrightConfigTest {
         assertEquals("hmcl-lan", config.serverId);
         assertEquals("", config.sharedToken);
         assertEquals(1, config.connectTimeoutSeconds);
-        assertEquals(30, config.requestTimeoutSeconds);
+        assertEquals(1800, config.requestTimeoutSeconds);
         assertEquals(50_000, config.maxBlocksPerAction);
         assertEquals(3, config.scanRadius);
         assertEquals(12, config.scanForwardBlocks);
         assertEquals(100, config.maxScanBlocks);
         assertEquals(5, config.pollIntervalTicks);
+        assertTrue(Files.readString(path).contains("\"requestTimeoutSeconds\": 1800"));
+    }
+
+    @Test
+    void normalizesRequestTimeoutToThirtyMinutes() throws Exception {
+        Path path = Files.createTempDirectory("blockwright-fabric-config").resolve("blockwright.json");
+        Files.writeString(path, """
+                {
+                  "requestTimeoutSeconds": 9999
+                }
+                """);
+
+        BlockwrightConfig config = BlockwrightConfig.load(path);
+
+        assertEquals(1800, config.requestTimeoutSeconds);
+    }
+
+    @Test
+    void upgradesLegacyShortRequestTimeoutOnLoad() throws Exception {
+        Path path = Files.createTempDirectory("blockwright-fabric-config").resolve("blockwright.json");
+        Files.writeString(path, """
+                {
+                  "requestTimeoutSeconds": 180
+                }
+                """);
+
+        BlockwrightConfig config = BlockwrightConfig.load(path);
+
+        assertEquals(1800, config.requestTimeoutSeconds);
+        assertTrue(Files.readString(path).contains("\"requestTimeoutSeconds\": 1800"));
     }
 }

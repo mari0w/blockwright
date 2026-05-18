@@ -164,6 +164,8 @@ pub struct ActionExecutionReport {
     pub placed_count: u32,
     pub skipped_existing_count: u32,
     pub skipped_limit_count: u32,
+    #[serde(default)]
+    pub skipped_player_safety_count: u32,
     pub verified_count: u32,
     pub mismatch_count: u32,
     #[serde(default)]

@@ -1,14 +1,15 @@
 use std::{
     collections::HashMap,
+    io,
     path::{Path, PathBuf},
-    process::{ExitStatus, Stdio},
+    process::{ExitStatus, Output, Stdio},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde_json::Value;
 use tokio::{
-    io::AsyncWriteExt,
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
     process::Command,
     sync::{Mutex, OwnedMutexGuard},
     time::{sleep, Duration, Instant as TokioInstant},
@@ -34,6 +35,7 @@ struct CodexSessionStore {
 
 #[derive(Debug, Clone, Copy)]
 pub enum CodexResponseSchema {
+    Intent,
     ActionPlan,
     Blueprint,
 }
@@ -41,6 +43,7 @@ pub enum CodexResponseSchema {
 impl CodexResponseSchema {
     fn label(self) -> &'static str {
         match self {
+            CodexResponseSchema::Intent => "intent",
             CodexResponseSchema::ActionPlan => "action_plan",
             CodexResponseSchema::Blueprint => "blueprint",
         }
@@ -48,6 +51,7 @@ impl CodexResponseSchema {
 
     fn path(self) -> PathBuf {
         let file_name = match self {
+            CodexResponseSchema::Intent => "intent.schema.json",
             CodexResponseSchema::ActionPlan => "action-plan.schema.json",
             CodexResponseSchema::Blueprint => "blueprint.schema.json",
         };
@@ -154,6 +158,9 @@ impl CodexClient {
                 resume_thread_id.as_deref(),
                 session_key.is_some(),
                 self.runtime_home.as_deref().map(PathBuf::as_path),
+                &self.config.command,
+                schema_label,
+                session_key.as_deref().unwrap_or("ephemeral"),
             ),
         )
         .await?;
@@ -327,7 +334,10 @@ async fn run_codex_exec(
     resume_thread_id: Option<&str>,
     persist_session: bool,
     runtime_home: Option<&Path>,
-) -> std::io::Result<std::process::Output> {
+    command_for_log: &str,
+    schema_label: &str,
+    session_key: &str,
+) -> std::io::Result<Output> {
     let mut command = Command::new(program);
     if let Some(runtime_home) = runtime_home {
         command.env("CODEX_HOME", runtime_home);
@@ -357,7 +367,173 @@ async fn run_codex_exec(
         stdin.write_all(prompt.as_bytes()).await?;
     }
 
-    child.wait_with_output().await
+    let stdout = child.stdout.take().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::Other, "failed to capture codex stdout pipe")
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::Other, "failed to capture codex stderr pipe")
+    })?;
+    let stdout_context = CodexEventLogContext {
+        command: command_for_log.to_string(),
+        schema_label: schema_label.to_string(),
+        session_key: session_key.to_string(),
+    };
+    let stdout_task =
+        tokio::spawn(async move { collect_stdout_with_progress(stdout, stdout_context).await });
+    let stderr_task = tokio::spawn(async move { collect_reader(stderr).await });
+
+    let status = child.wait().await?;
+    let stdout = stdout_task
+        .await
+        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))??;
+    let stderr = stderr_task
+        .await
+        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))??;
+
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+struct CodexEventLogContext {
+    command: String,
+    schema_label: String,
+    session_key: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CodexProgressEvent {
+    event_type: String,
+    phase: &'static str,
+    detail: Option<String>,
+}
+
+async fn collect_stdout_with_progress<R>(
+    reader: R,
+    context: CodexEventLogContext,
+) -> io::Result<Vec<u8>>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = BufReader::new(reader);
+    let mut output = Vec::new();
+    let mut line = Vec::new();
+
+    loop {
+        line.clear();
+        let read = reader.read_until(b'\n', &mut line).await?;
+        if read == 0 {
+            break;
+        }
+        output.extend_from_slice(&line);
+        log_codex_json_event(&line, &context);
+    }
+
+    Ok(output)
+}
+
+async fn collect_reader<R>(reader: R) -> io::Result<Vec<u8>>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = BufReader::new(reader);
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).await?;
+    Ok(output)
+}
+
+fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
+    let Ok(line) = std::str::from_utf8(line) else {
+        return;
+    };
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+    let Ok(value) = serde_json::from_str::<Value>(line) else {
+        return;
+    };
+    let Some(event) = codex_progress_event(&value) else {
+        return;
+    };
+
+    tracing::info!(
+        command = %context.command,
+        schema = %context.schema_label,
+        session_key = %context.session_key,
+        event_type = %event.event_type,
+        phase = event.phase,
+        detail = event.detail.as_deref().unwrap_or(""),
+        "codex cli progress event"
+    );
+}
+
+fn codex_progress_event(value: &Value) -> Option<CodexProgressEvent> {
+    let event_type = value.get("type").and_then(Value::as_str)?;
+    if event_type.ends_with(".delta") || event_type.ends_with("_delta") {
+        return None;
+    }
+
+    let phase = codex_progress_phase(event_type)?;
+    Some(CodexProgressEvent {
+        event_type: event_type.to_string(),
+        phase,
+        detail: codex_progress_detail(value),
+    })
+}
+
+fn codex_progress_phase(event_type: &str) -> Option<&'static str> {
+    match event_type {
+        "thread.started" => Some("会话已准备好，开始承接本次请求"),
+        "turn.started" => Some("开始分析玩家需求并准备生成结构化结果"),
+        "turn.completed" => Some("本轮 Codex 处理完成，等待 controller 读取最终结果"),
+        "agent_message.started" => Some("开始生成最终结构化回复"),
+        "agent_message.completed" => Some("最终结构化回复已经生成"),
+        "error" | "turn.failed" => Some("Codex 处理失败，准备返回错误"),
+        value if value.contains("reasoning") && value.ends_with(".started") => {
+            Some("开始分析需求和可执行方案")
+        }
+        value if value.contains("reasoning") && value.ends_with(".completed") => {
+            Some("需求分析阶段完成")
+        }
+        value if value.contains("tool") && value.ends_with(".started") => {
+            Some("准备调用工具获取上下文或执行辅助步骤")
+        }
+        value if value.contains("tool") && value.ends_with(".completed") => {
+            Some("工具调用完成，继续整理结果")
+        }
+        value if value.contains("command") && value.ends_with(".started") => {
+            Some("准备执行内部命令或检查步骤")
+        }
+        value if value.contains("command") && value.ends_with(".completed") => {
+            Some("内部命令或检查步骤完成")
+        }
+        value if value.ends_with(".started") => Some("进入新的处理阶段"),
+        value if value.ends_with(".completed") => Some("当前处理阶段完成"),
+        _ => None,
+    }
+}
+
+fn codex_progress_detail(value: &Value) -> Option<String> {
+    let raw = value
+        .get("tool_name")
+        .or_else(|| value.get("tool"))
+        .or_else(|| value.get("name"))
+        .or_else(|| value.get("command"))
+        .and_then(Value::as_str)?;
+
+    Some(safe_progress_detail(raw))
+}
+
+fn safe_progress_detail(raw: &str) -> String {
+    let mut detail = raw.split_whitespace().next().unwrap_or(raw).to_string();
+    detail.retain(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':' | '/'));
+    if detail.len() > 80 {
+        detail.truncate(80);
+    }
+    detail
 }
 
 fn extract_thread_id_from_json_stdout(stdout: &[u8]) -> Option<String> {
@@ -625,6 +801,7 @@ BLOCKWRIGHT_JSON
 
     #[test]
     fn response_schema_files_are_packaged_with_controller_source() {
+        assert!(CodexResponseSchema::Intent.path().exists());
         assert!(CodexResponseSchema::ActionPlan.path().exists());
         assert!(CodexResponseSchema::Blueprint.path().exists());
     }
@@ -639,6 +816,43 @@ BLOCKWRIGHT_JSON
             extract_thread_id_from_json_stdout(stdout).as_deref(),
             Some("thread-123")
         );
+    }
+
+    #[test]
+    fn summarizes_codex_json_events_without_leaking_model_text() {
+        let event = serde_json::json!({
+            "type": "agent_message.completed",
+            "message": "这里可能是模型最终正文，不能进阶段日志"
+        });
+
+        let progress = codex_progress_event(&event).unwrap();
+
+        assert_eq!(progress.event_type, "agent_message.completed");
+        assert_eq!(progress.phase, "最终结构化回复已经生成");
+        assert_eq!(progress.detail, None);
+    }
+
+    #[test]
+    fn summarizes_tool_and_command_progress_with_safe_detail() {
+        let tool_event = serde_json::json!({
+            "type": "mcp_tool_call.started",
+            "tool_name": "blockwright_blueprint_validator"
+        });
+        let command_event = serde_json::json!({
+            "type": "command.completed",
+            "command": "python3 /tmp/secret-prompt.py --with-sensitive-args"
+        });
+
+        let tool_progress = codex_progress_event(&tool_event).unwrap();
+        let command_progress = codex_progress_event(&command_event).unwrap();
+
+        assert_eq!(tool_progress.phase, "准备调用工具获取上下文或执行辅助步骤");
+        assert_eq!(
+            tool_progress.detail.as_deref(),
+            Some("blockwright_blueprint_validator")
+        );
+        assert_eq!(command_progress.phase, "内部命令或检查步骤完成");
+        assert_eq!(command_progress.detail.as_deref(), Some("python3"));
     }
 
     #[test]

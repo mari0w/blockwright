@@ -11,6 +11,8 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 public final class ControllerClient {
+    static final long REQUEST_TIMEOUT_SECONDS = 30 * 60L;
+
     private final BlockwrightPlugin plugin;
     private final HttpClient httpClient;
     private final Gson gson;
@@ -23,7 +25,8 @@ public final class ControllerClient {
     public ControllerClient(BlockwrightPlugin plugin) {
         this.plugin = plugin;
         this.connectTimeoutSeconds = plugin.getConfig().getLong("connect-timeout-seconds", 5L);
-        this.requestTimeoutSeconds = plugin.getConfig().getLong("request-timeout-seconds", 180L);
+        this.requestTimeoutSeconds = normalizeRequestTimeout(
+                plugin.getConfig().getLong("request-timeout-seconds", REQUEST_TIMEOUT_SECONDS));
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
                 .build();
@@ -87,5 +90,9 @@ public final class ControllerClient {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException("controller returned " + response.statusCode() + ": " + response.body());
         }
+    }
+
+    static long normalizeRequestTimeout(long value) {
+        return REQUEST_TIMEOUT_SECONDS;
     }
 }

@@ -1,13 +1,15 @@
 use crate::{
     domain::types::{
-        BlockOrigin, Blueprint, ChatAttachment, ChatAttachmentKind, GameAction, PlayerPosition,
-        WorldScan,
+        BlockOrigin, Blueprint, ChatAttachment, GameAction, PlayerPosition, WorldScan,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
     services::blueprint_store::BlueprintStore,
 };
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+
+const PLAYER_SAFETY_RADIUS: i32 = 1;
+const PLAYER_SAFETY_HEIGHT_BLOCKS: i32 = 3;
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
@@ -33,6 +35,33 @@ struct CodexActionPlan {
     actions: Vec<GameAction>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlannerIntentKind {
+    Blueprint,
+    Action,
+    ExistingBuildEdit,
+    Chat,
+}
+
+impl PlannerIntentKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            PlannerIntentKind::Blueprint => "blueprint",
+            PlannerIntentKind::Action => "action",
+            PlannerIntentKind::ExistingBuildEdit => "existing_build_edit",
+            PlannerIntentKind::Chat => "chat",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlannerIntent {
+    pub intent: PlannerIntentKind,
+    pub reply: String,
+    pub summary: String,
+}
+
 #[derive(Clone, Default)]
 pub struct Planner {
     codex: Option<CodexClient>,
@@ -44,30 +73,96 @@ impl Planner {
     }
 
     pub async fn plan(&self, input: PlannerInput, blueprints: &BlueprintStore) -> PlanResult {
-        let text = input.text.trim();
-        let lower_text = text.to_lowercase();
+        let intent = self.classify_intent(&input).await;
+        self.plan_with_intent(input, blueprints, intent).await
+    }
 
-        if wants_image_pipeline(text, &lower_text, &input.attachments) {
-            if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
-                return result;
+    pub async fn classify_intent(&self, input: &PlannerInput) -> Option<PlannerIntent> {
+        let codex = self.codex.as_ref()?;
+        if !codex.enabled() {
+            return None;
+        }
+
+        tracing::info!(
+            has_nearby_scan = input.nearby_scan.is_some(),
+            attachment_count = input.attachments.len(),
+            "starting codex intent classifier"
+        );
+        let prompt = build_intent_prompt(input);
+        let output = match codex
+            .ask_with_schema(
+                &prompt,
+                CodexResponseSchema::Intent,
+                input.codex_session_key.as_deref(),
+            )
+            .await
+        {
+            Ok(Some(output)) if !output.trim().is_empty() => output,
+            Ok(_) => return None,
+            Err(error) => {
+                tracing::warn!(error = %error, "codex intent classification failed");
+                return None;
             }
+        };
+        tracing::info!(
+            response_bytes = output.len(),
+            "codex intent response received; parsing intent json"
+        );
 
+        let intent = match parse_intent_response(&output) {
+            Some(intent) => intent,
+            None => {
+                tracing::warn!("codex intent classification returned invalid json");
+                return None;
+            }
+        };
+        tracing::info!(
+            intent = intent.intent.as_str(),
+            summary = %intent.summary,
+            "codex intent classified"
+        );
+        Some(intent)
+    }
+
+    pub async fn plan_with_intent(
+        &self,
+        input: PlannerInput,
+        blueprints: &BlueprintStore,
+        intent: Option<PlannerIntent>,
+    ) -> PlanResult {
+        if !self.codex_enabled() {
             return PlanResult {
-                reply: "图片复刻会走图片分析流水线：识别结构、换算材料、生成蓝图、再由插件放置。当前骨架已经预留入口，下一步接入视觉分析。".to_string(),
-                summary: "说明图片复刻流程".to_string(),
+                reply: "当前没有启用 Codex，已关闭本地关键词意图匹配，无法判断建筑或动作需求。请先启用 Codex。".to_string(),
+                summary: "Codex 未启用".to_string(),
                 actions: vec![GameAction::Chat {
-                    message: "图片复刻能力还在接入中。".to_string(),
+                    message: "没有启用 Codex，无法理解这类自然语言需求。".to_string(),
                 }],
             };
         }
 
-        if wants_build_request(text, &lower_text, &input.attachments) {
-            if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
-                return result;
-            }
+        let Some(intent) = intent else {
+            return PlanResult {
+                reply: format!(
+                    "Codex 没有返回有效意图分类，所以我没有下发任何动作。{}",
+                    short_rephrase_hint()
+                ),
+                summary: "大模型意图识别失败".to_string(),
+                actions: vec![GameAction::Chat {
+                    message: format!(
+                        "这次没有执行：Codex 未返回有效意图分类。{}",
+                        short_rephrase_hint()
+                    ),
+                }],
+            };
+        };
 
-            if self.codex_enabled() {
-                return PlanResult {
+        match intent.intent {
+            PlannerIntentKind::Blueprint => {
+                if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
+                    return result;
+                }
+
+                PlanResult {
                     reply: format!(
                         "大模型没有生成有效蓝图，所以我没有下发建筑动作。{}",
                         rephrase_hints_for_build()
@@ -79,72 +174,41 @@ impl Planner {
                             short_rephrase_hint()
                         ),
                     }],
-                };
+                }
             }
+            PlannerIntentKind::Action => {
+                if let Some(result) = self.try_codex_action_plan(&input).await {
+                    return result;
+                }
 
-            if let Some(result) = self.try_builtin_house_blueprint(&input, blueprints).await {
-                return result;
-            }
-
-            return PlanResult {
-                reply: "当前没有启用大模型，也没有匹配到可用的本地建筑蓝图。".to_string(),
-                summary: "缺少建筑规划能力".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: "没有启用 Codex，也没有找到可用建筑蓝图。".to_string(),
-                }],
-            };
-        }
-
-        if let Some(result) = self.try_codex_action_plan(&input).await {
-            return result;
-        }
-
-        if self.codex_enabled() {
-            return PlanResult {
-                reply: format!(
-                    "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。{}",
-                    rephrase_hints_for_common_actions()
-                ),
-                summary: "大模型动作理解失败".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: format!(
-                        "这次没有执行：Codex 未返回有效动作。{}",
-                        short_rephrase_hint()
+                PlanResult {
+                    reply: format!(
+                        "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。{}",
+                        rephrase_hints_for_common_actions()
                     ),
+                    summary: "大模型动作理解失败".to_string(),
+                    actions: vec![GameAction::Chat {
+                        message: format!(
+                            "这次没有执行：Codex 未返回有效动作。{}",
+                            short_rephrase_hint()
+                        ),
+                    }],
+                }
+            }
+            PlannerIntentKind::ExistingBuildEdit => PlanResult {
+                reply: "这个请求被 Codex 识别为改造现有建筑，需要 Minecraft 端带附近扫描并匹配已保存构建记录。请站到目标建筑前面重新执行同一句 `/bw ...`。".to_string(),
+                summary: "需要建筑改造入口".to_string(),
+                actions: vec![GameAction::Chat {
+                    message: "请站到目标建筑前面重新发送，这类改造要先匹配附近已记录建筑。".to_string(),
                 }],
-            };
-        }
-
-        if let Some(item) = requested_item(text, &lower_text) {
-            return PlanResult {
-                reply: format!("可以，已经准备给你{}。", item.reply_name),
-                summary: format!("发放{}", item.summary_name),
-                actions: vec![GameAction::GiveItem {
-                    player: input.player,
-                    item: item.item_id.to_string(),
-                    count: item.count,
+            },
+            PlannerIntentKind::Chat => PlanResult {
+                reply: intent.reply.clone(),
+                summary: intent.summary,
+                actions: vec![GameAction::Chat {
+                    message: intent.reply,
                 }],
-            };
-        }
-
-        if wants_diamonds(text, &lower_text) {
-            return PlanResult {
-                reply: "可以，已经准备给你 64 个钻石。".to_string(),
-                summary: "发放钻石".to_string(),
-                actions: vec![GameAction::GiveItem {
-                    player: input.player,
-                    item: "minecraft:diamond".to_string(),
-                    count: 64,
-                }],
-            };
-        }
-
-        PlanResult {
-            reply: "当前没有启用 Codex，也没有匹配到本地离线动作。请启用 Codex 后再让模型理解这类需求。".to_string(),
-            summary: "普通对话".to_string(),
-            actions: vec![GameAction::Chat {
-                message: "没有启用 Codex，无法理解这类自然语言需求。".to_string(),
-            }],
+            },
         }
     }
 
@@ -153,60 +217,6 @@ impl Planner {
             .as_ref()
             .map(CodexClient::enabled)
             .unwrap_or(false)
-    }
-
-    async fn try_builtin_house_blueprint(
-        &self,
-        input: &PlannerInput,
-        blueprints: &BlueprintStore,
-    ) -> Option<PlanResult> {
-        let text = input.text.trim();
-        let lower_text = text.to_lowercase();
-        if !wants_house(text, &lower_text) {
-            return None;
-        }
-
-        let blueprint = blueprints.first_by_tag("house").await?;
-        let PlacementDecision::Ready {
-            origin,
-            clear_existing,
-            pre_foundation_blocks,
-            pre_clear_blocks,
-            note: _,
-        } = assess_placement(input, &blueprint);
-
-        let mut actions = Vec::new();
-        if !pre_foundation_blocks.is_empty() {
-            actions.push(GameAction::PlaceBlocks {
-                blueprint_id: Some(format!("{}:site-foundation", blueprint.id)),
-                origin: origin.clone(),
-                blocks: pre_foundation_blocks,
-                clear_existing: true,
-            });
-        }
-        if !pre_clear_blocks.is_empty() {
-            actions.push(GameAction::PlaceBlocks {
-                blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
-                origin: origin.clone(),
-                blocks: pre_clear_blocks,
-                clear_existing: true,
-            });
-        }
-        actions.push(GameAction::PlaceBlocks {
-            blueprint_id: Some(blueprint.id.clone()),
-            origin,
-            blocks: blueprint.blocks.clone(),
-            clear_existing,
-        });
-
-        Some(PlanResult {
-            reply: format!(
-                "可以，我会按蓝图 `{}` 在你面前生成一个木屋。",
-                blueprint.name
-            ),
-            summary: format!("建造蓝图 {}", blueprint.id),
-            actions,
-        })
     }
 
     async fn try_codex_blueprint(
@@ -375,9 +385,15 @@ impl Planner {
         if plan.actions.is_empty() {
             return None;
         }
+        let action_types = plan
+            .actions
+            .iter()
+            .map(action_type_name)
+            .collect::<Vec<_>>();
         tracing::info!(
             summary = %plan.summary,
             action_count = plan.actions.len(),
+            action_types = ?action_types,
             "planned with codex action planner"
         );
 
@@ -386,6 +402,15 @@ impl Planner {
             summary: plan.summary,
             actions: plan.actions,
         })
+    }
+}
+
+fn action_type_name(action: &GameAction) -> &'static str {
+    match action {
+        GameAction::GiveItem { .. } => "give_item",
+        GameAction::PlaceBlocks { .. } => "place_blocks",
+        GameAction::RunCommand { .. } => "run_command",
+        GameAction::Chat { .. } => "chat",
     }
 }
 
@@ -399,13 +424,6 @@ fn rephrase_hints_for_build() -> &'static str {
 
 fn rephrase_hints_for_common_actions() -> &'static str {
     "建议改成明确动作，例如“给我一把钻石剑”“把时间调到白天”“把天气改成晴天”。"
-}
-
-struct RequestedItem {
-    item_id: &'static str,
-    summary_name: &'static str,
-    reply_name: &'static str,
-    count: u32,
 }
 
 struct BlueprintBounds {
@@ -429,6 +447,8 @@ struct PlacementCandidate {
     target_collisions: Vec<PlacementCollision>,
     volume_collisions: Vec<PlacementCollision>,
     distance_score: i32,
+    forward_preference_score: i32,
+    player_safety_overlap_count: usize,
     has_known_ground: bool,
     surface_score: PlacementSurfaceScore,
 }
@@ -479,6 +499,7 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
     let candidate = choose_placement_candidate(input, scan, bounds.as_ref(), &blueprint.blocks)
         .unwrap_or_else(|| {
             placement_candidate(
+                input,
                 scan,
                 origin,
                 PlacementSurfaceScore::default(),
@@ -498,7 +519,7 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
     let origin = candidate.origin;
     let target_collisions = candidate.target_collisions;
     let volume_collisions = candidate.volume_collisions;
-    let pre_foundation_blocks = if should_prepare_foundation(input, blueprint) {
+    let pre_foundation_blocks = if should_prepare_foundation(blueprint) {
         foundation_blocks_for_footprint(scan, &origin, blueprint, bounds.as_ref())
     } else {
         Vec::new()
@@ -588,6 +609,7 @@ fn choose_placement_candidate(
                     |surface| surface.ground_y + 1,
                 );
                 let candidate = placement_candidate(
+                    input,
                     scan,
                     BlockOrigin {
                         world: Some(scan.world.clone()),
@@ -629,6 +651,7 @@ fn choose_placement_candidate(
 }
 
 fn placement_candidate(
+    input: &PlannerInput,
     scan: &WorldScan,
     origin: BlockOrigin,
     surface_score: PlacementSurfaceScore,
@@ -644,12 +667,16 @@ fn placement_candidate(
     let (offset_x, offset_z) = blueprint_center_offset(bounds);
     let distance_score =
         (origin.x + offset_x - scan.center_x).abs() + (origin.z + offset_z - scan.center_z).abs();
+    let forward_preference_score = forward_preference_score(input, scan, &origin, bounds);
+    let player_safety_overlap_count = player_safety_overlap_count(input, &origin, bounds);
 
     PlacementCandidate {
         origin,
         target_collisions,
         volume_collisions,
         distance_score,
+        forward_preference_score,
+        player_safety_overlap_count,
         has_known_ground,
         surface_score,
     }
@@ -657,10 +684,12 @@ fn placement_candidate(
 
 fn placement_candidate_score(
     candidate: &PlacementCandidate,
-) -> (usize, i32, usize, usize, usize, usize) {
+) -> (usize, usize, i32, i32, usize, usize, usize, usize) {
     (
+        candidate.player_safety_overlap_count,
         hard_collision_count(candidate),
         candidate.distance_score,
+        -candidate.forward_preference_score,
         collision_count(candidate),
         candidate.surface_score.height_spread as usize,
         candidate.surface_score.missing_support_count,
@@ -673,7 +702,8 @@ fn collision_count(candidate: &PlacementCandidate) -> usize {
 }
 
 fn placement_candidate_is_ready(candidate: &PlacementCandidate) -> bool {
-    collision_count(candidate) == 0
+    candidate.player_safety_overlap_count == 0
+        && collision_count(candidate) == 0
         && (candidate.distance_score == 0
             || (candidate.has_known_ground
                 && candidate.surface_score.missing_support_count == 0
@@ -705,7 +735,7 @@ fn placement_origin(input: &PlannerInput, bounds: Option<&BlueprintBounds>) -> B
         return input
             .position
             .as_ref()
-            .map(origin_in_front_of_player)
+            .map(|position| origin_in_front_of_player(position, bounds))
             .unwrap_or(BlockOrigin {
                 world: None,
                 x: 0,
@@ -895,17 +925,7 @@ fn highest_safe_support_y_at(scan: &WorldScan, x: i32, z: i32, max_y: i32) -> Op
         .max()
 }
 
-fn should_prepare_foundation(input: &PlannerInput, blueprint: &Blueprint) -> bool {
-    let text = input.text.to_lowercase();
-    let special_span_request = input.text.contains('桥')
-        || input.text.contains("码头")
-        || input.text.contains("栈桥")
-        || input.text.contains("树屋")
-        || text.contains("bridge")
-        || text.contains("dock")
-        || text.contains("pier")
-        || text.contains("treehouse")
-        || text.contains("tree house");
+fn should_prepare_foundation(blueprint: &Blueprint) -> bool {
     let special_span_tag = blueprint.tags.iter().any(|tag| {
         let tag = tag.to_lowercase();
         matches!(
@@ -914,7 +934,7 @@ fn should_prepare_foundation(input: &PlannerInput, blueprint: &Blueprint) -> boo
         )
     });
 
-    !special_span_request && !special_span_tag
+    !special_span_tag
 }
 
 fn foundation_note(count: usize, blueprint: &Blueprint) -> String {
@@ -983,6 +1003,86 @@ fn placement_volume_collisions(
             material: block.material.clone(),
         })
         .collect()
+}
+
+fn player_safety_overlap_count(
+    input: &PlannerInput,
+    origin: &BlockOrigin,
+    bounds: Option<&BlueprintBounds>,
+) -> usize {
+    let Some(bounds) = bounds else {
+        return 0;
+    };
+    let Some(position) = input.position.as_ref() else {
+        return 0;
+    };
+    if let Some(world) = origin.world.as_deref() {
+        if world != position.world {
+            return 0;
+        }
+    }
+
+    player_safety_overlap_count_for_position(position, origin, bounds)
+}
+
+fn player_safety_overlap_count_for_position(
+    position: &PlayerPosition,
+    origin: &BlockOrigin,
+    bounds: &BlueprintBounds,
+) -> usize {
+    let player_x = position.x.floor() as i32;
+    let player_y = position.y.floor() as i32;
+    let player_z = position.z.floor() as i32;
+
+    let safety_min_x = player_x - PLAYER_SAFETY_RADIUS;
+    let safety_max_x = player_x + PLAYER_SAFETY_RADIUS;
+    let safety_min_y = player_y;
+    let safety_max_y = player_y + PLAYER_SAFETY_HEIGHT_BLOCKS - 1;
+    let safety_min_z = player_z - PLAYER_SAFETY_RADIUS;
+    let safety_max_z = player_z + PLAYER_SAFETY_RADIUS;
+
+    let min_x = origin.x + bounds.min_x;
+    let max_x = origin.x + bounds.max_x;
+    let min_y = origin.y + bounds.min_y;
+    let max_y = origin.y + bounds.max_y;
+    let min_z = origin.z + bounds.min_z;
+    let max_z = origin.z + bounds.max_z;
+
+    let overlap_min_x = min_x.max(safety_min_x);
+    let overlap_max_x = max_x.min(safety_max_x);
+    let overlap_min_y = min_y.max(safety_min_y);
+    let overlap_max_y = max_y.min(safety_max_y);
+    let overlap_min_z = min_z.max(safety_min_z);
+    let overlap_max_z = max_z.min(safety_max_z);
+
+    if overlap_min_x > overlap_max_x
+        || overlap_min_y > overlap_max_y
+        || overlap_min_z > overlap_max_z
+    {
+        return 0;
+    }
+
+    ((overlap_max_x - overlap_min_x + 1)
+        * (overlap_max_y - overlap_min_y + 1)
+        * (overlap_max_z - overlap_min_z + 1)) as usize
+}
+
+fn forward_preference_score(
+    input: &PlannerInput,
+    scan: &WorldScan,
+    origin: &BlockOrigin,
+    bounds: Option<&BlueprintBounds>,
+) -> i32 {
+    let Some(position) = input.position.as_ref() else {
+        return 0;
+    };
+    let (offset_x, offset_z) = blueprint_center_offset(bounds);
+    let candidate_dx = origin.x + offset_x - scan.center_x;
+    let candidate_dz = origin.z + offset_z - scan.center_z;
+    let forward_x = scan.center_x as f64 - position.x;
+    let forward_z = scan.center_z as f64 - position.z;
+
+    ((candidate_dx as f64 * forward_x) + (candidate_dz as f64 * forward_z)).round() as i32
 }
 
 fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<BlueprintBounds> {
@@ -1073,181 +1173,80 @@ fn material_id(material: &str) -> &str {
         .unwrap_or(material)
 }
 
-fn requested_item(original: &str, lower_text: &str) -> Option<RequestedItem> {
-    let items = [
-        RequestedItem {
-            item_id: "minecraft:diamond_pickaxe",
-            summary_name: "钻石镐",
-            reply_name: "一把钻石镐",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_axe",
-            summary_name: "钻石斧",
-            reply_name: "一把钻石斧",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_shovel",
-            summary_name: "钻石铲",
-            reply_name: "一把钻石铲",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_hoe",
-            summary_name: "钻石锄",
-            reply_name: "一把钻石锄",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_sword",
-            summary_name: "钻石剑",
-            reply_name: "一把钻石剑",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_helmet",
-            summary_name: "钻石头盔",
-            reply_name: "一个钻石头盔",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_chestplate",
-            summary_name: "钻石胸甲",
-            reply_name: "一个钻石胸甲",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_leggings",
-            summary_name: "钻石护腿",
-            reply_name: "一个钻石护腿",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_boots",
-            summary_name: "钻石靴子",
-            reply_name: "一双钻石靴子",
-            count: 1,
-        },
-        RequestedItem {
-            item_id: "minecraft:diamond_block",
-            summary_name: "钻石块",
-            reply_name: "64 个钻石块",
-            count: 64,
-        },
-    ];
-
-    let aliases = [
-        (
-            &items[0],
-            &["钻石镐子", "钻石镐", "钻石稿子", "钻石稿"][..],
-            "diamond pickaxe",
-        ),
-        (&items[1], &["钻石斧子", "钻石斧"][..], "diamond axe"),
-        (&items[2], &["钻石铲子", "钻石铲"][..], "diamond shovel"),
-        (&items[3], &["钻石锄头", "钻石锄"][..], "diamond hoe"),
-        (&items[4], &["钻石剑"][..], "diamond sword"),
-        (&items[5], &["钻石头盔"][..], "diamond helmet"),
-        (&items[6], &["钻石胸甲"][..], "diamond chestplate"),
-        (&items[7], &["钻石护腿"][..], "diamond leggings"),
-        (&items[8], &["钻石靴子", "钻石鞋"][..], "diamond boots"),
-        (&items[9], &["钻石块"][..], "diamond block"),
-    ];
-
-    aliases
-        .iter()
-        .find(|(item, chinese_aliases, english_alias)| {
-            chinese_aliases.iter().any(|alias| original.contains(alias))
-                || lower_text.contains(english_alias)
-                || lower_text.contains(
-                    item.item_id
-                        .strip_prefix("minecraft:")
-                        .unwrap_or(item.item_id),
-                )
-        })
-        .map(|(item, _, _)| RequestedItem {
-            item_id: item.item_id,
-            summary_name: item.summary_name,
-            reply_name: item.reply_name,
-            count: item.count,
-        })
-}
-
-fn wants_diamonds(original: &str, lower_text: &str) -> bool {
-    original.contains("钻石") || lower_text.contains("diamond")
-}
-
-fn wants_image_pipeline(original: &str, lower_text: &str, attachments: &[ChatAttachment]) -> bool {
-    original.contains("图片")
-        || lower_text.contains("image")
-        || attachments
-            .iter()
-            .any(|item| item.kind == ChatAttachmentKind::Image)
-}
-
-fn wants_build_request(original: &str, lower_text: &str, attachments: &[ChatAttachment]) -> bool {
-    !wants_image_pipeline(original, lower_text, attachments)
-        && (wants_house(original, lower_text)
-            || wants_custom_build(original, lower_text)
-            || [
-                "建造",
-                "修建",
-                "搭建",
-                "造一个",
-                "做一个",
-                "房间",
-                "树屋",
-                "小屋",
-                "屋子",
-                "别墅",
-                "高楼",
-                "城墙",
-                "桥",
-                "花园",
-                "庭院",
-                "农场",
-                "仓库",
-                "码头",
-            ]
-            .iter()
-            .any(|keyword| original.contains(keyword))
-            || [
-                "tree house",
-                "treehouse",
-                "room",
-                "cabin",
-                "building",
-                "bridge",
-                "garden",
-                "farm",
-                "warehouse",
-                "dock",
-            ]
-            .iter()
-            .any(|keyword| lower_text.contains(keyword)))
-}
-
-fn wants_house(original: &str, lower_text: &str) -> bool {
-    original.contains("房子") || original.contains("木屋") || lower_text.contains("house")
-}
-
-fn wants_custom_build(original: &str, lower_text: &str) -> bool {
-    original.contains("建筑")
-        || original.contains("盖")
-        || original.contains("城堡")
-        || original.contains("塔")
-        || lower_text.contains("build")
-        || lower_text.contains("castle")
-        || lower_text.contains("tower")
-}
-
-fn origin_in_front_of_player(position: &PlayerPosition) -> BlockOrigin {
-    BlockOrigin {
+fn origin_in_front_of_player(
+    position: &PlayerPosition,
+    bounds: Option<&BlueprintBounds>,
+) -> BlockOrigin {
+    let (step_x, step_z) = player_forward_step(position);
+    let mut origin = BlockOrigin {
         world: Some(position.world.clone()),
-        x: position.x.round() as i32 + 2,
+        x: position.x.round() as i32 + step_x * 2,
         y: position.y.round() as i32,
-        z: position.z.round() as i32 + 2,
+        z: position.z.round() as i32 + step_z * 2,
+    };
+
+    if let Some(bounds) = bounds {
+        for _ in 0..64 {
+            if player_safety_overlap_count_for_position(position, &origin, bounds) == 0 {
+                break;
+            }
+            origin.x += step_x;
+            origin.z += step_z;
+        }
     }
+
+    origin
+}
+
+fn player_forward_step(position: &PlayerPosition) -> (i32, i32) {
+    if let Some(yaw) = position.yaw {
+        let radians = yaw.to_radians();
+        let step_x = (-radians.sin()).round() as i32;
+        let step_z = radians.cos().round() as i32;
+        if step_x != 0 || step_z != 0 {
+            return (step_x, step_z);
+        }
+    }
+
+    (1, 1)
+}
+
+fn build_intent_prompt(input: &PlannerInput) -> String {
+    let attachments =
+        serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
+    let site_context = build_site_context(input);
+    format!(
+        r#"你是 Blockwright 的 Minecraft 意图分类器。请只判断玩家这句话接下来应该进入哪一个规划器，不要生成执行动作或蓝图。
+
+硬性规则：
+- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
+- JSON 必须符合：{{"intent":"blueprint|action|existing_build_edit|chat","reply":"中文短回复","summary":"短中文摘要"}}
+- 这里由 Codex 做自然语言意图识别，controller 不再使用本地关键词表兜底；你必须根据完整语义、上下文、附件和场地信息判断。
+- intent=blueprint：玩家想新建、生成、设计、摆放一个实体结构、装饰物、模型、建筑、场景、图片复刻结构或游戏内实物。只要目标是“在世界里出现一个东西”，就选它。
+- intent=existing_build_edit：玩家想改造、移动、升降、替换材料、修正入口/窗户/地基等，且语义指向附近或已经存在的 Blockwright 建筑。
+- intent=action：玩家想发物品、调整时间/天气/游戏模式/效果，或执行可由安全 Minecraft 指令完成的非建筑动作。
+- intent=chat：普通聊天、说明、无法判断、拒绝执行或缺少关键信息。
+- 如果在 blueprint 和 action 之间犹豫，只要结果会放置方块或生成实物，就选 blueprint。
+- 如果在 blueprint 和 existing_build_edit 之间犹豫：新做一个选 blueprint；改已有目标选 existing_build_edit。
+- reply 是给玩家看的简短中文说明；summary 是日志和任务列表用的中文短摘要。
+
+玩家名：
+{player}
+
+用户文字：
+{text}
+
+场地摘要：
+{site_context}
+
+附件元数据：
+{attachments}
+"#,
+        player = input.player.as_deref().unwrap_or("unknown"),
+        text = input.text.trim(),
+        site_context = site_context,
+        attachments = attachments
+    )
 }
 
 fn build_blueprint_prompt(input: &PlannerInput) -> String {
@@ -1269,6 +1268,7 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
 - 蓝图最低的普通地板/地基层默认从相对 y=0 开始；不要把世界绝对高度写进 blocks，也不要无故使用负 y。
 - 默认假设 controller 会把蓝图 y=0 放在玩家面向目标点附近的第一层空气上，优先使用玩家正面目标点，而不是随便搬到远处空地。
+- 蓝图本身不要设计成覆盖玩家脚下、头部或贴身一圈活动空间；建筑再大也必须整体在玩家前方，不能把玩家包进结构里。
 - 如果目标点是坑、水边、坡地或奇怪地形，不要拒绝；要把地形融入设计，让建筑通过平台、露台、木桩、石砖基座、楼梯、桥接或挡土墙自然贴合场地。
 - 住宅、木屋、树屋、房间这类可居住建筑，默认要能实际使用：至少有完整地板、墙、屋顶、可通行入口、两格高室内空间、床、照明和基础窗户，除非玩家明确只要外观模型。
 - 门要按两格结构输出上下两块，例如同一个位置 y=1 用 minecraft:oak_door[half=lower,facing=south]，y=2 用 minecraft:oak_door[half=upper,facing=south]，并让入口前后留出通行空间。
@@ -1364,7 +1364,8 @@ fn build_action_plan_prompt(input: &PlannerInput) -> String {
 - 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
 - 例如“钻石剑/diamond sword”应是 minecraft:diamond_sword。
 - 例如“给我钻石”才是 minecraft:diamond，count 为 64。
-- 这个动作理解器只处理物品和普通聊天；建筑需求会在进入这里之前由蓝图规划器处理。
+- 这个动作理解器只处理物品、安全 Minecraft 指令和普通聊天；建筑和改造需求已经由 Codex 意图分类器拦截。
+- 如果这里仍收到建筑、改造或放置方块类需求，返回普通 chat 提示，不要输出 place_blocks 或危险命令。
 - 对能用原版 Minecraft 指令完成的需求，输出 run_command。command 不要带开头的 `/`。
 - 例如“我想白天/天亮吧”应是 time set day。
 - 例如“我想晚上”应是 time set night。
@@ -1394,6 +1395,11 @@ fn parse_blueprint_response(output: &str) -> Option<Blueprint> {
     serde_json::from_str(json).ok()
 }
 
+fn parse_intent_response(output: &str) -> Option<PlannerIntent> {
+    let json = extract_json_object(output.trim())?;
+    serde_json::from_str(json).ok()
+}
+
 fn parse_action_plan_response(output: &str) -> Option<CodexActionPlan> {
     let json = extract_json_object(output.trim())?;
     serde_json::from_str(json).ok()
@@ -1414,8 +1420,8 @@ mod tests {
     use crate::{
         config::CodexConfig,
         domain::types::{
-            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentSource, MaterialCount,
-            WorldScanBlock,
+            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentKind, ChatAttachmentSource,
+            MaterialCount, WorldScanBlock,
         },
     };
     use std::{
@@ -1439,9 +1445,20 @@ mod tests {
         BlueprintStore::new(temp_dir(name)).await.unwrap()
     }
 
-    fn planner_with_fake_codex(name: &str, final_message: &str) -> Planner {
+    fn planner_with_fake_codex_responses(
+        name: &str,
+        intent_message: &str,
+        blueprint_message: &str,
+        action_message: &str,
+    ) -> Planner {
         let dir = temp_dir(name);
         fs::create_dir_all(&dir).unwrap();
+        let intent_path = dir.join("intent.json");
+        let blueprint_path = dir.join("blueprint.json");
+        let action_path = dir.join("action.json");
+        fs::write(&intent_path, intent_message).unwrap();
+        fs::write(&blueprint_path, blueprint_message).unwrap();
+        fs::write(&action_path, action_message).unwrap();
         let script_path = dir.join("fake-codex.sh");
         fs::write(
             &script_path,
@@ -1449,10 +1466,15 @@ mod tests {
                 r#"#!/usr/bin/env bash
 set -euo pipefail
 last_message=""
+schema=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-last-message)
       last_message="$2"
+      shift 2
+      ;;
+    --output-schema)
+      schema="$2"
       shift 2
       ;;
     *)
@@ -1464,10 +1486,24 @@ cat >/dev/null
 if [[ -z "$last_message" ]]; then
   exit 2
 fi
-cat > "$last_message" <<'BLOCKWRIGHT_JSON'
-{final_message}
-BLOCKWRIGHT_JSON
-"#
+case "$schema" in
+  *intent.schema.json)
+    cat "{intent_path}" > "$last_message"
+    ;;
+  *action-plan.schema.json)
+    cat "{action_path}" > "$last_message"
+    ;;
+  *blueprint.schema.json)
+    cat "{blueprint_path}" > "$last_message"
+    ;;
+  *)
+    exit 3
+    ;;
+esac
+"#,
+                intent_path = intent_path.to_string_lossy(),
+                action_path = action_path.to_string_lossy(),
+                blueprint_path = blueprint_path.to_string_lossy()
             ),
         )
         .unwrap();
@@ -1480,6 +1516,24 @@ BLOCKWRIGHT_JSON
             command: script_path.to_string_lossy().to_string(),
             timeout_seconds: 5,
         }))
+    }
+
+    fn planner_with_fake_codex(name: &str, blueprint_message: &str) -> Planner {
+        planner_with_fake_codex_responses(
+            name,
+            r#"{"intent":"blueprint","reply":"按建筑处理。","summary":"建筑需求"}"#,
+            blueprint_message,
+            r#"{"reply":"无法处理建筑动作。","summary":"普通提示","actions":[{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"无法处理建筑动作。"}]}"#,
+        )
+    }
+
+    fn planner_with_fake_action(name: &str, action_message: &str) -> Planner {
+        planner_with_fake_codex_responses(
+            name,
+            r#"{"intent":"action","reply":"按动作处理。","summary":"动作需求"}"#,
+            r#"not blueprint json"#,
+            action_message,
+        )
     }
 
     fn test_blueprint(id: &str, tags: Vec<&str>) -> Blueprint {
@@ -1526,10 +1580,30 @@ BLOCKWRIGHT_JSON
         }
     }
 
+    fn flat_ground_blocks(min_x: i32, max_x: i32, min_z: i32, max_z: i32) -> Vec<WorldScanBlock> {
+        let mut blocks = Vec::new();
+        for x in min_x..=max_x {
+            for z in min_z..=max_z {
+                blocks.push(scan_block(x, 63, z, "minecraft:grass_block"));
+            }
+        }
+        blocks
+    }
+
     #[tokio::test]
     async fn plans_diamond_sword() {
         let store = empty_store("sword").await;
-        let result = Planner::default()
+        let planner = planner_with_fake_action(
+            "codex-sword",
+            r#"{
+  "reply": "可以，已经准备给你一把钻石剑。",
+  "summary": "发放钻石剑",
+  "actions": [
+    {"type":"give_item","player":"Steve","item":"minecraft:diamond_sword","count":1}
+  ]
+}"#,
+        );
+        let result = planner
             .plan(
                 PlannerInput {
                     text: "给我一把钻石剑".to_string(),
@@ -1557,7 +1631,17 @@ BLOCKWRIGHT_JSON
     #[tokio::test]
     async fn plans_diamonds_without_confusing_them_with_diamond_sword() {
         let store = empty_store("diamonds").await;
-        let result = Planner::default()
+        let planner = planner_with_fake_action(
+            "codex-diamonds",
+            r#"{
+  "reply": "可以，已经准备给你 64 个钻石。",
+  "summary": "发放钻石",
+  "actions": [
+    {"type":"give_item","player":"Alex","item":"minecraft:diamond","count":64}
+  ]
+}"#,
+        );
+        let result = planner
             .plan(
                 PlannerInput {
                     text: "give me diamonds".to_string(),
@@ -1582,9 +1666,19 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn fallback_plans_diamond_pickaxe_before_loose_diamond_match() {
+    async fn codex_plans_diamond_pickaxe_before_loose_diamond_match() {
         let store = empty_store("diamond-pickaxe").await;
-        let result = Planner::default()
+        let planner = planner_with_fake_action(
+            "codex-diamond-pickaxe",
+            r#"{
+  "reply": "可以，已经准备给你一把钻石镐。",
+  "summary": "发放钻石镐",
+  "actions": [
+    {"type":"give_item","player":"Alex","item":"minecraft:diamond_pickaxe","count":1}
+  ]
+}"#,
+        );
+        let result = planner
             .plan(
                 PlannerInput {
                     text: "我要一个钻石稿子".to_string(),
@@ -1611,7 +1705,12 @@ BLOCKWRIGHT_JSON
     #[tokio::test]
     async fn enabled_codex_failure_does_not_fall_back_to_keyword_rules() {
         let store = empty_store("codex-invalid-action").await;
-        let planner = planner_with_fake_codex("codex-invalid-action", "not json");
+        let planner = planner_with_fake_codex_responses(
+            "codex-invalid-action",
+            r#"{"intent":"action","reply":"按动作处理。","summary":"动作需求"}"#,
+            "not blueprint json",
+            "not action json",
+        );
 
         let result = planner
             .plan(
@@ -1746,6 +1845,50 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
+    async fn carousel_request_enters_codex_blueprint_planner() {
+        let store = empty_store("codex-carousel").await;
+        let planner = planner_with_fake_codex(
+            "codex-carousel",
+            r#"{
+  "id": "large-carousel",
+  "name": "大气旋转木马",
+  "description": "中心立柱、圆形平台和装饰顶棚组成的旋转木马。",
+  "size": {"width": 3, "height": 3, "depth": 3},
+  "materials": [{"material": "minecraft:oak_planks", "count": 3}],
+  "blocks": [
+    {"x": 1, "y": 0, "z": 1, "material": "minecraft:oak_planks"},
+    {"x": 1, "y": 1, "z": 1, "material": "minecraft:oak_fence"},
+    {"x": 1, "y": 2, "z": 1, "material": "minecraft:red_wool"}
+  ],
+  "tags": ["carousel"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "给我旋转木马，可以大点，大气点".to_string(),
+                    player: Some("Charles".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 large-carousel");
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(ref blueprint_id),
+                ..
+            } if blueprint_id == "large-carousel"
+        ));
+    }
+
+    #[tokio::test]
     async fn codex_build_uses_scan_ground_and_soft_clear_policy() {
         let store = empty_store("codex-site-soft-clear").await;
         let planner = planner_with_fake_codex(
@@ -1844,8 +1987,21 @@ BLOCKWRIGHT_JSON
 
         assert_eq!(result.summary, "建造蓝图 blocked-room");
         assert!(result.reply.contains("自动选择更合适落点"));
+        let main_action = result
+            .actions
+            .iter()
+            .find(|action| {
+                matches!(
+                    action,
+                    GameAction::PlaceBlocks {
+                        blueprint_id: Some(blueprint_id),
+                        ..
+                    } if blueprint_id == "blocked-room"
+                )
+            })
+            .expect("main blueprint action should be present");
         assert!(matches!(
-            result.actions[0],
+            main_action,
             GameAction::PlaceBlocks {
                 origin: BlockOrigin { y: 64, .. },
                 clear_existing: false,
@@ -2032,6 +2188,14 @@ BLOCKWRIGHT_JSON
                 blocks.push(scan_block(x, 63, z, "minecraft:grass_block"));
             }
         }
+        let player_position = PlayerPosition {
+            world: "minecraft:overworld".to_string(),
+            x: 18.0,
+            y: 64.0,
+            z: 28.0,
+            yaw: None,
+            pitch: None,
+        };
 
         let result = planner
             .plan(
@@ -2039,14 +2203,7 @@ BLOCKWRIGHT_JSON
                     text: "生成一个房间".to_string(),
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
-                    position: Some(PlayerPosition {
-                        world: "minecraft:overworld".to_string(),
-                        x: 18.0,
-                        y: 64.0,
-                        z: 28.0,
-                        yaw: None,
-                        pitch: None,
-                    }),
+                    position: Some(player_position.clone()),
                     nearby_scan: Some(scan_with_blocks(blocks)),
                     attachments: Vec::new(),
                 },
@@ -2056,36 +2213,104 @@ BLOCKWRIGHT_JSON
 
         assert_eq!(result.summary, "建造蓝图 supported-floor-room");
         assert!(result.reply.contains("融入地形的木桩平台"));
-        assert_eq!(result.actions.len(), 2);
+        let main_action = result
+            .actions
+            .iter()
+            .find(|action| {
+                matches!(
+                    action,
+                    GameAction::PlaceBlocks {
+                        blueprint_id: Some(blueprint_id),
+                        ..
+                    } if blueprint_id == "supported-floor-room"
+                )
+            })
+            .expect("main blueprint action should be present");
+        let GameAction::PlaceBlocks { origin, blocks, .. } = main_action else {
+            panic!("main action should place blocks");
+        };
+        let bounds = blueprint_bounds(blocks).expect("main blueprint should have bounds");
+        assert_eq!(
+            0,
+            player_safety_overlap_count_for_position(&player_position, origin, &bounds)
+        );
         assert!(matches!(
-            &result.actions[0],
+            main_action,
             GameAction::PlaceBlocks {
                 blueprint_id: Some(blueprint_id),
                 origin: BlockOrigin {
-                    x: 19,
+                    x,
                     y: 64,
-                    z: 29,
-                    ..
-                },
-                blocks,
-                clear_existing: true,
-            } if blueprint_id == "supported-floor-room:site-foundation"
-                && blocks.len() == 8
-                && blocks.iter().all(|block| block.y == -1)
-                && blocks.iter().all(|block| block.material == "minecraft:oak_planks")
-        ));
-        assert!(matches!(
-            &result.actions[1],
-            GameAction::PlaceBlocks {
-                blueprint_id: Some(blueprint_id),
-                origin: BlockOrigin {
-                    x: 19,
-                    y: 64,
-                    z: 29,
+                    z,
                     ..
                 },
                 ..
-            } if blueprint_id == "supported-floor-room"
+            } if blueprint_id == "supported-floor-room" && *x >= 20 && *z >= 29
+        ));
+    }
+
+    #[tokio::test]
+    async fn codex_build_shifts_large_footprint_away_from_player_body() {
+        let store = empty_store("codex-player-safe-cake").await;
+        let mut blueprint_blocks = Vec::new();
+        for x in 0..=10 {
+            for z in 0..=10 {
+                blueprint_blocks.push(format!(
+                    r#"{{"x": {x}, "y": 0, "z": {z}, "material": "minecraft:white_wool"}}"#
+                ));
+            }
+        }
+        let planner = planner_with_fake_codex(
+            "codex-player-safe-cake",
+            &format!(
+                r#"{{
+  "id": "safe-cake-platform",
+  "name": "不会盖住玩家的蛋糕平台",
+  "description": "测试大面积蓝图不能覆盖玩家安全区。",
+  "size": {{"width": 11, "height": 1, "depth": 11}},
+  "materials": [{{"material": "minecraft:white_wool", "count": 121}}],
+  "blocks": [{}],
+  "tags": ["cake"]
+}}"#,
+                blueprint_blocks.join(",")
+            ),
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "帮我盖个蛋糕".to_string(),
+                    player: Some("Charles".to_string()),
+                    codex_session_key: None,
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 64.0,
+                        y: 64.0,
+                        z: 0.0,
+                        yaw: Some(0.0),
+                        pitch: None,
+                    }),
+                    nearby_scan: Some(WorldScan {
+                        world: "minecraft:overworld".to_string(),
+                        center_x: 64,
+                        center_y: 64,
+                        center_z: 5,
+                        radius: 8,
+                        blocks: flat_ground_blocks(56, 72, -2, 16),
+                    }),
+                    attachments: Vec::new(),
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 safe-cake-platform");
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                origin: BlockOrigin { x: 59, y: 64, z, .. },
+                ..
+            } if *z >= 2
         ));
     }
 
@@ -2146,75 +2371,7 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn plans_house_from_blueprint_tag() {
-        let store = empty_store("house").await;
-        store
-            .save(test_blueprint("test-house", vec!["house"]))
-            .await
-            .unwrap();
-
-        let result = Planner::default()
-            .plan(
-                PlannerInput {
-                    text: "帮我盖一个木屋".to_string(),
-                    player: Some("Steve".to_string()),
-                    codex_session_key: None,
-                    position: None,
-                    nearby_scan: None,
-                    attachments: Vec::new(),
-                },
-                &store,
-            )
-            .await;
-
-        assert!(matches!(result.actions[0], GameAction::PlaceBlocks { .. }));
-    }
-
-    #[tokio::test]
-    async fn places_house_in_front_of_player_position() {
-        let store = empty_store("house-origin").await;
-        store
-            .save(test_blueprint("test-house", vec!["house"]))
-            .await
-            .unwrap();
-
-        let result = Planner::default()
-            .plan(
-                PlannerInput {
-                    text: "build a house".to_string(),
-                    player: Some("Steve".to_string()),
-                    codex_session_key: None,
-                    position: Some(PlayerPosition {
-                        world: "world_nether".to_string(),
-                        x: 10.4,
-                        y: 65.2,
-                        z: -3.6,
-                        yaw: None,
-                        pitch: None,
-                    }),
-                    nearby_scan: None,
-                    attachments: Vec::new(),
-                },
-                &store,
-            )
-            .await;
-
-        assert!(matches!(
-            result.actions[0],
-            GameAction::PlaceBlocks {
-                origin: BlockOrigin {
-                    ref world,
-                    x: 12,
-                    y: 65,
-                    z: -2
-                },
-                ..
-            } if world.as_deref() == Some("world_nether")
-        ));
-    }
-
-    #[tokio::test]
-    async fn explains_missing_house_blueprint() {
+    async fn codex_disabled_does_not_use_local_keyword_fallback() {
         let store = empty_store("missing-house").await;
         let result = Planner::default()
             .plan(
@@ -2230,54 +2387,27 @@ BLOCKWRIGHT_JSON
             )
             .await;
 
-        assert_eq!(result.summary, "缺少建筑规划能力");
+        assert_eq!(result.summary, "Codex 未启用");
+        assert!(result.reply.contains("已关闭本地关键词意图匹配"));
         assert!(matches!(result.actions[0], GameAction::Chat { .. }));
     }
 
     #[tokio::test]
-    async fn explains_image_pipeline_and_default_capabilities() {
-        let store = empty_store("fallback").await;
-        let image_result = Planner::default()
-            .plan(
-                PlannerInput {
-                    text: "帮我根据图片复刻建筑".to_string(),
-                    player: None,
-                    codex_session_key: None,
-                    position: None,
-                    nearby_scan: None,
-                    attachments: Vec::new(),
-                },
-                &store,
-            )
-            .await;
-        let fallback_result = Planner::default()
-            .plan(
-                PlannerInput {
-                    text: "你好".to_string(),
-                    player: None,
-                    codex_session_key: None,
-                    position: None,
-                    nearby_scan: None,
-                    attachments: Vec::new(),
-                },
-                &store,
-            )
-            .await;
-
-        assert_eq!(image_result.summary, "说明图片复刻流程");
-        assert_eq!(fallback_result.summary, "普通对话");
-        assert!(!fallback_result.reply.contains("第一版"));
-        assert!(!fallback_result.reply.contains("后续会接 Codex"));
-        assert!(matches!(
-            fallback_result.actions[0],
-            GameAction::Chat { .. }
-        ));
-    }
-
-    #[tokio::test]
-    async fn image_attachment_enters_image_pipeline_without_magic_text() {
+    async fn image_attachment_enters_codex_blueprint_without_magic_text() {
         let store = empty_store("image-attachment").await;
-        let result = Planner::default()
+        let planner = planner_with_fake_codex(
+            "codex-image-attachment",
+            r#"{
+  "id": "image-inspired-house",
+  "name": "图片参考小屋",
+  "description": "按附件图片生成的简化建筑。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["image_reference"]
+}"#,
+        );
+        let result = planner
             .plan(
                 PlannerInput {
                     text: "照这个做".to_string(),
@@ -2298,7 +2428,7 @@ BLOCKWRIGHT_JSON
             )
             .await;
 
-        assert_eq!(result.summary, "说明图片复刻流程");
+        assert_eq!(result.summary, "建造蓝图 image-inspired-house");
     }
 
     #[test]
@@ -2327,6 +2457,24 @@ BLOCKWRIGHT_JSON
     }
 
     #[test]
+    fn intent_prompt_routes_builds_actions_and_existing_edits() {
+        let prompt = build_intent_prompt(&PlannerInput {
+            text: "给我旋转木马，可以大点，大气点".to_string(),
+            player: Some("Charles".to_string()),
+            codex_session_key: None,
+            position: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+        });
+
+        assert!(prompt.contains("意图分类器"));
+        assert!(prompt.contains("controller 不再使用本地关键词表兜底"));
+        assert!(prompt.contains("intent=blueprint"));
+        assert!(prompt.contains("intent=action"));
+        assert!(prompt.contains("intent=existing_build_edit"));
+    }
+
+    #[test]
     fn action_plan_prompt_requires_complete_item_understanding() {
         let prompt = build_action_plan_prompt(&PlannerInput {
             text: "我要钻石稿子".to_string(),
@@ -2341,7 +2489,17 @@ BLOCKWRIGHT_JSON
         assert!(prompt.contains("minecraft:diamond_pickaxe"));
         assert!(prompt.contains("time set day"));
         assert!(prompt.contains("gamemode creative Steve"));
-        assert!(!prompt.contains("需要走建筑规划流程"));
+        assert!(prompt.contains("Codex 意图分类器"));
+    }
+
+    #[test]
+    fn parses_codex_intent_json() {
+        let output = r#"{"intent":"blueprint","reply":"按建筑处理。","summary":"建筑需求"}"#;
+
+        let intent = parse_intent_response(output).unwrap();
+
+        assert_eq!(intent.intent, PlannerIntentKind::Blueprint);
+        assert_eq!(intent.summary, "建筑需求");
     }
 
     #[test]

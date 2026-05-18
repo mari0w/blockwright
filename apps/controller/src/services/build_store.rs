@@ -409,6 +409,7 @@ mod tests {
                             placed_count: 1,
                             skipped_existing_count: 0,
                             skipped_limit_count: 0,
+                            skipped_player_safety_count: 0,
                             verified_count: 1,
                             mismatch_count: 1,
                             mismatches: vec![BlockMismatch {

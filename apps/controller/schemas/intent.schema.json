@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intent", "reply", "summary"],
+  "properties": {
+    "intent": {
+      "type": "string",
+      "enum": ["blueprint", "action", "existing_build_edit", "chat"]
+    },
+    "reply": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    }
+  }
+}
