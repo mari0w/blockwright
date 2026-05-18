@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1412;
+      --panel: #171d1a;
+      --line: #2d3832;
+      --text: #edf4ef;
+      --muted: #95a39a;
+      --accent: #62d48b;
+      --accent-strong: #3cbf6d;
+      --danger: #ff6b6b;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    aside {
+      border-right: 1px solid var(--line);
+      padding: 20px;
+      background: #121815;
+    }
+    main {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      min-width: 0;
+    }
+    h1 {
+      margin: 0 0 20px;
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    label {
+      display: block;
+      margin: 14px 0 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    input, textarea, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      font: inherit;
+    }
+    input, textarea {
+      padding: 10px 12px;
+      outline: none;
+    }
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    button {
+      padding: 11px 14px;
+      border-color: var(--accent-strong);
+      background: var(--accent-strong);
+      color: #06100a;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
+    .messages {
+      overflow: auto;
+      padding: 22px;
+    }
+    .message {
+      max-width: 900px;
+      margin: 0 0 14px;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .message.user {
+      margin-left: auto;
+      border-color: #355542;
+    }
+    .meta {
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 18px 22px;
+      background: #121815;
+    }
+    .composer-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 150px;
+      gap: 12px;
+      align-items: end;
+    }
+    .preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .preview img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .status {
+      margin-top: 10px;
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .status.error {
+      color: var(--danger);
+    }
+    @media (max-width: 760px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .composer-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>Blockwright</h1>
+      <label for="username">用户名</label>
+      <input id="username" autocomplete="username" placeholder="Charles">
+      <label for="targetPlayer">Minecraft 玩家</label>
+      <input id="targetPlayer" placeholder="默认同用户名">
+      <label for="serverId">服务器</label>
+      <input id="serverId" placeholder="hmcl-lan">
+      <label for="images">参考图片</label>
+      <input id="images" type="file" accept="image/*" multiple>
+      <div id="preview" class="preview"></div>
+    </aside>
+    <main>
+      <section id="messages" class="messages"></section>
+      <form id="form" class="composer">
+        <div class="composer-grid">
+          <textarea id="text" placeholder="说你想建什么、改什么，图片会一起发过去。"></textarea>
+          <button id="send" type="submit">发送</button>
+        </div>
+        <div id="status" class="status"></div>
+      </form>
+    </main>
+  </div>
+  <script>
+    const username = document.getElementById('username');
+    const targetPlayer = document.getElementById('targetPlayer');
+    const serverId = document.getElementById('serverId');
+    const images = document.getElementById('images');
+    const preview = document.getElementById('preview');
+    const form = document.getElementById('form');
+    const text = document.getElementById('text');
+    const messages = document.getElementById('messages');
+    const statusEl = document.getElementById('status');
+    const send = document.getElementById('send');
+
+    username.value = localStorage.getItem('bw.username') || '';
+    targetPlayer.value = localStorage.getItem('bw.targetPlayer') || '';
+    serverId.value = localStorage.getItem('bw.serverId') || 'hmcl-lan';
+
+    [username, targetPlayer, serverId].forEach((input) => {
+      input.addEventListener('input', () => localStorage.setItem(`bw.${input.id}`, input.value));
+    });
+
+    images.addEventListener('change', () => {
+      preview.replaceChildren();
+      [...images.files].forEach((file) => {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = () => URL.revokeObjectURL(img.src);
+        preview.appendChild(img);
+      });
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const name = username.value.trim();
+      if (!name) {
+        setStatus('先填用户名。', true);
+        username.focus();
+        return;
+      }
+      send.disabled = true;
+      setStatus('发送中...', false);
+      try {
+        const uploads = await Promise.all([...images.files].map(readImage));
+        const body = {
+          username: name,
+          target_player: targetPlayer.value.trim() || null,
+          server_id: serverId.value.trim() || null,
+          text: text.value,
+          images: uploads
+        };
+        addMessage('user', name, text.value || (uploads.length ? '发送了一张参考图片' : ''));
+        const response = await fetch('/web/message', {
+          method: 'POST',
+          headers: {'content-type': 'application/json'},
+          body: JSON.stringify(body)
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || await response.text() || '请求失败');
+        }
+        addMessage('assistant', 'Blockwright', payload.reply || '');
+        setStatus(payload.queued_job_id ? `已排队：${payload.queued_job_id}` : '已回复', false);
+        text.value = '';
+      } catch (error) {
+        setStatus(error.message || String(error), true);
+      } finally {
+        send.disabled = false;
+      }
+    });
+
+    function addMessage(kind, who, content) {
+      const item = document.createElement('article');
+      item.className = `message ${kind}`;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = who;
+      const body = document.createElement('div');
+      body.textContent = content;
+      item.append(meta, body);
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function setStatus(value, isError) {
+      statusEl.textContent = value;
+      statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    function readImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error(`${file.name} 读取失败`));
+        reader.onload = () => resolve({
+          file_name: file.name,
+          mime_type: file.type || 'image/png',
+          data_url: reader.result
+        });
+        reader.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>

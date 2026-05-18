@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -7,9 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{
-        BlueprintBlock, GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan,
-    },
+    domain::types::{GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan},
     services::build_store::BuildMatch,
     services::planner::{PlannerInput, PlannerIntentKind},
     state::AppState,
@@ -175,10 +175,14 @@ async fn handle_existing_build_modification(
     request: &MinecraftMessageRequest,
 ) -> Option<Result<MinecraftMessageResponse, (StatusCode, String)>> {
     let Some(scan) = request.nearby_scan.as_ref() else {
-        return Some(Ok(chat_response(
-            "这个需求需要先扫描你附近的建筑。请在游戏内站到目标建筑前面重新执行同一句 `/bw ...`，HMCL/Fabric 模组会自动带上附近方块信息。"
+        return Some(Ok(MinecraftMessageResponse {
+            reply: "这次没有收到附近建筑扫描，已让 HMCL/Fabric 现场扫描你当前位置并自动继续处理。"
                 .to_string(),
-        )));
+            actions: vec![GameAction::ScanNearbyAndPlan {
+                text: request.text.clone(),
+            }],
+            job_id: None,
+        }));
     };
 
     let matches = state.builds.match_scan(&request.server_id, scan).await;
@@ -187,247 +191,294 @@ async fn handle_existing_build_modification(
         .filter(|item| item.matched_blocks >= 3 || item.score >= 0.2)
         .collect::<Vec<_>>();
     if useful_matches.is_empty() {
-        return Some(Ok(chat_response(
-            "我扫描了附近方块，但没有匹配到 Blockwright 已记录的建筑。请先确认这个建筑是通过 Blockwright 生成的，或者先保存/登记蓝图后再改造。"
-                .to_string(),
-        )));
+        match adopt_scanned_build(state, request, scan).await {
+            Ok(Some(best)) => return Some(plan_existing_build_edit(state, request, &best).await),
+            Ok(None) => {
+                return Some(Ok(chat_response(
+                    "我扫描了附近方块，但没识别到可改造的建筑结构。请站近一点、对准目标建筑再发同一句。"
+                        .to_string(),
+                )));
+            }
+            Err(error) => return Some(Err(error)),
+        }
     }
 
-    let best = &useful_matches[0];
-    if is_ambiguous_match(best, useful_matches.get(1)) {
+    let ranked_matches = rank_build_matches(useful_matches, request.position.as_ref(), scan);
+    let best = ranked_matches[0].item.clone();
+    if is_ambiguous_match(
+        &ranked_matches[0],
+        ranked_matches.get(1),
+        request.position.as_ref().is_some(),
+    ) {
         return Some(Ok(chat_response(format!(
             "附近匹配到多个可能的建筑，请指定要改哪一个：{}。",
-            useful_matches
+            ranked_matches
                 .iter()
                 .take(3)
-                .map(|item| format!("{}（匹配 {} 个方块）", item.record.id, item.matched_blocks))
+                .map(|item| format!(
+                    "{}（匹配 {} 个方块）",
+                    item.item.record.id, item.total_matched_blocks
+                ))
                 .collect::<Vec<_>>()
                 .join("、")
         ))));
     }
 
-    if let Some(actions) = planned_vertical_shift(&request.text, best) {
-        let job_id = state.jobs.reserve_job_id();
-        let summary = format!("调整构建 {} 的高度", best.record.id);
-        if let Err(error) = state
-            .builds
-            .register_planned(
-                job_id.clone(),
-                request.server_id.clone(),
-                Some(request.player.clone()),
-                summary,
-                &actions,
-            )
-            .await
-        {
-            tracing::error!(error = %error, "failed to register planned vertical shift");
-            return Some(Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "构建记录保存失败，已取消下发调整动作。".to_string(),
-            )));
-        }
-
-        return Some(Ok(MinecraftMessageResponse {
-            reply: format!(
-                "已匹配到建筑 `{}`，会按原方块清单整体调整高度，并在新位置重新校验。",
-                best.record.id
-            ),
-            actions,
-            job_id: Some(job_id),
-        }));
-    }
-
-    match planned_window_replacement(&request.text, best) {
-        Ok(Some(action)) => {
-            let job_id = state.jobs.reserve_job_id();
-            let summary = format!("改造构建 {} 的窗户", best.record.id);
-            if let Err(error) = state
-                .builds
-                .register_planned(
-                    job_id.clone(),
-                    request.server_id.clone(),
-                    Some(request.player.clone()),
-                    summary,
-                    &[action.clone()],
-                )
-                .await
-            {
-                tracing::error!(error = %error, "failed to register planned modification build");
-                return Some(Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "构建记录保存失败，已取消下发改造动作。".to_string(),
-                )));
-            }
-
-            Some(Ok(MinecraftMessageResponse {
-                reply: format!(
-                    "已匹配到建筑 `{}`，这次只改造识别到的窗户方块。完成后会逐块校验并写回构建记录。",
-                    best.record.id
-                ),
-                actions: vec![action],
-                job_id: Some(job_id),
-            }))
-        }
-        Ok(None) => Some(Ok(chat_response(
-            "我识别到了目标建筑，但没有找到可替换的窗户/玻璃方块。请说得更具体一点，例如“把一楼正面的窗户换成蓝色玻璃”。"
-                .to_string(),
-        ))),
-        Err(message) => Some(Ok(chat_response(message))),
-    }
+    Some(plan_existing_build_edit(state, request, &best).await)
 }
 
-fn is_ambiguous_match(best: &BuildMatch, second: Option<&BuildMatch>) -> bool {
+async fn adopt_scanned_build(
+    state: &AppState,
+    request: &MinecraftMessageRequest,
+    scan: &WorldScan,
+) -> Result<Option<BuildMatch>, (StatusCode, String)> {
+    let build_id = state.jobs.reserve_job_id();
+    state
+        .builds
+        .adopt_scan_as_build(
+            build_id,
+            request.server_id.clone(),
+            Some(request.player.clone()),
+            scan,
+        )
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "failed to auto-adopt scanned minecraft build");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "附近建筑自动记录失败，已取消本次改造。".to_string(),
+            )
+        })
+}
+
+async fn plan_existing_build_edit(
+    state: &AppState,
+    request: &MinecraftMessageRequest,
+    best: &BuildMatch,
+) -> Result<MinecraftMessageResponse, (StatusCode, String)> {
+    let planner_input = PlannerInput {
+        text: request.text.clone(),
+        player: Some(request.player.clone()),
+        codex_session_key: Some(format!("minecraft:{}", request.player)),
+        position: request.position.clone(),
+        nearby_scan: request.nearby_scan.clone(),
+        attachments: Vec::new(),
+    };
+
+    let Some(plan) = state
+        .planner
+        .plan_existing_build_edit(&planner_input, &best.record)
+        .await
+    else {
+        return Ok(chat_response(format!(
+            "已匹配到目标建筑 `{}`，但 Codex 没有返回有效改造计划，所以没有下发动作。请换一种说法重试。",
+            best.record.id
+        )));
+    };
+
+    let job_id = state.jobs.reserve_job_id();
+    state
+        .builds
+        .register_planned(
+            job_id.clone(),
+            request.server_id.clone(),
+            Some(request.player.clone()),
+            plan.summary.clone(),
+            &plan.actions,
+        )
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "failed to register planned replacement build");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "构建记录保存失败，已取消下发改造动作。".to_string(),
+            )
+        })?;
+
+    Ok(MinecraftMessageResponse {
+        reply: plan.reply,
+        actions: plan.actions,
+        job_id: Some(job_id),
+    })
+}
+
+#[derive(Debug, Clone)]
+struct RankedBuildMatch {
+    item: BuildMatch,
+    total_matched_blocks: u32,
+    score: f32,
+    in_front: bool,
+    lateral_distance: f64,
+    distance: f64,
+}
+
+fn rank_build_matches(
+    matches: Vec<BuildMatch>,
+    position: Option<&PlayerPosition>,
+    scan: &WorldScan,
+) -> Vec<RankedBuildMatch> {
+    let mut grouped = BTreeMap::<String, RankedBuildMatch>::new();
+    for item in matches {
+        let metrics = spatial_metrics(&item, position, scan);
+        grouped
+            .entry(item.record.id.clone())
+            .and_modify(|existing| {
+                existing.total_matched_blocks += item.matched_blocks;
+                existing.score = existing.score.max(item.score);
+                if prefer_stronger_match(&item, &existing.item) {
+                    existing.item = item.clone();
+                }
+            })
+            .or_insert_with(|| RankedBuildMatch {
+                item,
+                total_matched_blocks: metrics.matched_blocks,
+                score: metrics.score,
+                in_front: metrics.in_front,
+                lateral_distance: metrics.lateral_distance,
+                distance: metrics.distance,
+            });
+    }
+
+    let mut ranked = grouped.into_values().collect::<Vec<_>>();
+    ranked.sort_by(|left, right| {
+        right
+            .in_front
+            .cmp(&left.in_front)
+            .then_with(|| left.lateral_distance.total_cmp(&right.lateral_distance))
+            .then_with(|| left.distance.total_cmp(&right.distance))
+            .then_with(|| right.total_matched_blocks.cmp(&left.total_matched_blocks))
+            .then_with(|| right.score.total_cmp(&left.score))
+            .then_with(|| left.item.record.id.cmp(&right.item.record.id))
+    });
+    ranked
+}
+
+fn is_ambiguous_match(
+    best: &RankedBuildMatch,
+    second: Option<&RankedBuildMatch>,
+    has_player_direction: bool,
+) -> bool {
     let Some(second) = second else {
         return false;
     };
-    second.matched_blocks + 2 >= best.matched_blocks && second.score >= best.score * 0.8
-}
-
-fn planned_window_replacement(
-    text: &str,
-    candidate: &BuildMatch,
-) -> Result<Option<GameAction>, String> {
-    if !(text.contains("窗") || text.contains("玻璃")) {
-        return Err("我已经匹配到附近建筑，但还不知道要改哪个部位。请补充目标，例如“把正面的窗户换成蓝色玻璃”。".to_string());
+    if has_player_direction
+        && best.in_front
+        && (!second.in_front
+            || best.lateral_distance + 2.0 < second.lateral_distance
+            || best.distance + 4.0 < second.distance)
+    {
+        return false;
     }
 
-    let Some(target_material) = replacement_glass_material(text) else {
-        return Err("我知道你要改窗户/玻璃，但还不确定要换成哪种玻璃。请明确说“换成蓝色玻璃/红色玻璃/普通玻璃/玻璃板”。".to_string());
+    second.total_matched_blocks + 2 >= best.total_matched_blocks && second.score >= best.score * 0.8
+}
+
+#[derive(Debug)]
+struct SpatialMetrics {
+    matched_blocks: u32,
+    score: f32,
+    in_front: bool,
+    lateral_distance: f64,
+    distance: f64,
+}
+
+fn spatial_metrics(
+    item: &BuildMatch,
+    position: Option<&PlayerPosition>,
+    scan: &WorldScan,
+) -> SpatialMetrics {
+    let (origin_x, origin_z, forward) = if let Some(position) = position {
+        let forward = player_forward_vector(position, scan);
+        (position.x, position.z, forward)
+    } else {
+        (scan.center_x as f64, scan.center_z as f64, None)
     };
+    let (in_front, lateral_distance, distance) =
+        record_spatial_distances(item, origin_x, origin_z, forward);
 
-    let action = &candidate.record.expected_actions[candidate.action_index];
-    let mut blocks = action
-        .blocks
-        .iter()
-        .filter(|block| block.material.contains("glass"))
-        .cloned()
-        .collect::<Vec<_>>();
+    SpatialMetrics {
+        matched_blocks: item.matched_blocks,
+        score: item.score,
+        in_front,
+        lateral_distance,
+        distance,
+    }
+}
 
-    if text.contains("二楼") || text.contains("2楼") {
-        let min_y = action.blocks.iter().map(|block| block.y).min().unwrap_or(0);
-        let max_y = action.blocks.iter().map(|block| block.y).max().unwrap_or(0);
-        if max_y - min_y < 4 {
-            return Err("我匹配到这个建筑，但从已保存蓝图看不出明确的二楼窗户。请指定更明确的位置，例如“正面左边窗户”。".to_string());
+fn record_spatial_distances(
+    item: &BuildMatch,
+    origin_x: f64,
+    origin_z: f64,
+    forward: Option<(f64, f64)>,
+) -> (bool, f64, f64) {
+    let mut any_block = false;
+    let mut any_in_front = false;
+    let mut best_lateral_any = f64::MAX;
+    let mut best_lateral_front = f64::MAX;
+    let mut best_distance_any = f64::MAX;
+    let mut best_distance_front = f64::MAX;
+
+    for action in &item.record.expected_actions {
+        for block in &action.blocks {
+            any_block = true;
+            let x = (action.origin.x + block.x) as f64;
+            let z = (action.origin.z + block.z) as f64;
+            let dx = x - origin_x;
+            let dz = z - origin_z;
+            let distance = (dx * dx + dz * dz).sqrt();
+            best_distance_any = best_distance_any.min(distance);
+
+            let lateral = if let Some((forward_x, forward_z)) = forward {
+                let forward_distance = dx * forward_x + dz * forward_z;
+                let lateral = (dx * forward_z - dz * forward_x).abs();
+                best_lateral_any = best_lateral_any.min(lateral);
+                if forward_distance >= -2.0 {
+                    any_in_front = true;
+                    best_lateral_front = best_lateral_front.min(lateral);
+                    best_distance_front = best_distance_front.min(distance);
+                }
+                lateral
+            } else {
+                distance
+            };
+            best_lateral_any = best_lateral_any.min(lateral);
         }
-        let split_y = min_y + (max_y - min_y) / 2 + 1;
-        blocks.retain(|block| block.y >= split_y);
     }
 
-    if blocks.is_empty() {
-        return Ok(None);
+    if !any_block {
+        return (true, 0.0, 0.0);
     }
-    for block in &mut blocks {
-        block.material = target_material.clone();
-    }
-
-    Ok(Some(GameAction::PlaceBlocks {
-        blueprint_id: Some(format!("{}:window-modification", candidate.record.id)),
-        origin: action.origin.clone(),
-        blocks,
-        clear_existing: false,
-    }))
-}
-
-fn planned_vertical_shift(text: &str, candidate: &BuildMatch) -> Option<Vec<GameAction>> {
-    let delta = vertical_delta(text)?;
-    let mut actions = Vec::new();
-
-    for (index, action) in candidate.record.expected_actions.iter().enumerate() {
-        actions.push(GameAction::PlaceBlocks {
-            blueprint_id: action
-                .blueprint_id
-                .as_ref()
-                .map(|id| format!("{id}:height-clear-{index}")),
-            origin: action.origin.clone(),
-            blocks: action
-                .blocks
-                .iter()
-                .map(|block| BlueprintBlock {
-                    x: block.x,
-                    y: block.y,
-                    z: block.z,
-                    material: "minecraft:air".to_string(),
-                })
-                .collect(),
-            clear_existing: true,
-        });
-
-        let mut shifted_origin = action.origin.clone();
-        shifted_origin.y += delta;
-        actions.push(GameAction::PlaceBlocks {
-            blueprint_id: action
-                .blueprint_id
-                .as_ref()
-                .map(|id| format!("{id}:height-shift")),
-            origin: shifted_origin,
-            blocks: action.blocks.clone(),
-            clear_existing: true,
-        });
-    }
-
-    Some(actions)
-}
-
-fn vertical_delta(text: &str) -> Option<i32> {
-    let lower = text.to_lowercase();
-    let direction = if text.contains("抬高")
-        || text.contains("升高")
-        || lower.contains("raise")
-        || lower.contains("lift")
-    {
-        1
-    } else if text.contains("降低")
-        || text.contains("下降")
-        || lower.contains("lower")
-        || lower.contains("drop")
-    {
-        -1
+    if forward.is_some() && any_in_front {
+        (true, best_lateral_front, best_distance_front)
     } else {
-        return None;
-    };
-
-    Some(direction * requested_block_delta(text).min(8))
-}
-
-fn requested_block_delta(text: &str) -> i32 {
-    if text.contains("八") || text.contains("8") {
-        8
-    } else if text.contains("七") || text.contains("7") {
-        7
-    } else if text.contains("六") || text.contains("6") {
-        6
-    } else if text.contains("五") || text.contains("5") {
-        5
-    } else if text.contains("四") || text.contains("4") {
-        4
-    } else if text.contains("三") || text.contains("3") {
-        3
-    } else if text.contains("两") || text.contains("二") || text.contains("2") {
-        2
-    } else {
-        1
+        (forward.is_none(), best_lateral_any, best_distance_any)
     }
 }
 
-fn replacement_glass_material(text: &str) -> Option<String> {
-    let material = if text.contains("玻璃板") {
-        "minecraft:glass_pane"
-    } else if text.contains("蓝") {
-        "minecraft:blue_stained_glass"
-    } else if text.contains("红") {
-        "minecraft:red_stained_glass"
-    } else if text.contains("绿") {
-        "minecraft:green_stained_glass"
-    } else if text.contains("黄") {
-        "minecraft:yellow_stained_glass"
-    } else if text.contains("黑") {
-        "minecraft:black_stained_glass"
-    } else if text.contains("白") || text.contains("普通") || text.contains("透明") {
-        "minecraft:glass"
+fn player_forward_vector(position: &PlayerPosition, scan: &WorldScan) -> Option<(f64, f64)> {
+    if let Some(yaw) = position.yaw {
+        let radians = yaw.to_radians();
+        let forward_x = -radians.sin();
+        let forward_z = radians.cos();
+        let length = (forward_x * forward_x + forward_z * forward_z).sqrt();
+        if length > 0.0 {
+            return Some((forward_x / length, forward_z / length));
+        }
+    }
+
+    let forward_x = scan.center_x as f64 - position.x;
+    let forward_z = scan.center_z as f64 - position.z;
+    let length = (forward_x * forward_x + forward_z * forward_z).sqrt();
+    if length > 0.0 {
+        Some((forward_x / length, forward_z / length))
     } else {
-        return None;
-    };
-    Some(material.to_string())
+        None
+    }
+}
+
+fn prefer_stronger_match(candidate: &BuildMatch, current: &BuildMatch) -> bool {
+    candidate.matched_blocks > current.matched_blocks
+        || (candidate.matched_blocks == current.matched_blocks && candidate.score > current.score)
 }
 
 fn chat_response(message: String) -> MinecraftMessageResponse {
@@ -441,7 +492,9 @@ fn chat_response(message: String) -> MinecraftMessageResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::{BuildRecord, BuildStatus, ExpectedBuildAction, MaterialCount};
+    use crate::domain::types::{
+        BlueprintBlock, BuildRecord, BuildStatus, ExpectedBuildAction, MaterialCount,
+    };
 
     fn matched_build() -> BuildMatch {
         BuildMatch {
@@ -481,39 +534,116 @@ mod tests {
         }
     }
 
-    #[test]
-    fn vertical_shift_clears_old_blocks_and_places_at_new_height() {
-        let actions = planned_vertical_shift("把它抬高两格", &matched_build()).unwrap();
-
-        assert_eq!(actions.len(), 2);
-        assert!(matches!(
-            &actions[0],
-            GameAction::PlaceBlocks {
-                blueprint_id: Some(blueprint_id),
-                origin,
-                blocks,
-                clear_existing: true,
-            } if blueprint_id == "test-house:height-clear-0"
-                && origin.y == 64
-                && blocks[0].material == "minecraft:air"
-        ));
-        assert!(matches!(
-            &actions[1],
-            GameAction::PlaceBlocks {
-                blueprint_id: Some(blueprint_id),
-                origin,
-                blocks,
-                clear_existing: true,
-            } if blueprint_id == "test-house:height-shift"
-                && origin.y == 66
-                && blocks[0].material == "minecraft:oak_planks"
-        ));
+    fn build_match_at(id: &str, x: i32, z: i32, matched_blocks: u32, score: f32) -> BuildMatch {
+        BuildMatch {
+            record: BuildRecord {
+                id: id.to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: format!("建造蓝图 {id}"),
+                status: BuildStatus::Succeeded,
+                expected_actions: vec![ExpectedBuildAction {
+                    blueprint_id: Some(id.to_string()),
+                    origin: crate::domain::types::BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x,
+                        y: 64,
+                        z,
+                    },
+                    expected_count: 1,
+                    materials: vec![MaterialCount {
+                        material: "minecraft:oak_planks".to_string(),
+                        count: 1,
+                    }],
+                    blocks: vec![BlueprintBlock {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:oak_planks".to_string(),
+                    }],
+                }],
+                result: None,
+                message: None,
+            },
+            action_index: 0,
+            matched_blocks,
+            scanned_expected_blocks: matched_blocks,
+            score,
+        }
     }
 
     #[test]
-    fn vertical_delta_defaults_to_one_and_supports_lowering() {
-        assert_eq!(vertical_delta("抬高一点"), Some(1));
-        assert_eq!(vertical_delta("降低三格"), Some(-3));
-        assert_eq!(vertical_delta("换成蓝色玻璃"), None);
+    fn rank_build_matches_merges_actions_from_same_record() {
+        let mut first = matched_build();
+        let mut second = matched_build();
+        first.action_index = 0;
+        first.matched_blocks = 126;
+        first.score = 0.4;
+        second.record.expected_actions.push(ExpectedBuildAction {
+            blueprint_id: Some("test-house-main".to_string()),
+            origin: crate::domain::types::BlockOrigin {
+                world: Some("minecraft:overworld".to_string()),
+                x: 10,
+                y: 64,
+                z: 20,
+            },
+            expected_count: 1,
+            materials: vec![MaterialCount {
+                material: "minecraft:oak_planks".to_string(),
+                count: 1,
+            }],
+            blocks: vec![BlueprintBlock {
+                x: 1,
+                y: 0,
+                z: 0,
+                material: "minecraft:oak_planks".to_string(),
+            }],
+        });
+        second.action_index = 1;
+        second.matched_blocks = 346;
+        second.score = 0.6;
+        let scan = WorldScan {
+            world: "minecraft:overworld".to_string(),
+            center_x: 10,
+            center_y: 64,
+            center_z: 20,
+            radius: 8,
+            blocks: Vec::new(),
+        };
+
+        let ranked = rank_build_matches(vec![first, second], None, &scan);
+
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].item.record.id, "hm-job-1");
+        assert_eq!(ranked[0].item.action_index, 1);
+        assert_eq!(ranked[0].total_matched_blocks, 472);
+        assert!(!is_ambiguous_match(&ranked[0], ranked.get(1), false));
+    }
+
+    #[test]
+    fn rank_build_matches_prefers_crosshair_direction_before_raw_match_count() {
+        let forward = build_match_at("front-wheel", 0, 8, 30, 0.3);
+        let side = build_match_at("side-platform", 12, 3, 200, 0.9);
+        let scan = WorldScan {
+            world: "minecraft:overworld".to_string(),
+            center_x: 0,
+            center_y: 64,
+            center_z: 5,
+            radius: 8,
+            blocks: Vec::new(),
+        };
+        let position = PlayerPosition {
+            world: "minecraft:overworld".to_string(),
+            x: 0.0,
+            y: 64.0,
+            z: 0.0,
+            yaw: Some(0.0),
+            pitch: None,
+        };
+
+        let ranked = rank_build_matches(vec![side, forward], Some(&position), &scan);
+
+        assert_eq!(ranked[0].item.record.id, "front-wheel");
+        assert!(!is_ambiguous_match(&ranked[0], ranked.get(1), true));
     }
 }

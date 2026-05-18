@@ -25,6 +25,13 @@ final class BlockwrightConfigTest {
         assertEquals(8000, config.maxScanBlocks);
         assertTrue(config.pollControllerJobs);
         assertEquals(40, config.pollIntervalTicks);
+        assertTrue(config.matrixEnabled);
+        assertEquals("https://matrix-client.matrix.org", config.matrixHomeserverUrl);
+        assertEquals("", config.matrixAccessToken);
+        assertEquals("@enochzzg:matrix.org", config.matrixAllowedSender);
+        assertEquals("Charles", config.matrixDefaultTargetPlayer);
+        assertTrue(config.matrixAllowOwnUserMessages);
+        assertTrue(config.matrixAutoJoinInvites);
         assertTrue(Files.exists(path));
     }
 
@@ -42,7 +49,11 @@ final class BlockwrightConfigTest {
                   "scanRadius": 1,
                   "scanForwardBlocks": 100,
                   "maxScanBlocks": 1,
-                  "pollIntervalTicks": 1
+                  "pollIntervalTicks": 1,
+                  "matrixHomeserverUrl": "https://matrix-client.matrix.org/",
+                  "matrixAccessToken": null,
+                  "matrixAllowedSender": "  ",
+                  "matrixDefaultTargetPlayer": "  "
                 }
                 """);
 
@@ -58,6 +69,10 @@ final class BlockwrightConfigTest {
         assertEquals(12, config.scanForwardBlocks);
         assertEquals(100, config.maxScanBlocks);
         assertEquals(5, config.pollIntervalTicks);
+        assertEquals("https://matrix-client.matrix.org", config.matrixHomeserverUrl);
+        assertEquals("", config.matrixAccessToken);
+        assertEquals("@enochzzg:matrix.org", config.matrixAllowedSender);
+        assertEquals("Charles", config.matrixDefaultTargetPlayer);
         assertTrue(Files.readString(path).contains("\"requestTimeoutSeconds\": 1800"));
     }
 

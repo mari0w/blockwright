@@ -37,6 +37,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 CommandManager.literal("bw")
                         .then(CommandManager.literal("reload").executes(context -> reload(context.getSource())))
+                        .then(CommandManager.literal("config").executes(context -> configHint(context.getSource())))
                         .then(CommandManager.literal("ask")
                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
                                         .executes(context -> runChat(
@@ -59,6 +60,11 @@ public final class BlockwrightFabricMod implements ModInitializer {
             }
         });
         LOGGER.info("Blockwright Fabric mod initialized");
+    }
+
+    private static int configHint(ServerCommandSource source) {
+        source.sendFeedback(() -> Text.literal("请在游戏客户端执行 /bwconfig 打开 Blockwright 内置配置界面。"), false);
+        return 1;
     }
 
     private static int reload(ServerCommandSource source) {
@@ -90,7 +96,9 @@ public final class BlockwrightFabricMod implements ModInitializer {
                         return;
                     }
                     currentPlayer.sendMessage(Text.literal(response.reply), false);
-                    executeDirectActions(controllerClient, server, currentPlayer, response);
+                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response)) {
+                        executeDirectActions(controllerClient, server, currentPlayer, response);
+                    }
                 }))
                 .exceptionally(error -> {
                     server.execute(() -> {
@@ -150,6 +158,68 @@ public final class BlockwrightFabricMod implements ModInitializer {
                     () -> sendDirectJobResult(controllerClient, response.jobId, resultOk, resultMessage, resultReport),
                     REQUEST_EXECUTOR);
         }
+    }
+
+    private static boolean executeScanAndPlanAction(
+            ControllerClient controllerClient,
+            MinecraftServer server,
+            ServerPlayerEntity player,
+            JsonModels.MinecraftMessageResponse response) {
+        if (response.actions == null) {
+            return false;
+        }
+
+        for (JsonModels.GameAction action : response.actions) {
+            if (action == null || !"scan_nearby_and_plan".equals(action.type)) {
+                continue;
+            }
+
+            sendScannedRetry(controllerClient, server, player, action);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void sendScannedRetry(
+            ControllerClient controllerClient,
+            MinecraftServer server,
+            ServerPlayerEntity player,
+            JsonModels.GameAction action) {
+        PlayerSnapshot playerSnapshot = PlayerSnapshot.from(player);
+        JsonModels.WorldScan nearbyScan = WorldScanner.scan(player, config);
+        String playerName = playerSnapshot.name();
+        String text = action.text == null || action.text.isBlank() ? action.message : action.text;
+        if (text == null || text.isBlank()) {
+            player.sendMessage(Text.literal("Blockwright 扫描完成，但缺少要继续处理的原始需求。"), false);
+            return;
+        }
+
+        CompletableFuture
+                .supplyAsync(() -> sendRequest(controllerClient, playerSnapshot, text, nearbyScan), REQUEST_EXECUTOR)
+                .thenAccept(response -> server.execute(() -> {
+                    ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerName);
+                    if (currentPlayer == null) {
+                        LOGGER.warn("player left before Blockwright scanned retry response: {}", playerName);
+                        return;
+                    }
+                    currentPlayer.sendMessage(Text.literal(response.reply), false);
+                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response)) {
+                        executeDirectActions(controllerClient, server, currentPlayer, response);
+                    }
+                }))
+                .exceptionally(error -> {
+                    server.execute(() -> {
+                        ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerName);
+                        if (currentPlayer != null) {
+                            currentPlayer.sendMessage(
+                                    Text.literal("Blockwright 扫描后继续处理失败：" + rootMessage(error)),
+                                    false);
+                        }
+                    });
+                    LOGGER.warn("Blockwright scanned retry failed", error);
+                    return null;
+                });
     }
 
     private static void sendDirectJobResult(

@@ -306,7 +306,7 @@ async fn assistant_message(state: &AppState, arguments: Value) -> Result<Value, 
 fn blockwright_protocol() -> Value {
     json!({
         "boundary": "MCP exposes high-level Blockwright context and validation only. Do not call raw Minecraft setBlock/fill/inventory APIs through MCP.",
-        "safe_actions": ["give_item", "place_blocks", "run_command", "chat"],
+        "safe_actions": ["give_item", "place_blocks", "run_command", "chat", "scan_nearby_and_plan"],
         "building_contract": [
             "Blueprint blocks use relative coordinates.",
             "The controller chooses the player-facing target from scan data and may prepare the site tastefully.",

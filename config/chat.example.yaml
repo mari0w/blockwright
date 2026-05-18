@@ -16,5 +16,24 @@ tools:
     inbound: local_command
     default_server_id: local-paper
 
+  - name: element-local
+    platform: matrix
+    enabled: false
+    inbound: polling
+    default_server_id: hmcl-lan
+    default_target_player: Charles
+    matrix:
+      homeserver_url: https://matrix.org
+      access_token_env: MATRIX_ACCESS_TOKEN
+      # 可直接指定 room_id；不填时会监听 bot 已加入的房间，并用 allowed_senders 限定谁能触发。
+      # room_id: "!xxxxxxxx:matrix.org"
+      allowed_senders:
+        - "@enochzzg:matrix.org"
+      # 如果 access token 属于 allowed_senders 里的同一个账号，才需要打开这一项。
+      allow_own_user_messages: false
+      auto_join_invites: true
+      poll_interval_seconds: 2
+      sync_timeout_seconds: 30
+
   # Telegram 后续接入时应使用 polling/getUpdates 一类的本地拉取方式。
   # 不要在本地 Minecraft 场景启用 webhook-only 工具。

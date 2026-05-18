@@ -1,4 +1,4 @@
-use blockwright_controller::{app, config, mcp, state::AppState};
+use blockwright_controller::{app, config, integrations::matrix, mcp, state::AppState};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
+    matrix::spawn_pollers(state.clone());
     tracing::info!("blockwright controller listening on http://{bind_addr}");
     axum::serve(listener, app::build_app(state)).await?;
     Ok(())

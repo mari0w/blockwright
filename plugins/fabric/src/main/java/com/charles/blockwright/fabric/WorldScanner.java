@@ -1,7 +1,9 @@
 package com.charles.blockwright.fabric;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import net.minecraft.block.BlockState;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -17,28 +19,46 @@ final class WorldScanner {
     static JsonModels.WorldScan scan(ServerPlayerEntity player, BlockwrightConfig config) {
         ServerWorld world = player.getWorld();
         Vec3d look = player.getRotationVec(1.0F);
-        BlockPos center = player.getBlockPos().add(
+        BlockPos playerCenter = player.getBlockPos();
+        BlockPos lookCenter = playerCenter.add(
                 (int) Math.round(look.x * config.scanForwardBlocks),
                 0,
                 (int) Math.round(look.z * config.scanForwardBlocks));
 
         JsonModels.WorldScan scan = new JsonModels.WorldScan();
         scan.world = world.getRegistryKey().getValue().toString();
-        scan.centerX = center.getX();
-        scan.centerY = center.getY();
-        scan.centerZ = center.getZ();
+        scan.centerX = lookCenter.getX();
+        scan.centerY = lookCenter.getY();
+        scan.centerZ = lookCenter.getZ();
         scan.radius = config.scanRadius;
         scan.blocks = new ArrayList<>();
 
+        Set<BlockPos> visited = new HashSet<>();
+        collectArea(world, scan, playerCenter, config, visited);
+        collectArea(world, scan, lookCenter, config, visited);
+
+        return scan;
+    }
+
+    private static void collectArea(
+            ServerWorld world,
+            JsonModels.WorldScan scan,
+            BlockPos center,
+            BlockwrightConfig config,
+            Set<BlockPos> visited) {
         int radius = config.scanRadius;
         for (int x = center.getX() - radius; x <= center.getX() + radius; x++) {
             for (int y = center.getY() - radius; y <= center.getY() + radius; y++) {
                 for (int z = center.getZ() - radius; z <= center.getZ() + radius; z++) {
                     if (scan.blocks.size() >= config.maxScanBlocks) {
-                        return scan;
+                        return;
                     }
 
                     BlockPos pos = new BlockPos(x, y, z);
+                    if (!visited.add(pos)) {
+                        continue;
+                    }
+
                     var state = world.getBlockState(pos);
                     if (state.isAir()) {
                         continue;
@@ -53,8 +73,6 @@ final class WorldScanner {
                 }
             }
         }
-
-        return scan;
     }
 
     private static String blockStateToString(BlockState state) {

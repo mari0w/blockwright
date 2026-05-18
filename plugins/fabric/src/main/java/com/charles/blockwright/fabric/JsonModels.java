@@ -52,6 +52,7 @@ public final class JsonModels {
         public int count;
         public String command;
         public String message;
+        public String text;
         @SerializedName("blueprint_id")
         public String blueprintId;
         public BlockOrigin origin;

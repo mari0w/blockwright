@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "com.charles.blockwright.fabric.BlockwrightFabricMod"
+    ],
+    "client": [
+      "com.charles.blockwright.fabric.BlockwrightFabricClient"
     ]
   },
   "depends": {

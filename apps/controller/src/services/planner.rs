@@ -1,6 +1,6 @@
 use crate::{
     domain::types::{
-        BlockOrigin, Blueprint, ChatAttachment, GameAction, PlayerPosition, WorldScan,
+        BlockOrigin, Blueprint, BuildRecord, ChatAttachment, GameAction, PlayerPosition, WorldScan,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
     services::blueprint_store::BlueprintStore,
@@ -33,6 +33,21 @@ struct CodexActionPlan {
     reply: String,
     summary: String,
     actions: Vec<GameAction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexExistingEditPlan {
+    reply: String,
+    summary: String,
+    mode: ExistingEditMode,
+    actions: Vec<GameAction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ExistingEditMode {
+    Patch,
+    Replace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -347,6 +362,72 @@ impl Planner {
         })
     }
 
+    pub async fn plan_existing_build_edit(
+        &self,
+        input: &PlannerInput,
+        existing: &BuildRecord,
+    ) -> Option<PlanResult> {
+        let codex = self.codex.as_ref()?;
+        if !codex.enabled() {
+            return None;
+        }
+
+        tracing::info!(
+            build_id = %existing.id,
+            has_nearby_scan = input.nearby_scan.is_some(),
+            "starting codex existing-build edit planner"
+        );
+        let prompt = build_existing_edit_prompt(input, existing);
+        let output = match codex
+            .ask_with_schema(
+                &prompt,
+                CodexResponseSchema::ExistingEditPlan,
+                input.codex_session_key.as_deref(),
+            )
+            .await
+        {
+            Ok(Some(output)) if !output.trim().is_empty() => output,
+            Ok(_) => return None,
+            Err(error) => {
+                tracing::warn!(
+                    build_id = %existing.id,
+                    error = %error,
+                    "codex existing-build edit planning failed"
+                );
+                return None;
+            }
+        };
+        tracing::info!(
+            build_id = %existing.id,
+            response_bytes = output.len(),
+            "codex existing-build edit response received; parsing json"
+        );
+
+        let plan = match parse_existing_edit_plan_response(&output) {
+            Some(plan) => plan,
+            None => {
+                tracing::warn!(build_id = %existing.id, "codex existing-build edit returned invalid json");
+                return None;
+            }
+        };
+        if plan.actions.is_empty() {
+            return None;
+        }
+
+        let mut actions = if plan.mode == ExistingEditMode::Replace {
+            clear_existing_build_actions(existing)
+        } else {
+            Vec::new()
+        };
+        actions.extend(plan.actions);
+
+        Some(PlanResult {
+            reply: plan.reply,
+            summary: plan.summary,
+            actions,
+        })
+    }
+
     async fn try_codex_action_plan(&self, input: &PlannerInput) -> Option<PlanResult> {
         let codex = self.codex.as_ref()?;
         if !codex.enabled() {
@@ -411,6 +492,7 @@ fn action_type_name(action: &GameAction) -> &'static str {
         GameAction::PlaceBlocks { .. } => "place_blocks",
         GameAction::RunCommand { .. } => "run_command",
         GameAction::Chat { .. } => "chat",
+        GameAction::ScanNearbyAndPlan { .. } => "scan_nearby_and_plan",
     }
 }
 
@@ -1106,6 +1188,59 @@ fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<B
     Some(bounds)
 }
 
+fn expected_record_bounds(record: &BuildRecord) -> Option<BlueprintBounds> {
+    let mut bounds: Option<BlueprintBounds> = None;
+    for action in &record.expected_actions {
+        for block in &action.blocks {
+            let x = action.origin.x + block.x;
+            let y = action.origin.y + block.y;
+            let z = action.origin.z + block.z;
+            bounds = Some(match bounds {
+                Some(existing) => BlueprintBounds {
+                    min_x: existing.min_x.min(x),
+                    max_x: existing.max_x.max(x),
+                    min_y: existing.min_y.min(y),
+                    max_y: existing.max_y.max(y),
+                    min_z: existing.min_z.min(z),
+                    max_z: existing.max_z.max(z),
+                },
+                None => BlueprintBounds {
+                    min_x: x,
+                    max_x: x,
+                    min_y: y,
+                    max_y: y,
+                    min_z: z,
+                    max_z: z,
+                },
+            });
+        }
+    }
+    bounds
+}
+
+fn clear_existing_build_actions(record: &BuildRecord) -> Vec<GameAction> {
+    record
+        .expected_actions
+        .iter()
+        .enumerate()
+        .map(|(index, action)| GameAction::PlaceBlocks {
+            blueprint_id: Some(format!("{}:replacement-clear-{index}", record.id)),
+            origin: action.origin.clone(),
+            blocks: action
+                .blocks
+                .iter()
+                .map(|block| crate::domain::types::BlueprintBlock {
+                    x: block.x,
+                    y: block.y,
+                    z: block.z,
+                    material: "minecraft:air".to_string(),
+                })
+                .collect(),
+            clear_existing: true,
+        })
+        .collect()
+}
+
 fn is_auto_clear_material(material: &str) -> bool {
     let material = material_id(material);
     matches!(
@@ -1300,6 +1435,95 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
     )
 }
 
+fn build_existing_edit_prompt(input: &PlannerInput, existing: &BuildRecord) -> String {
+    let site_context = build_site_context(input);
+    let existing_context = build_existing_record_context(existing);
+    format!(
+        r#"你是 Blockwright 的 Minecraft 现有建筑自由改造规划器。玩家已经站在目标建筑前，controller 已经按附近扫描和空间位置匹配到了当前要改的整栋建筑。请直接输出可执行改造计划 JSON。
+
+硬性规则：
+- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
+- JSON 必须符合字段：reply、summary、mode、actions。
+- mode 只能是 patch 或 replace。
+- actions 只能输出 place_blocks；每个 action 的 origin 是世界绝对放置原点，blocks 是相对 origin 的方块列表。
+- 方块材质必须使用 Minecraft 命名空间 ID，例如 minecraft:oak_planks；需要清除单个方块时可以使用 minecraft:air。
+- 不要再要求玩家说明“哪个部位”，也不要因为目标不够模板化就拒绝。你要根据玩家这句话自己判断是局部补丁还是整栋重做。
+- 小范围材料替换、局部细节、补灯、加装饰、修正窗口/入口，优先 mode=patch，只输出需要改的方块，clear_existing=false。
+- 整体放大、重做、变逼真、换主题、移动、升降、旋转、整体结构变化，使用 mode=replace。replace 时 actions 只输出新的最终建筑；controller 会先清掉旧建筑。
+- 如果是“移动/升降/换位置”这类整体调整，mode=replace，并把新 actions 的 origin 改到目标位置，不要把 origin 仍然放在旧位置。
+- 如果是“放大/重做/逼真/升级/更真实/更大气”，mode=replace，输出完整的新最终结构，不要只输出几个装饰方块。
+- 第一阶段单次 actions 总方块量控制在 700 个以内，优先用常见原版方块。
+- 对摩天轮、旋转木马、桥、塔、雕塑等模型，要有可辨认的整体轮廓、支撑结构、中心轴、座舱/装饰和地基。
+- reply 用中文说明会怎么改，summary 用中文短摘要。
+
+玩家文字：
+{text}
+
+已匹配建筑：
+{existing_context}
+
+场地摘要：
+{site_context}
+"#,
+        text = input.text.trim(),
+        existing_context = existing_context,
+        site_context = site_context
+    )
+}
+
+fn build_existing_record_context(existing: &BuildRecord) -> String {
+    let action_count = existing.expected_actions.len();
+    let total_blocks = existing
+        .expected_actions
+        .iter()
+        .map(|action| action.expected_count)
+        .sum::<u32>();
+    let bounds = expected_record_bounds(existing)
+        .map(|bounds| {
+            format!(
+                "bounds=({}, {}, {})..({}, {}, {})",
+                bounds.min_x, bounds.min_y, bounds.min_z, bounds.max_x, bounds.max_y, bounds.max_z
+            )
+        })
+        .unwrap_or_else(|| "bounds=未知".to_string());
+    let actions_json = build_existing_actions_context(existing, 700);
+    format!(
+        "id={}，summary={}，action_count={}，recorded_blocks={}，{}，actions={}",
+        existing.id, existing.summary, action_count, total_blocks, bounds, actions_json
+    )
+}
+
+fn build_existing_actions_context(existing: &BuildRecord, max_blocks: usize) -> String {
+    let mut remaining = max_blocks;
+    let mut truncated = false;
+    let actions = existing
+        .expected_actions
+        .iter()
+        .enumerate()
+        .map(|(index, action)| {
+            let take = remaining.min(action.blocks.len());
+            remaining -= take;
+            if take < action.blocks.len() {
+                truncated = true;
+            }
+            let blocks = action.blocks.iter().take(take).collect::<Vec<_>>();
+            serde_json::json!({
+                "index": index,
+                "blueprint_id": action.blueprint_id.clone(),
+                "origin": action.origin.clone(),
+                "expected_count": action.expected_count,
+                "included_blocks": blocks,
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "truncated": truncated,
+        "max_included_blocks": max_blocks,
+        "actions": actions,
+    })
+    .to_string()
+}
+
 fn build_site_context(input: &PlannerInput) -> String {
     let Some(scan) = input.nearby_scan.as_ref() else {
         return "未收到附近场地扫描；只能按玩家位置估算地面和落点。".to_string();
@@ -1405,6 +1629,11 @@ fn parse_action_plan_response(output: &str) -> Option<CodexActionPlan> {
     serde_json::from_str(json).ok()
 }
 
+fn parse_existing_edit_plan_response(output: &str) -> Option<CodexExistingEditPlan> {
+    let json = extract_json_object(output.trim())?;
+    serde_json::from_str(json).ok()
+}
+
 fn extract_json_object(output: &str) -> Option<&str> {
     let start = output.find('{')?;
     let end = output.rfind('}')?;
@@ -1420,8 +1649,8 @@ mod tests {
     use crate::{
         config::CodexConfig,
         domain::types::{
-            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentKind, ChatAttachmentSource,
-            MaterialCount, WorldScanBlock,
+            Blueprint, BlueprintBlock, BlueprintSize, BuildRecord, BuildStatus, ChatAttachmentKind,
+            ChatAttachmentSource, ExpectedBuildAction, MaterialCount, WorldScanBlock,
         },
     };
     use std::{
@@ -1456,9 +1685,28 @@ mod tests {
         let intent_path = dir.join("intent.json");
         let blueprint_path = dir.join("blueprint.json");
         let action_path = dir.join("action.json");
+        let existing_edit_path = dir.join("existing-edit.json");
         fs::write(&intent_path, intent_message).unwrap();
         fs::write(&blueprint_path, blueprint_message).unwrap();
         fs::write(&action_path, action_message).unwrap();
+        fs::write(
+            &existing_edit_path,
+            r#"{
+  "reply": "已按当前建筑自由改造。",
+  "summary": "自由改造现有建筑",
+  "mode": "replace",
+  "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-existing-edit",
+      "origin": {"world": "minecraft:overworld", "x": 10, "y": 65, "z": 20},
+      "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+      "clear_existing": true
+    }
+  ]
+}"#,
+        )
+        .unwrap();
         let script_path = dir.join("fake-codex.sh");
         fs::write(
             &script_path,
@@ -1496,6 +1744,9 @@ case "$schema" in
   *blueprint.schema.json)
     cat "{blueprint_path}" > "$last_message"
     ;;
+  *existing-edit-plan.schema.json)
+    cat "{existing_edit_path}" > "$last_message"
+    ;;
   *)
     exit 3
     ;;
@@ -1503,7 +1754,8 @@ esac
 "#,
                 intent_path = intent_path.to_string_lossy(),
                 action_path = action_path.to_string_lossy(),
-                blueprint_path = blueprint_path.to_string_lossy()
+                blueprint_path = blueprint_path.to_string_lossy(),
+                existing_edit_path = existing_edit_path.to_string_lossy()
             ),
         )
         .unwrap();
@@ -1557,6 +1809,46 @@ esac
                 material: "minecraft:oak_planks".to_string(),
             }],
             tags: tags.into_iter().map(|value| value.to_string()).collect(),
+        }
+    }
+
+    fn test_build_record() -> BuildRecord {
+        BuildRecord {
+            id: "hm-job-1".to_string(),
+            server_id: "hmcl-lan".to_string(),
+            target_player: Some("Steve".to_string()),
+            summary: "建造蓝图 old-wheel".to_string(),
+            status: BuildStatus::Succeeded,
+            expected_actions: vec![ExpectedBuildAction {
+                blueprint_id: Some("old-wheel".to_string()),
+                origin: BlockOrigin {
+                    world: Some("minecraft:overworld".to_string()),
+                    x: 10,
+                    y: 64,
+                    z: 20,
+                },
+                expected_count: 2,
+                materials: vec![MaterialCount {
+                    material: "minecraft:oak_planks".to_string(),
+                    count: 2,
+                }],
+                blocks: vec![
+                    BlueprintBlock {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:oak_planks".to_string(),
+                    },
+                    BlueprintBlock {
+                        x: 1,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:oak_planks".to_string(),
+                    },
+                ],
+            }],
+            result: None,
+            message: None,
         }
     }
 
@@ -1841,6 +2133,58 @@ esac
                 blueprint_id: Some(ref blueprint_id),
                 ..
             } if blueprint_id == "codex-wood-cabin"
+        ));
+    }
+
+    #[tokio::test]
+    async fn existing_build_edit_uses_codex_plan_without_local_keyword_rules() {
+        let planner = planner_with_fake_codex(
+            "codex-existing-edit",
+            r#"{
+  "id": "unused-blueprint",
+  "name": "未使用蓝图",
+  "description": "这个测试直接走 existing edit schema。",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+  "tags": ["test"]
+}"#,
+        );
+        let result = planner
+            .plan_existing_build_edit(
+                &PlannerInput {
+                    text: "把它整体升高一点，再做得更精致".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: Some(scan_with_blocks(Vec::new())),
+                    attachments: Vec::new(),
+                },
+                &test_build_record(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.summary, "自由改造现有建筑");
+        assert_eq!(result.actions.len(), 2);
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                blocks,
+                clear_existing: true,
+                ..
+            } if blueprint_id == "hm-job-1:replacement-clear-0"
+                && blocks.len() == 2
+                && blocks[0].material == "minecraft:air"
+        ));
+        assert!(matches!(
+            &result.actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin { y: 65, .. },
+                ..
+            } if blueprint_id == "codex-existing-edit"
         ));
     }
 

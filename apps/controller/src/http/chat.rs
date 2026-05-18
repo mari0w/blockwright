@@ -1,18 +1,22 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    config::{ChatInboundMode, ChatPlatform},
+    config::{ChatInboundMode, ChatPlatform, ChatRuntimeConfig, ChatToolConfig, MatrixChatConfig},
     domain::types::{ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
     http::robot::{queue_chat_message, RobotMessageResponse},
+    integrations::matrix,
     services::chat::IncomingChatMessage,
     state::AppState,
 };
 
 const DINGTALK_BOT_MESSAGE_TOPIC: &str = "/v1.0/im/bot/messages/get";
+const MATRIX_LOCAL_TOOL_NAME: &str = "element-local";
+const MATRIX_ACCESS_TOKEN_ENV: &str = "MATRIX_ACCESS_TOKEN";
 
 #[derive(Debug, Serialize)]
 pub struct ChatAdaptersResponse {
@@ -26,6 +30,41 @@ pub struct ChatAdapterInfo {
     pub enabled: bool,
     pub inbound: ChatInboundMode,
     pub local_friendly: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MatrixLocalConfigRequest {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    pub homeserver_url: String,
+    #[serde(default)]
+    pub access_token: String,
+    #[serde(default)]
+    pub room_id: Option<String>,
+    pub allowed_sender: String,
+    #[serde(default = "default_true")]
+    pub allow_own_user_messages: bool,
+    #[serde(default = "default_true")]
+    pub auto_join_invites: bool,
+    #[serde(default)]
+    pub default_server_id: Option<String>,
+    #[serde(default)]
+    pub default_target_player: Option<String>,
+    #[serde(default)]
+    pub poll_interval_seconds: Option<u64>,
+    #[serde(default)]
+    pub sync_timeout_seconds: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MatrixLocalConfigResponse {
+    pub ok: bool,
+    pub message: String,
+    pub tool_name: String,
+    pub config_path: String,
+    pub env_path: String,
+    pub token_configured: bool,
+    pub poller_started: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,9 +116,58 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat/adapters", get(list_adapters))
         .route(
+            "/chat/matrix/local-config",
+            axum::routing::put(save_matrix_local_config),
+        )
+        .route(
             "/chat/dingtalk/stream",
             axum::routing::post(handle_dingtalk_stream),
         )
+}
+
+async fn save_matrix_local_config(
+    State(state): State<AppState>,
+    Json(request): Json<MatrixLocalConfigRequest>,
+) -> Result<Json<MatrixLocalConfigResponse>, (StatusCode, String)> {
+    let tool = matrix_tool_from_request(&request)?;
+    let token = request.access_token.trim();
+    let env_path = state.config.chat.env_path.clone();
+    if token.is_empty() && !env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Matrix access token 不能为空；如果已经配置过，保存时可以留空表示保留。".to_string(),
+        ));
+    }
+
+    upsert_chat_tool(&state.config.chat.config_path, tool.clone())
+        .map_err(internal_error_response)?;
+    if !token.is_empty() {
+        ensure_env_value(&env_path, MATRIX_ACCESS_TOKEN_ENV, token)
+            .map_err(internal_error_response)?;
+        std::env::set_var(MATRIX_ACCESS_TOKEN_ENV, token);
+    }
+    let poller_started = if request.enabled {
+        matrix::spawn_tool_poller(state.clone(), tool)
+    } else {
+        false
+    };
+
+    Ok(Json(MatrixLocalConfigResponse {
+        ok: true,
+        message: if poller_started {
+            "Matrix/Element 本地配置已保存，并已启动 polling。".to_string()
+        } else if request.enabled {
+            "Matrix/Element 本地配置已保存；如果已有 polling 在运行，新配置下次重启 controller 生效。"
+                .to_string()
+        } else {
+            "Matrix/Element 本地配置已保存，当前为禁用状态。".to_string()
+        },
+        tool_name: MATRIX_LOCAL_TOOL_NAME.to_string(),
+        config_path: state.config.chat.config_path.display().to_string(),
+        env_path: env_path.display().to_string(),
+        token_configured: true,
+        poller_started,
+    }))
 }
 
 async fn list_adapters(State(state): State<AppState>) -> Json<ChatAdaptersResponse> {
@@ -303,6 +391,137 @@ fn dingtalk_content_attachment(
     })
 }
 
+fn matrix_tool_from_request(
+    request: &MatrixLocalConfigRequest,
+) -> Result<ChatToolConfig, (StatusCode, String)> {
+    let homeserver_url = request.homeserver_url.trim();
+    let allowed_sender = request.allowed_sender.trim();
+    let access_token = request.access_token.trim();
+    if homeserver_url.is_empty() || allowed_sender.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "homeserver_url 和 allowed_sender 不能为空。".to_string(),
+        ));
+    }
+    if contains_line_break(homeserver_url)
+        || contains_line_break(allowed_sender)
+        || contains_line_break(access_token)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Matrix 配置值不能包含换行。".to_string(),
+        ));
+    }
+
+    Ok(ChatToolConfig {
+        name: MATRIX_LOCAL_TOOL_NAME.to_string(),
+        platform: ChatPlatform::Matrix,
+        enabled: request.enabled,
+        inbound: ChatInboundMode::Polling,
+        default_server_id: normalize_optional_string(request.default_server_id.as_deref()),
+        default_target_player: normalize_optional_string(request.default_target_player.as_deref()),
+        dingtalk: None,
+        matrix: Some(MatrixChatConfig {
+            homeserver_url: homeserver_url.to_string(),
+            access_token_env: MATRIX_ACCESS_TOKEN_ENV.to_string(),
+            room_id: normalize_optional_string(request.room_id.as_deref()),
+            allowed_senders: vec![allowed_sender.to_string()],
+            allow_own_user_messages: Some(request.allow_own_user_messages),
+            auto_join_invites: Some(request.auto_join_invites),
+            poll_interval_seconds: request.poll_interval_seconds,
+            sync_timeout_seconds: request.sync_timeout_seconds,
+        }),
+    })
+}
+
+fn upsert_chat_tool(
+    path: &PathBuf,
+    tool: ChatToolConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = if path.exists() {
+        let source = std::fs::read_to_string(path)?;
+        yaml_serde::from_str::<ChatRuntimeConfig>(&source)?
+    } else {
+        ChatRuntimeConfig::default()
+    };
+
+    if let Some(existing) = config
+        .tools
+        .iter_mut()
+        .find(|existing| existing.name == tool.name)
+    {
+        *existing = tool;
+    } else {
+        config.tools.push(tool);
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let source = yaml_serde::to_string(&config)?;
+    std::fs::write(path, source)?;
+    Ok(())
+}
+
+fn env_key_exists(path: &PathBuf, key: &str) -> bool {
+    std::fs::read_to_string(path)
+        .map(|source| {
+            source.lines().any(|line| {
+                let line = line.trim_start();
+                line.starts_with(&format!("{key}="))
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn ensure_env_value(
+    path: &PathBuf,
+    key: &str,
+    value: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let mut updated = Vec::new();
+    let mut replaced = false;
+    for line in existing.lines() {
+        if line.trim_start().starts_with(&format!("{key}=")) {
+            updated.push(format!("{key}={value}"));
+            replaced = true;
+        } else {
+            updated.push(line.to_string());
+        }
+    }
+    if !replaced {
+        updated.push(format!("{key}={value}"));
+    }
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, format!("{}\n", updated.join("\n")))?;
+    Ok(())
+}
+
+fn normalize_optional_string(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn contains_line_break(value: &str) -> bool {
+    value.contains('\n') || value.contains('\r')
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn internal_error_response(
+    error: Box<dyn std::error::Error + Send + Sync>,
+) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,5 +611,56 @@ mod tests {
         assert_eq!(text, "照这个做");
         assert_eq!(attachments.len(), 1);
         assert_eq!(attachments[0].kind, ChatAttachmentKind::Image);
+    }
+
+    #[test]
+    fn matrix_local_config_request_writes_chat_tool_without_secret() {
+        let path = unique_temp_path("chat.yaml");
+        let request = MatrixLocalConfigRequest {
+            enabled: true,
+            homeserver_url: " https://matrix-client.matrix.org/ ".to_string(),
+            access_token: "secret-token".to_string(),
+            room_id: None,
+            allowed_sender: " @enochzzg:matrix.org ".to_string(),
+            allow_own_user_messages: true,
+            auto_join_invites: true,
+            default_server_id: Some("hmcl-lan".to_string()),
+            default_target_player: Some("Charles".to_string()),
+            poll_interval_seconds: Some(2),
+            sync_timeout_seconds: Some(30),
+        };
+
+        let tool = matrix_tool_from_request(&request).unwrap();
+        upsert_chat_tool(&path, tool).unwrap();
+
+        let source = std::fs::read_to_string(&path).unwrap();
+        assert!(source.contains("element-local"));
+        assert!(source.contains("https://matrix-client.matrix.org/"));
+        assert!(source.contains("@enochzzg:matrix.org"));
+        assert!(source.contains("MATRIX_ACCESS_TOKEN"));
+        assert!(!source.contains("secret-token"));
+    }
+
+    #[test]
+    fn env_value_is_upserted_without_leaking_duplicates() {
+        let path = unique_temp_path(".env");
+        std::fs::write(&path, "OTHER=value\nMATRIX_ACCESS_TOKEN=old\n").unwrap();
+
+        ensure_env_value(&path, MATRIX_ACCESS_TOKEN_ENV, "new-token").unwrap();
+
+        let source = std::fs::read_to_string(&path).unwrap();
+        assert!(source.contains("OTHER=value"));
+        assert!(source.contains("MATRIX_ACCESS_TOKEN=new-token"));
+        assert_eq!(source.matches("MATRIX_ACCESS_TOKEN=").count(), 1);
+    }
+
+    fn unique_temp_path(file_name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("blockwright-chat-test-{nanos}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join(file_name)
     }
 }

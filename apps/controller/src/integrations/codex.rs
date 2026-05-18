@@ -38,6 +38,7 @@ pub enum CodexResponseSchema {
     Intent,
     ActionPlan,
     Blueprint,
+    ExistingEditPlan,
 }
 
 impl CodexResponseSchema {
@@ -46,6 +47,7 @@ impl CodexResponseSchema {
             CodexResponseSchema::Intent => "intent",
             CodexResponseSchema::ActionPlan => "action_plan",
             CodexResponseSchema::Blueprint => "blueprint",
+            CodexResponseSchema::ExistingEditPlan => "existing_edit_plan",
         }
     }
 
@@ -54,6 +56,7 @@ impl CodexResponseSchema {
             CodexResponseSchema::Intent => "intent.schema.json",
             CodexResponseSchema::ActionPlan => "action-plan.schema.json",
             CodexResponseSchema::Blueprint => "blueprint.schema.json",
+            CodexResponseSchema::ExistingEditPlan => "existing-edit-plan.schema.json",
         };
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("schemas")
@@ -804,6 +807,7 @@ BLOCKWRIGHT_JSON
         assert!(CodexResponseSchema::Intent.path().exists());
         assert!(CodexResponseSchema::ActionPlan.path().exists());
         assert!(CodexResponseSchema::Blueprint.path().exists());
+        assert!(CodexResponseSchema::ExistingEditPlan.path().exists());
     }
 
     #[test]

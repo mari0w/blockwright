@@ -23,6 +23,13 @@ public final class BlockwrightConfig {
     public int maxScanBlocks = 8000;
     public boolean pollControllerJobs = true;
     public int pollIntervalTicks = 40;
+    public boolean matrixEnabled = true;
+    public String matrixHomeserverUrl = "https://matrix-client.matrix.org";
+    public String matrixAccessToken = "";
+    public String matrixAllowedSender = "@enochzzg:matrix.org";
+    public String matrixDefaultTargetPlayer = "Charles";
+    public boolean matrixAllowOwnUserMessages = true;
+    public boolean matrixAutoJoinInvites = true;
 
     public static BlockwrightConfig load(Path path) throws IOException {
         if (Files.notExists(path)) {
@@ -65,6 +72,24 @@ public final class BlockwrightConfig {
         scanForwardBlocks = normalizeBounded(scanForwardBlocks, 0, 12);
         maxScanBlocks = normalizeBounded(maxScanBlocks, 100, 20000);
         pollIntervalTicks = normalizePollIntervalTicks(pollIntervalTicks);
+        if (matrixHomeserverUrl == null || matrixHomeserverUrl.isBlank()) {
+            matrixHomeserverUrl = "https://matrix-client.matrix.org";
+        } else {
+            matrixHomeserverUrl = ControllerPaths.trimTrailingSlash(matrixHomeserverUrl);
+        }
+        if (matrixAccessToken == null) {
+            matrixAccessToken = "";
+        }
+        if (matrixAllowedSender == null || matrixAllowedSender.isBlank()) {
+            matrixAllowedSender = "@enochzzg:matrix.org";
+        } else {
+            matrixAllowedSender = matrixAllowedSender.trim();
+        }
+        if (matrixDefaultTargetPlayer == null || matrixDefaultTargetPlayer.isBlank()) {
+            matrixDefaultTargetPlayer = "Charles";
+        } else {
+            matrixDefaultTargetPlayer = matrixDefaultTargetPlayer.trim();
+        }
     }
 
     private int normalizeBounded(int value, int min, int max) {

@@ -36,9 +36,14 @@ fn config(require_token: bool) -> AppConfig {
 }
 
 fn config_with_chat_path(require_token: bool, chat_config_path: PathBuf) -> AppConfig {
+    let env_path = chat_config_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(".env");
     config_with_chat_path_and_codex(
         require_token,
         chat_config_path,
+        env_path,
         CodexConfig {
             enabled: false,
             command: "codex".to_string(),
@@ -50,6 +55,7 @@ fn config_with_chat_path(require_token: bool, chat_config_path: PathBuf) -> AppC
 fn config_with_chat_path_and_codex(
     require_token: bool,
     chat_config_path: PathBuf,
+    env_path: PathBuf,
     codex: CodexConfig,
 ) -> AppConfig {
     AppConfig {
@@ -73,6 +79,7 @@ fn config_with_chat_path_and_codex(
         codex,
         chat: blockwright_controller::config::ChatConfig {
             config_path: chat_config_path,
+            env_path,
         },
     }
 }
@@ -98,6 +105,7 @@ async fn test_app_with_fake_codex(require_token: bool, name: &str) -> Router {
     let state = AppState::new(config_with_chat_path_and_codex(
         require_token,
         temp_dir("chat-config").join("chat.local.yaml"),
+        temp_dir("env").join(".env"),
         CodexConfig {
             enabled: true,
             command: script_path.to_string_lossy().to_string(),
@@ -145,6 +153,10 @@ case "$schema" in
       cat > "$last_message" <<'JSON'
 {"intent":"existing_build_edit","reply":"按现有建筑改造处理。","summary":"改造现有建筑"}
 JSON
+    elif grep -q "摩天轮整体放大" "$prompt_file"; then
+      cat > "$last_message" <<'JSON'
+{"intent":"existing_build_edit","reply":"按现有建筑整体重做。","summary":"重做放大现有摩天轮"}
+JSON
     elif grep -q "给我一把钻石剑" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
 {"intent":"action","reply":"按动作处理。","summary":"动作需求"}
@@ -180,6 +192,52 @@ JSON
   "tags": ["house"]
 }
 JSON
+    ;;
+  *existing-edit-plan.schema.json)
+    if grep -q "摩天轮整体放大" "$prompt_file"; then
+      cat > "$last_message" <<'JSON'
+{
+  "reply": "已按当前匹配到的摩天轮整体重做，会先清理旧结构，再放置新的逼真摩天轮。",
+  "summary": "整体重做逼真摩天轮",
+  "mode": "replace",
+  "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-realistic-ferris-wheel",
+      "origin": {"world": "world", "x": 20, "y": 64, "z": 30},
+      "blocks": [
+        {"x": 0, "y": 0, "z": 0, "material": "minecraft:stone_bricks"},
+        {"x": 0, "y": 1, "z": 0, "material": "minecraft:iron_bars"},
+        {"x": 0, "y": 2, "z": 0, "material": "minecraft:gold_block"}
+      ],
+      "clear_existing": true
+    }
+  ]
+}
+JSON
+    else
+      cat > "$last_message" <<'JSON'
+{
+  "reply": "已按当前匹配到的建筑自由调整窗户颜色。",
+  "summary": "调整现有建筑窗户",
+  "mode": "patch",
+  "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-window-edit",
+      "origin": {"world": "world", "x": 20, "y": 64, "z": 30},
+      "blocks": [
+        {"x": 0, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 1, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 0, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 1, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"}
+      ],
+      "clear_existing": false
+    }
+  ]
+}
+JSON
+    fi
     ;;
   *action-plan.schema.json)
     cat > "$last_message" <<'JSON'
@@ -241,6 +299,49 @@ async fn public_health_does_not_require_token() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["ok"], true);
     assert_eq!(body["codex_enabled"], false);
+}
+
+#[tokio::test]
+async fn web_chat_page_and_image_message_work_without_api_token() {
+    let app = test_app_with_fake_codex(true, "api-web-chat").await;
+
+    let page_response = app
+        .clone()
+        .oneshot(request("GET", "/web", None, None))
+        .await
+        .unwrap();
+    assert_eq!(page_response.status(), StatusCode::OK);
+
+    let message_response = app
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "参考图片盖一个小木屋",
+                "images": [
+                    {
+                        "file_name": "house.png",
+                        "mime_type": "image/png",
+                        "data_url": "data:image/png;base64,iVBORw0KGgo="
+                    }
+                ]
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let body = response_json(message_response).await;
+
+    assert_eq!(body["attachment_count"], 1);
+    assert!(body["queued_job_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("hm-job-"));
+    assert!(body["reply"].as_str().unwrap().contains("蓝图"));
 }
 
 #[tokio::test]
@@ -428,6 +529,40 @@ async fn minecraft_build_message_returns_job_id_for_direct_verification() {
 }
 
 #[tokio::test]
+async fn minecraft_modification_without_scan_asks_fabric_to_rescan_once() {
+    let app = test_app_with_fake_codex(true, "api-minecraft-missing-scan").await;
+    let modification_request = json!({
+        "server_id": "hmcl-lan",
+        "player": "Steve",
+        "text": "把我脚下这个建筑的窗户换成蓝色玻璃",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        }
+    });
+
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(modification_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let body = response_json(response).await;
+
+    assert_eq!(body["actions"][0]["type"], "scan_nearby_and_plan");
+    assert_eq!(
+        body["actions"][0]["text"],
+        "把我脚下这个建筑的窗户换成蓝色玻璃"
+    );
+    assert!(body["job_id"].is_null());
+}
+
+#[tokio::test]
 async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
     let app = test_app_with_fake_codex(true, "api-minecraft-modification").await;
     let build_request = json!({
@@ -542,6 +677,184 @@ async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
             .len(),
         4
     );
+    assert!(modification_body["job_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("hm-job-"));
+}
+
+#[tokio::test]
+async fn minecraft_modification_auto_adopts_scanned_build_when_no_record_exists() {
+    let app = test_app_with_fake_codex(true, "api-minecraft-auto-adopt").await;
+    let modification_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "把我面前这个建筑的窗户换成蓝色玻璃",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        },
+        "nearby_scan": {
+            "world": "world",
+            "center_x": 20,
+            "center_y": 64,
+            "center_z": 30,
+            "radius": 8,
+            "blocks": [
+                {"x": 20, "y": 63, "z": 30, "material": "minecraft:water[level=0]"},
+                {"x": 20, "y": 64, "z": 30, "material": "minecraft:gold_block"},
+                {"x": 21, "y": 64, "z": 30, "material": "minecraft:copper_block"}
+            ]
+        }
+    });
+
+    let modification_response = app
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(modification_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let modification_body = response_json(modification_response).await;
+
+    assert_eq!(modification_body["actions"][0]["type"], "place_blocks");
+    assert_eq!(
+        modification_body["actions"][0]["blocks"][0]["material"],
+        "minecraft:blue_stained_glass"
+    );
+    assert!(!modification_body["reply"]
+        .as_str()
+        .unwrap()
+        .contains("保存"));
+    assert!(!modification_body["reply"]
+        .as_str()
+        .unwrap()
+        .contains("登记"));
+    assert!(modification_body["job_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("hm-job-"));
+}
+
+#[tokio::test]
+async fn minecraft_whole_build_replacement_does_not_ask_for_part() {
+    let app = test_app_with_fake_codex(true, "api-minecraft-whole-replacement").await;
+    let build_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "帮我盖一个摩天轮",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        }
+    });
+
+    let build_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(build_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let build_body = response_json(build_response).await;
+    let job_id = build_body["job_id"].as_str().unwrap();
+    let build_action = &build_body["actions"][0];
+    let origin = &build_action["origin"];
+    let blocks = build_action["blocks"].as_array().unwrap();
+    let expected_count = blocks.len();
+    let scan_blocks = blocks
+        .iter()
+        .map(|block| {
+            json!({
+                "x": origin["x"].as_i64().unwrap() + block["x"].as_i64().unwrap(),
+                "y": origin["y"].as_i64().unwrap() + block["y"].as_i64().unwrap(),
+                "z": origin["z"].as_i64().unwrap() + block["z"].as_i64().unwrap(),
+                "material": block["material"]
+            })
+        })
+        .collect::<Vec<_>>();
+    let result_request = json!({
+        "ok": true,
+        "message": "ok",
+        "report": {
+            "actions": [
+                {
+                    "action_type": "place_blocks",
+                    "blueprint_id": "oak-house-small",
+                    "expected_count": expected_count,
+                    "placed_count": expected_count,
+                    "skipped_existing_count": 0,
+                    "skipped_limit_count": 0,
+                    "verified_count": expected_count,
+                    "mismatch_count": 0,
+                    "mismatches": []
+                }
+            ]
+        }
+    });
+    app.clone()
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(result_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    let modification_request = json!({
+        "server_id": "local-paper",
+        "player": "Steve",
+        "text": "我要改的是摩天轮，把摩天轮整体放大，重做，我要的是逼真的摩天轮",
+        "position": {
+            "world": "world",
+            "x": 0,
+            "y": 64,
+            "z": 0
+        },
+        "nearby_scan": {
+            "world": "world",
+            "center_x": 2,
+            "center_y": 64,
+            "center_z": 2,
+            "radius": 8,
+            "blocks": scan_blocks
+        }
+    });
+
+    let modification_response = app
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(modification_request),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let modification_body = response_json(modification_response).await;
+    let actions = modification_body["actions"].as_array().unwrap();
+
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[0]["type"], "place_blocks");
+    assert_eq!(actions[0]["blocks"][0]["material"], "minecraft:air");
+    assert_eq!(actions[1]["type"], "place_blocks");
+    assert!(modification_body["reply"]
+        .as_str()
+        .unwrap()
+        .contains("整体重做"));
+    assert!(!modification_body["reply"]
+        .as_str()
+        .unwrap()
+        .contains("哪个部位"));
     assert!(modification_body["job_id"]
         .as_str()
         .unwrap()
@@ -698,6 +1011,18 @@ tools:
     dingtalk:
       client_id_env: DINGTALK_CLIENT_ID
       client_secret_env: DINGTALK_CLIENT_SECRET
+  - name: element-local
+    platform: matrix
+    enabled: true
+    inbound: polling
+    default_server_id: hmcl-lan
+    default_target_player: Charles
+    matrix:
+      homeserver_url: https://matrix.org
+      access_token_env: MATRIX_ACCESS_TOKEN
+      allowed_senders:
+        - "@enochzzg:matrix.org"
+      auto_join_invites: true
 "#,
     )
     .await;
@@ -716,5 +1041,51 @@ tools:
     assert_eq!(body["tools"][0]["name"], "dingtalk-local");
     assert_eq!(body["tools"][0]["inbound"], "stream");
     assert_eq!(body["tools"][0]["local_friendly"], true);
+    assert_eq!(body["tools"][1]["name"], "element-local");
+    assert_eq!(body["tools"][1]["platform"], "matrix");
+    assert_eq!(body["tools"][1]["inbound"], "polling");
+    assert_eq!(body["tools"][1]["local_friendly"], true);
     assert!(body.to_string().contains("DINGTALK_CLIENT_SECRET") == false);
+    assert!(body.to_string().contains("MATRIX_ACCESS_TOKEN") == false);
+}
+
+#[tokio::test]
+async fn matrix_local_config_endpoint_writes_untracked_config_and_env() {
+    let chat_path = temp_dir("matrix-local-config").join("chat.local.yaml");
+    let env_path = chat_path.parent().unwrap().join(".env");
+    let state = AppState::new(config_with_chat_path(true, chat_path.clone()))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .oneshot(request(
+            "PUT",
+            "/api/chat/matrix/local-config",
+            Some(json!({
+                "enabled": false,
+                "homeserver_url": "https://matrix-client.matrix.org",
+                "access_token": "test-matrix-token",
+                "allowed_sender": "@enochzzg:matrix.org",
+                "allow_own_user_messages": true,
+                "auto_join_invites": true,
+                "default_server_id": "hmcl-lan",
+                "default_target_player": "Charles"
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["token_configured"], true);
+    let chat_source = std::fs::read_to_string(chat_path).unwrap();
+    let env_source = std::fs::read_to_string(env_path).unwrap();
+    assert!(chat_source.contains("element-local"));
+    assert!(chat_source.contains("@enochzzg:matrix.org"));
+    assert!(chat_source.contains("MATRIX_ACCESS_TOKEN"));
+    assert!(!chat_source.contains("test-matrix-token"));
+    assert!(env_source.contains("MATRIX_ACCESS_TOKEN=test-matrix-token"));
 }

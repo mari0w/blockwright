@@ -22,3 +22,4 @@ codex:
 
 chat:
   config_path: config/chat.local.yaml
+  env_path: .env

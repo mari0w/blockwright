@@ -11,6 +11,7 @@ pub fn build_app(state: AppState) -> Router {
 
     Router::new()
         .merge(http::health::router())
+        .merge(http::web::router())
         .nest("/api", api_router)
         .with_state(state)
         .layer(CorsLayer::permissive())

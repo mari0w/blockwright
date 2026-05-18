@@ -1,0 +1,19 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - heading "Blockwright" [level=1] [ref=e4]
+    - generic [ref=e5]: 用户名
+    - textbox "用户名" [ref=e6]:
+      - /placeholder: Charles
+    - generic [ref=e7]: Minecraft 玩家
+    - textbox "Minecraft 玩家" [ref=e8]:
+      - /placeholder: 默认同用户名
+    - generic [ref=e9]: 服务器
+    - textbox "服务器" [ref=e10]:
+      - /placeholder: hmcl-lan
+      - text: hmcl-lan
+    - generic [ref=e11]: 参考图片
+    - button "参考图片" [ref=e12]
+  - main [ref=e13]:
+    - generic [ref=e16]:
+      - textbox "说你想建什么、改什么，图片会一起发过去。" [ref=e17]
+      - button "发送" [ref=e18] [cursor=pointer]

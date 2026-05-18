@@ -116,7 +116,10 @@ make HMCL_DIR=<HMCL当前游戏目录>
 /bw 帮我盖一个木屋
 /bw 把我面前这个房子的窗户换成蓝色玻璃
 /bw reload
+/bwconfig
 ```
+
+`/bwconfig` 会打开 Blockwright 配置界面，可以配置 controller 地址、共享 token、服务器 ID、Matrix/Element homeserver、access token 和允许发指令的 Matrix 用户；保存时会写入本机 `config/blockwright.json`，并调用 controller 保存 `config/chat.local.yaml` 和 `.env`。Matrix access token 只会写入本地未追踪 `.env`，不会写进仓库里的 YAML 示例。
 
 第一次调用 Codex CLI 或本地模型规划建筑时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 
@@ -181,6 +184,7 @@ controller 支持把不同聊天入口统一成一类消息，再转换成 Minec
 - Minecraft 游戏内命令。
 - 通用本地 HTTP 机器人入口：`POST /api/robot/message`。
 - 钉钉应用机器人 Stream 模式。
+- Element/Matrix 房间 polling 模式。
 - 后续 Telegram/Discord/企业微信等应优先选择 polling、stream 或 local_command。
 
 真实聊天工具配置放在未追踪文件：
@@ -196,6 +200,37 @@ cp config/chat.example.yaml config/chat.local.yaml
 ```
 
 不要提交真实 token、webhook、client secret 或机器人凭证。
+
+Element 客户端使用 Matrix 协议。接入时新建一个 Matrix bot 账号，把 bot 邀进目标房间，并在本机环境变量里放 bot 账号的 access token：
+
+```bash
+export MATRIX_ACCESS_TOKEN=...
+```
+
+`config/chat.local.yaml` 里启用 Matrix/Element polling：
+
+```yaml
+tools:
+  - name: element-local
+    platform: matrix
+    enabled: true
+    inbound: polling
+    default_server_id: hmcl-lan
+    default_target_player: Charles
+    matrix:
+      homeserver_url: https://matrix.org
+      access_token_env: MATRIX_ACCESS_TOKEN
+      allowed_senders:
+        - "@enochzzg:matrix.org"
+      allow_own_user_messages: true
+      auto_join_invites: true
+```
+
+也可以显式配置 `room_id: "!xxxxxxxx:matrix.org"` 只监听一个房间；不填 `room_id` 时，controller 会监听 bot 已加入的房间，并只处理 `allowed_senders` 里的用户消息。如果 token 属于独立 bot 账号，`allow_own_user_messages` 保持默认关闭；如果 token 就是发指令的 Element 账号，才打开它。
+
+当前 Matrix 适配读取普通 `m.room.message` 文本事件，不处理端到端加密房间；请给 bot 使用未开启 E2EE 的专用房间。
+
+如果使用 Fabric，可以直接在游戏内执行 `/bwconfig` 配置 Element/Matrix；保存按钮会调用 controller 的本地配置接口，不需要手工编辑 `chat.local.yaml`。
 
 ## MCP 助手入口
 

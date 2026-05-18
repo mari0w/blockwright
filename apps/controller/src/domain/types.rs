@@ -127,6 +127,9 @@ pub enum GameAction {
     Chat {
         message: String,
     },
+    ScanNearbyAndPlan {
+        text: String,
+    },
 }
 
 fn is_false(value: &bool) -> bool {
