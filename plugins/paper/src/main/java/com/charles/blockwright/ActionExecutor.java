@@ -307,16 +307,23 @@ public final class ActionExecutor {
     }
 
     private void runCommand(JsonModels.GameAction action, String defaultPlayer) {
-        String command = CommandPolicy.normalize(action.command);
-        if (!CommandPolicy.isAllowed(command)) {
-            throw new IllegalArgumentException("不允许执行的 Minecraft 指令：" + action.command);
-        }
-
+        String command = normalizeCommand(action.command);
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
         Player player = defaultPlayer == null ? null : Bukkit.getPlayerExact(defaultPlayer);
         if (player != null) {
             player.sendMessage("Blockwright 已执行指令：/" + command);
         }
+    }
+
+    private String normalizeCommand(String command) {
+        if (command == null) {
+            return "";
+        }
+        String normalized = command.trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1).trim();
+        }
+        return normalized;
     }
 
     private Location resolveOrigin(JsonModels.BlockOrigin origin, Location fallbackOrigin) {

@@ -192,7 +192,7 @@ fn tools_list_result() -> Value {
         "tools": [
             {
                 "name": "blockwright_protocol",
-                "description": "Explain the safe Blockwright action protocol. Use this before planning Minecraft changes through Blockwright.",
+                "description": "Explain the Blockwright action protocol. Use this before planning Minecraft changes through Blockwright.",
                 "inputSchema": object_schema(json!({}))
             },
             {
@@ -260,7 +260,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "blockwright_run_command",
-                "description": "Run one safe Minecraft command through the execution plugin's command allowlist.",
+                "description": "Run a Minecraft command through the execution plugin without a command whitelist.",
                 "inputSchema": object_schema(json!({
                     "server_id": { "type": "string", "description": "Minecraft server id. Defaults to configured minecraft.default_server_id." },
                     "target_player": { "type": "string", "description": "Target player name used as command source/context." },
@@ -910,8 +910,8 @@ async fn live_query(
 
 fn blockwright_protocol() -> Value {
     json!({
-        "boundary": "MCP is the pure tool surface for the Minecraft assistant: read live state, manage blueprints/build records, and enqueue controlled actions. It still does not expose raw Minecraft setBlock/fill or arbitrary inventory-click APIs.",
-        "safe_actions": ["give_item", "place_blocks", "run_command", "chat", "scan_nearby_and_plan"],
+        "boundary": "MCP is the pure tool surface for the Minecraft assistant: read live state, manage blueprints/build records, and enqueue controlled actions. Minecraft commands are passed through run_command without a command whitelist.",
+        "actions": ["give_item", "place_blocks", "run_command", "chat", "scan_nearby_and_plan"],
         "live_read_tools": ["blockwright_get_player_state", "blockwright_scan_nearby_blocks"],
         "data_tools": ["blockwright_list_blueprints", "blockwright_get_blueprint", "blockwright_save_blueprint", "blockwright_delete_blueprint", "blockwright_list_builds", "blockwright_get_build", "blockwright_delete_build", "blockwright_search_builds_nearby"],
         "write_tools": ["blockwright_give_item", "blockwright_place_blocks", "blockwright_run_command", "blockwright_send_chat", "blockwright_enqueue_actions"],
@@ -923,8 +923,7 @@ fn blockwright_protocol() -> Value {
             "Block material state strings are part of consistency, for example minecraft:oak_door[half=lower,facing=south]."
         ],
         "forbidden": [
-            "Do not expose arbitrary Minecraft commands.",
-            "Do not expose raw setBlock/fill tools.",
+            "Do not expose raw inventory-click APIs.",
             "Do not simulate player inventory clicks or right-click placement."
         ],
         "preferred_flow": [
@@ -1237,7 +1236,7 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_exposes_safe_blockwright_tools_only() {
+    fn tools_list_exposes_blockwright_tools_only() {
         let tools = tools_list_result();
         let encoded = tools.to_string();
 

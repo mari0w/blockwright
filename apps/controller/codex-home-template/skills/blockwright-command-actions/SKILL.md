@@ -1,11 +1,11 @@
 ---
 name: "blockwright-command-actions"
-description: "Use for Blockwright non-building Minecraft actions such as giving items, changing time or weather, changing gamemode, effects, enchantments, teleport, spawnpoint, and other safe command actions."
+description: "Use for Blockwright non-building Minecraft actions such as giving items, equipping armor, changing time or weather, changing gamemode, effects, enchantments, teleport, spawnpoint, and other Minecraft command actions."
 ---
 
 # Blockwright Command Actions
 
-Use this skill for requests that can be completed with a safe Minecraft action rather than a blueprint.
+Use this skill for requests that can be completed with an item action or a Minecraft command rather than a blueprint.
 
 ## Allowed Action Types
 
@@ -34,11 +34,10 @@ Use this skill for requests that can be completed with a safe Minecraft action r
 ## Command Rules
 
 1. Prefer `give_item` for item requests.
-2. Prefer `run_command` for time, weather, gamemode, effects, enchantments, teleport, spawnpoint, difficulty, gamerule, experience, and summon requests.
-3. Do not emit dangerous commands such as `op`, `deop`, `stop`, `reload`, `ban`, `kick`, `whitelist`, `save-all`, `execute`, `fill`, `setblock`, `data`, or `function`.
-4. Do not include a leading `/` in `run_command`.
-5. Use the player name when the command needs a target.
-6. Use full Minecraft namespaced item IDs.
+2. Prefer `run_command` for any explicit Minecraft command operation, including time, weather, gamemode, effects, enchantments, teleport, spawnpoint, difficulty, gamerule, experience, summon, armor equip, op, execute, fill, setblock, item, data, function, reload, stop, and other Minecraft commands.
+3. A leading `/` is accepted but not required; the execution plugin strips it before dispatch.
+4. Use the player name when the command needs a target.
+5. Use full Minecraft namespaced item IDs.
 
 ## State And Query Contract
 
@@ -47,7 +46,7 @@ Use this skill for requests that can be completed with a safe Minecraft action r
 - If the player asks about saved blueprints or prior builds, use the blueprint/build MCP tools instead of guessing from conversation text.
 - If the player asks for an item and you are calling MCP directly, use `blockwright_give_item`. If you are returning controller protocol JSON, emit a `give_item` action.
 - If the player asks to set or place explicit blocks at known coordinates and you are calling MCP directly, use `blockwright_place_blocks`.
-- If the player asks for a safe Minecraft command operation and you are calling MCP directly, use `blockwright_run_command`.
+- If the player asks for a Minecraft command operation and you are calling MCP directly, use `blockwright_run_command`.
 - If you already know the exact controlled action data, use `blockwright_enqueue_actions` instead of wrapping it in another natural-language request.
 - Reading player state or nearby blocks is a tool query, not a building operation and not an item delivery action.
 

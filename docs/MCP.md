@@ -2,9 +2,9 @@
 
 Blockwright MCP 是 controller 的可选 stdio 入口，用来让 Codex、机器人或其他 MCP 客户端以“普通 Minecraft 助手”的方式调用 Blockwright。
 
-MCP 是基础工具面：读取玩家状态、读取手持物和物品栏、扫描附近方块、给物品、放方块、执行安全命令、保存/删除蓝图、搜索构建记录、入队受控动作。AI 负责聊天、判断、调用工具和使用 skills；controller 只做工具运行时、协议校验、任务队列和安全边界。
+MCP 是基础工具面：读取玩家状态、读取手持物和物品栏、扫描附近方块、给物品、放方块、执行 Minecraft 命令、保存/删除蓝图、搜索构建记录、入队受控动作。AI 负责聊天、判断、调用工具和使用 skills；controller 只做工具运行时、协议校验、任务队列和执行边界。
 
-它仍然不是裸 Minecraft API MCP。不要通过 MCP 暴露 `setBlock`、`fill`、任意命令或背包模拟操作。真正改世界仍然走 Fabric/Paper 执行端、构建记录和逐块校验。
+它仍然不是裸 Minecraft API MCP。不要通过 MCP 暴露背包模拟操作；Minecraft 命令统一走 `run_command`，建筑改世界仍然走 Fabric/Paper 执行端、构建记录和逐块校验。
 
 ## 启动
 
@@ -26,7 +26,7 @@ MCP 可以做：
 - 让 AI 用自然语言请求 Blockwright 规划动作。
 - 读取在线玩家的主手、副手、快捷栏和物品栏快照。
 - 按半径扫描玩家附近非空气方块。
-- 直接给物品、放置明确方块、执行安全命令或发送聊天。
+- 直接给物品、放置明确方块、执行 Minecraft 命令或发送聊天。
 - dry-run 返回计划。
 - `execute=true` 时把受控动作入队给 Minecraft 执行端。
 - 查询、保存和删除蓝图。
@@ -36,8 +36,6 @@ MCP 可以做：
 
 MCP 不做：
 
-- 不直接调用 Minecraft `setBlock` / `fill`。
-- 不暴露任意服务端命令。
 - 不模拟玩家翻背包、选物品、右键放置。
 - 不绕过 controller 的构建记录和执行端校验。
 
@@ -116,7 +114,7 @@ MCP 不做：
 
 - `blockwright_give_item`：发放物品，并要求执行端把物品切到玩家主手可见的快捷栏。
 - `blockwright_place_blocks`：把明确方块列表放到指定 `origin`，controller 会保存构建记录，执行端会逐块校验。
-- `blockwright_run_command`：执行安全白名单内的 Minecraft 指令。
+- `blockwright_run_command`：执行 Minecraft 指令，不做命令白名单限制。
 - `blockwright_send_chat`：向 Minecraft 发送聊天消息。
 
 ### `blockwright_validate_blueprint`

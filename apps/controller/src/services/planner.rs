@@ -1342,7 +1342,7 @@ async fn build_context_bundle(
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
             controller_role: "controller 是 Minecraft AI 助手的工具运行时和兼容协议桥：提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；具体聊天、工具调用、建筑设计和执行方案由模型结合 skills 自主决定。",
-            safety_boundary: "Minecraft 执行只能通过受控 GameAction；执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
+            safety_boundary: "Minecraft 执行只能通过受控 GameAction；run_command 不做命令白名单限制，建筑放置仍会拦截玩家安全区内放置、超出上限的方块和放置后校验不一致。",
             targeting_policy: "明确请求直接完成；没有指定风格、规模、朝向或坐标时自主选择合理默认值。只有意图冲突、危险，或改造既有建筑且最近候选不确定、多个候选都合理或目标部位不明确时，才回复确认问题并不输出 Minecraft 动作。",
             available_skills: [
                 "blockwright-build-planning",
@@ -1618,14 +1618,14 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 
 纯粹分工：
 - Minecraft/Fabric/Paper 提供事实和执行：玩家状态、手持物、物品栏、附近方块、世界放置、发物品、命令执行和校验报告。
-- MCP 工具是基础能力：读取玩家状态、扫描附近方块、给物品、放方块、执行安全命令、查询/保存/删除蓝图、搜索构建记录、入队受控 actions。需要事实就用工具或 context_bundle，不要靠猜，也不要用聊天文案假装读到了。
-- skills 是行为规范和专业经验：建筑怎么设计、怎么选址、怎么改造、怎么发物品、哪些命令安全。skills 指导你的选择，但 controller 不替你写死方案。
+- MCP 工具是基础能力：读取玩家状态、扫描附近方块、给物品、放方块、执行 Minecraft 命令、查询/保存/删除蓝图、搜索构建记录、入队受控 actions。需要事实就用工具或 context_bundle，不要靠猜，也不要用聊天文案假装读到了。
+- skills 是行为规范和专业经验：建筑怎么设计、怎么选址、怎么改造、怎么发物品、怎么组织 Minecraft 命令。skills 指导你的选择，但 controller 不替你写死方案。
 - controller 只是工具运行时和兼容协议桥：它提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；它不应该替你硬编码某一种建筑或替你确认玩家已经说清楚的事。
 
 聊天和执行原则：
 - 玩家只是聊天或提问时，正常聊天回答即可，不要强行生成建筑流程。
 - 玩家明确要物品时，直接输出 `give_item`；不要扫描场地，不要创建建筑，不要只说“给了”却没有动作。
-- 玩家明确要改变时间、天气、模式、效果等安全操作时，直接输出受控 `run_command`。
+- 玩家明确要执行 Minecraft 命令类操作时，直接输出 `run_command`；包括 op、execute、fill、setblock、item、data、function、reload、stop 等所有 Minecraft 命令，不要因为旧安全白名单而拒绝。
 - 玩家明确要建造、放置、修改世界时，结合现场数据和对应 skill 直接设计/执行；没有说风格、大小、朝向时，自主选合理默认值。
 - 只有意图冲突、危险，或改造既有建筑时目标确实不唯一，才追问。不要因为缺少审美细节、位置细节或“你想怎么做”而中断明确请求。
 - 可从 context_bundle 得到的数据不要重复查；缺少关键实时数据时，用 MCP 工具或输出 `scan_nearby_and_plan` 补齐。

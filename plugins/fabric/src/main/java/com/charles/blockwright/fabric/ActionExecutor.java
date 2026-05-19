@@ -211,16 +211,23 @@ public final class ActionExecutor {
     }
 
     private void runCommand(JsonModels.GameAction action, ServerPlayerEntity defaultPlayer) {
-        String command = CommandPolicy.normalize(action.command);
-        if (!CommandPolicy.isAllowed(command)) {
-            throw new IllegalArgumentException("不允许执行的 Minecraft 指令：" + action.command);
-        }
-
+        String command = normalizeCommand(action.command);
         ServerCommandSource source = defaultPlayer.getCommandSource()
                 .withLevel(4)
                 .withSilent();
         server.getCommandManager().executeWithPrefix(source, "/" + command);
         defaultPlayer.sendMessage(Text.literal("Blockwright 已执行指令：/" + command), false);
+    }
+
+    private String normalizeCommand(String command) {
+        if (command == null) {
+            return "";
+        }
+        String normalized = command.trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1).trim();
+        }
+        return normalized;
     }
 
     private JsonModels.ActionExecutionReport placeBlocks(

@@ -245,7 +245,7 @@ Blockwright 也提供可选 MCP stdio 入口，让 Codex 或其他 MCP 客户端
 cargo run -p blockwright-controller -- mcp
 ```
 
-MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它还提供读取类工具，用来获取玩家主手/物品栏、扫描附近方块、查询蓝图和构建记录。它不暴露裸 `setBlock`、`fill` 或任意命令，仍然走 controller、构建记录和 Fabric/Paper 校验链路。
+MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它还提供读取类工具，用来获取玩家主手/物品栏、扫描附近方块、查询蓝图和构建记录。Minecraft 命令统一通过 `run_command` 透传给 Fabric/Paper 执行端。
 
 详细说明见 [docs/MCP.md](docs/MCP.md)。
 
@@ -286,7 +286,7 @@ cd plugins/paper && gradle test
 - Minecraft 执行逻辑只放在 `plugins/fabric` 和 `plugins/paper`。
 - 外部机器人、Codex CLI、图片分析和任务队列只放在 `apps/controller`。
 - 建筑执行必须走服务端世界方块 API，不模拟玩家翻背包、选物品或右键放置。
-- 普通游戏命令走 `run_command`，执行端再做命令白名单校验。
+- 普通游戏命令走 `run_command`，执行端不做命令白名单限制。
 - 本地密钥和聊天工具凭证只放在未追踪配置或环境变量中。
 
 安全报告流程见 [SECURITY.md](SECURITY.md)。
