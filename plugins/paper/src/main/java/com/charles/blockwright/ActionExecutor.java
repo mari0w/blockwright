@@ -1,6 +1,7 @@
 package com.charles.blockwright;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import org.bukkit.Bukkit;
@@ -11,8 +12,11 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
 public final class ActionExecutor {
+    private static final int HOTBAR_SIZE = 9;
+    private static final int PLAYER_STORAGE_SIZE = 36;
     private static final int MAX_REPORTED_MISMATCHES = 20;
 
     private final BlockwrightPlugin plugin;
@@ -47,6 +51,10 @@ public final class ActionExecutor {
                     sendChat(action, defaultPlayer);
                     report.actions.add(nonBlockReport("chat"));
                 }
+                case "run_command" -> {
+                    runCommand(action, defaultPlayer);
+                    report.actions.add(nonBlockReport("run_command"));
+                }
                 default -> {
                     plugin.getLogger().warning("unknown action type: " + action.type);
                     report.actions.add(nonBlockReport(action.type));
@@ -66,8 +74,133 @@ public final class ActionExecutor {
 
         Material material = itemMaterialFromId(action.item);
         int count = Math.max(action.count, 1);
-        player.getInventory().addItem(new ItemStack(material, count));
-        player.sendMessage("Blockwright 已发放：" + material.getKey().asString() + " x " + count);
+        int heldSlot = putItemInMainHand(player, material, count);
+        player.updateInventory();
+        player.sendMessage(
+                "Blockwright 已发放并切到手上：" + material.getKey().asString() + " x " + count
+                        + "（快捷栏 " + (heldSlot + 1) + "）");
+    }
+
+    private int putItemInMainHand(Player player, Material material, int count) {
+        PlayerInventory inventory = player.getInventory();
+        ItemStack handStack = new ItemStack(material, Math.min(count, material.getMaxStackSize()));
+        int selectedSlot = inventory.getHeldItemSlot();
+        int firstStackableHotbarSlot = findStackableHotbarSlot(inventory, handStack);
+        int firstEmptyHotbarSlot = findEmptyHotbarSlot(inventory);
+        int firstEmptyStorageSlot = findEmptyStorageSlot(inventory);
+        int targetSlot = chooseHandSlot(
+                selectedSlot,
+                canSlotAcceptMore(inventory.getItem(selectedSlot), handStack),
+                firstStackableHotbarSlot,
+                firstEmptyHotbarSlot,
+                firstEmptyStorageSlot);
+
+        ItemStack targetStack = inventory.getItem(targetSlot);
+        if (targetSlot == selectedSlot
+                && !isEmpty(targetStack)
+                && !canSlotAcceptMore(targetStack, handStack)) {
+            // 必须优先让新物品到手上；背包也满时，把旧手持物安全掉在玩家脚边。
+            if (firstEmptyStorageSlot >= HOTBAR_SIZE) {
+                inventory.setItem(firstEmptyStorageSlot, targetStack.clone());
+            } else {
+                player.getWorld().dropItemNaturally(player.getLocation(), targetStack.clone());
+            }
+            inventory.setItem(selectedSlot, null);
+        }
+
+        int heldCount = moveIntoSlot(inventory, targetSlot, handStack);
+        inventory.setHeldItemSlot(targetSlot);
+        insertRemaining(player, inventory, material, count - heldCount);
+        return targetSlot;
+    }
+
+    static int chooseHandSlot(
+            int selectedSlot,
+            boolean selectedCanAccept,
+            int firstStackableHotbarSlot,
+            int firstEmptyHotbarSlot,
+            int firstEmptyStorageSlot) {
+        if (selectedCanAccept && isHotbarSlot(selectedSlot)) {
+            return selectedSlot;
+        }
+        if (isHotbarSlot(firstStackableHotbarSlot)) {
+            return firstStackableHotbarSlot;
+        }
+        if (isHotbarSlot(firstEmptyHotbarSlot)) {
+            return firstEmptyHotbarSlot;
+        }
+        if (isHotbarSlot(selectedSlot)) {
+            return selectedSlot;
+        }
+        return 0;
+    }
+
+    private static boolean isHotbarSlot(int slot) {
+        return slot >= 0 && slot < HOTBAR_SIZE;
+    }
+
+    private int findStackableHotbarSlot(PlayerInventory inventory, ItemStack stack) {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (canSlotAcceptMore(inventory.getItem(slot), stack)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int findEmptyHotbarSlot(PlayerInventory inventory) {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (isEmpty(inventory.getItem(slot))) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int findEmptyStorageSlot(PlayerInventory inventory) {
+        for (int slot = HOTBAR_SIZE; slot < PLAYER_STORAGE_SIZE; slot++) {
+            if (isEmpty(inventory.getItem(slot))) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private boolean canSlotAcceptMore(ItemStack current, ItemStack stack) {
+        return !isEmpty(current)
+                && current.isSimilar(stack)
+                && current.getAmount() < current.getMaxStackSize();
+    }
+
+    private boolean isEmpty(ItemStack stack) {
+        return stack == null || stack.getType().isAir() || stack.getAmount() <= 0;
+    }
+
+    private int moveIntoSlot(PlayerInventory inventory, int slot, ItemStack stack) {
+        ItemStack current = inventory.getItem(slot);
+        if (isEmpty(current)) {
+            inventory.setItem(slot, stack);
+            return stack.getAmount();
+        }
+
+        int moved = Math.min(stack.getAmount(), current.getMaxStackSize() - current.getAmount());
+        current.setAmount(current.getAmount() + moved);
+        inventory.setItem(slot, current);
+        return moved;
+    }
+
+    private void insertRemaining(Player player, PlayerInventory inventory, Material material, int count) {
+        int remaining = count;
+        while (remaining > 0) {
+            int chunk = Math.min(remaining, material.getMaxStackSize());
+            HashMap<Integer, ItemStack> leftovers = inventory.addItem(new ItemStack(material, chunk));
+            for (ItemStack leftover : leftovers.values()) {
+                if (!isEmpty(leftover)) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+                }
+            }
+            remaining -= chunk;
+        }
     }
 
     private JsonModels.ActionExecutionReport placeBlocks(JsonModels.GameAction action, Location fallbackOrigin) {
@@ -170,6 +303,19 @@ public final class ActionExecutor {
             player.sendMessage(action.message);
         } else {
             Bukkit.broadcastMessage(action.message);
+        }
+    }
+
+    private void runCommand(JsonModels.GameAction action, String defaultPlayer) {
+        String command = CommandPolicy.normalize(action.command);
+        if (!CommandPolicy.isAllowed(command)) {
+            throw new IllegalArgumentException("不允许执行的 Minecraft 指令：" + action.command);
+        }
+
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        Player player = defaultPlayer == null ? null : Bukkit.getPlayerExact(defaultPlayer);
+        if (player != null) {
+            player.sendMessage("Blockwright 已执行指令：/" + command);
         }
     }
 

@@ -48,6 +48,9 @@ public final class JobPoller {
         JsonModels.JobExecutionReport report = null;
 
         try {
+            if (executeLiveQueryJob(job)) {
+                return;
+            }
             Location origin = defaultOrigin(job.targetPlayer);
             report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
             ok = report.isOk();
@@ -66,6 +69,65 @@ public final class JobPoller {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 controllerClient.sendJobResult(job.id, resultOk, resultMessage, resultReport);
+            } catch (Exception error) {
+                plugin.getLogger().warning("send job result failed: " + error.getMessage());
+            }
+        });
+    }
+
+    private boolean executeLiveQueryJob(JsonModels.GameJob job) {
+        JsonModels.GameAction stateAction = firstAction(job.actions, "get_player_state");
+        if (stateAction != null) {
+            Player player = resolveTargetPlayer(job.targetPlayer);
+            JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
+            result.ok = player != null;
+            result.message = player == null ? "没有在线玩家可执行查询" : "ok";
+            if (player != null) {
+                result.playerState = JsonModels.PlayerState.fromPlayer(player);
+            }
+            sendJobResultAsync(job.id, result);
+            return true;
+        }
+
+        JsonModels.GameAction scanAction = firstAction(job.actions, "scan_nearby");
+        if (scanAction != null) {
+            Player player = resolveTargetPlayer(job.targetPlayer);
+            JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
+            result.ok = player != null;
+            result.message = player == null ? "没有在线玩家可执行扫描" : "ok";
+            if (player != null) {
+                result.nearbyScan = WorldScanner.scan(player, scanAction.radius);
+            }
+            sendJobResultAsync(job.id, result);
+            return true;
+        }
+
+        return false;
+    }
+
+    private JsonModels.GameAction firstAction(java.util.List<JsonModels.GameAction> actions, String type) {
+        if (actions == null) {
+            return null;
+        }
+        for (JsonModels.GameAction action : actions) {
+            if (action != null && type.equals(action.type)) {
+                return action;
+            }
+        }
+        return null;
+    }
+
+    private Player resolveTargetPlayer(String targetPlayer) {
+        if (targetPlayer != null && !targetPlayer.isBlank()) {
+            return plugin.getServer().getPlayerExact(targetPlayer);
+        }
+        return plugin.getServer().getOnlinePlayers().stream().findFirst().orElse(null);
+    }
+
+    private void sendJobResultAsync(String jobId, JsonModels.JobResultRequest result) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                controllerClient.sendJobResult(jobId, result);
             } catch (Exception error) {
                 plugin.getLogger().warning("send job result failed: " + error.getMessage());
             }

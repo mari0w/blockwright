@@ -40,6 +40,25 @@ impl BuildStore {
         records
     }
 
+    pub async fn delete(&self, id: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let safe = safe_id(id);
+        if id.is_empty() || safe != id {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "构建记录 ID 只能使用英文字母、数字、横线和下划线",
+            )
+            .into());
+        }
+
+        let removed = self.items.write().await.remove(id).is_some();
+        let file_path = self.data_dir.join(format!("{safe}.json"));
+        match tokio::fs::remove_file(file_path).await {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(removed),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     pub async fn register_planned(
         &self,
         id: String,
@@ -297,6 +316,8 @@ mod tests {
                             }],
                         }],
                     }),
+                    player_state: None,
+                    nearby_scan: None,
                 },
             )
             .await
@@ -327,6 +348,8 @@ mod tests {
                     ok: true,
                     message: Some("ok".to_string()),
                     report: None,
+                    player_state: None,
+                    nearby_scan: None,
                 },
             )
             .await
@@ -334,5 +357,27 @@ mod tests {
             .unwrap();
 
         assert_eq!(updated.status, BuildStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn deletes_build_record_from_memory_and_disk() {
+        let data_dir = temp_dir("delete");
+        let store = BuildStore::new(data_dir.clone()).await.unwrap();
+        store
+            .register_planned(
+                "hm-job-1".to_string(),
+                "hmcl-lan".to_string(),
+                Some("Steve".to_string()),
+                "建造测试".to_string(),
+                &[place_action()],
+            )
+            .await
+            .unwrap();
+
+        assert!(store.delete("hm-job-1").await.unwrap());
+        assert!(store.get("hm-job-1").await.is_none());
+
+        let reloaded = BuildStore::new(data_dir).await.unwrap();
+        assert!(reloaded.get("hm-job-1").await.is_none());
     }
 }

@@ -60,6 +60,7 @@ public final class ControllerClient {
         request.player = player.getName();
         request.text = text;
         request.position = JsonModels.PlayerPosition.fromLocation(location);
+        request.playerState = JsonModels.PlayerState.fromPlayer(player);
         request.progressId = "paper-" + UUID.randomUUID();
 
         HttpRequest httpRequest = baseRequest(ControllerPaths.minecraftMessagePath())
@@ -146,7 +147,11 @@ public final class ControllerClient {
         request.ok = ok;
         request.message = message;
         request.report = report;
+        sendJobResult(jobId, request);
+    }
 
+    public void sendJobResult(String jobId, JsonModels.JobResultRequest request)
+            throws IOException, InterruptedException {
         HttpRequest httpRequest = baseRequest(ControllerPaths.jobResultPath(jobId))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(request)))
                 .build();

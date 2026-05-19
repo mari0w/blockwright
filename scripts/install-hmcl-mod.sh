@@ -3,16 +3,64 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if [[ $# -ne 1 ]]; then
-  echo "用法：./scripts/install-hmcl-mod.sh <HMCL 当前游戏目录>"
+detect_running_game_dir() {
+  ps -axo command= \
+    | awk '
+      /--gameDir/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i == "--gameDir" && (i + 1) <= NF) {
+            print $(i + 1)
+            exit
+          }
+          if ($i ~ /^--gameDir=/) {
+            sub(/^--gameDir=/, "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    '
+}
+
+detect_game_dir() {
+  local running_dir
+  running_dir="$(detect_running_game_dir || true)"
+  if [[ -n "$running_dir" ]]; then
+    echo "$running_dir"
+    return
+  fi
+
+  if [[ -d /Applications/.minecraft ]]; then
+    echo "/Applications/.minecraft"
+    return
+  fi
+
+  if [[ -d "$HOME/.minecraft" ]]; then
+    echo "$HOME/.minecraft"
+    return
+  fi
+
+  echo "$HOME/.minecraft"
+}
+
+if [[ $# -gt 1 ]]; then
+  echo "用法：./scripts/install-hmcl-mod.sh [HMCL 当前游戏目录|auto]" >&2
   echo
   echo "例子："
+  echo "./scripts/install-hmcl-mod.sh"
+  echo "./scripts/install-hmcl-mod.sh auto"
   echo "./scripts/install-hmcl-mod.sh ~/.minecraft"
-  echo "./scripts/install-hmcl-mod.sh ~/HMCL/.minecraft/versions/1.21.8-fabric"
+  echo "./scripts/install-hmcl-mod.sh /Applications/.minecraft"
   exit 1
 fi
 
-GAME_DIR="${1/#\~/$HOME}"
+GAME_DIR="${1:-auto}"
+if [[ "$GAME_DIR" == "auto" || "$GAME_DIR" == "" ]]; then
+  GAME_DIR="$(detect_game_dir)"
+  echo "已自动识别 HMCL 当前游戏目录：$GAME_DIR"
+else
+  GAME_DIR="${GAME_DIR/#\~/$HOME}"
+fi
 MODS_DIR="$GAME_DIR/mods"
 JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-0.1.3.jar"
 
@@ -25,6 +73,7 @@ if [[ ! -f "$JAR_PATH" ]]; then
 fi
 
 mkdir -p "$MODS_DIR"
+echo "正在清理旧版 Blockwright Fabric 模组：$MODS_DIR/blockwright-fabric-*.jar"
 find "$MODS_DIR" -maxdepth 1 -type f -name 'blockwright-fabric-*.jar' -delete
 install -m 0644 "$JAR_PATH" "$MODS_DIR/"
 

@@ -1,7 +1,7 @@
 use crate::{
     domain::types::{
         BlockOrigin, Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, GameAction,
-        MaterialCount, PlayerPosition, WorldScan, WorldScanBlock,
+        MaterialCount, PlayerPosition, PlayerState, WorldScan, WorldScanBlock,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
     services::{blueprint_store::BlueprintStore, build_store::BuildStore},
@@ -22,6 +22,7 @@ pub struct PlannerInput {
     pub player: Option<String>,
     pub codex_session_key: Option<String>,
     pub position: Option<PlayerPosition>,
+    pub player_state: Option<PlayerState>,
     pub nearby_scan: Option<WorldScan>,
     pub attachments: Vec<ChatAttachment>,
     pub progress_id: Option<String>,
@@ -58,6 +59,7 @@ struct PlanContextBundle {
     user_text: String,
     attachments: Vec<ChatAttachment>,
     position: Option<PlayerPosition>,
+    player_state: Option<PlayerState>,
     site: SiteContextBundle,
     available_blueprints: Vec<BlueprintContext>,
     recent_builds: Vec<BuildRecordContext>,
@@ -142,6 +144,7 @@ struct PlanProtocolContext {
     targeting_policy: &'static str,
     available_skills: [&'static str; 6],
     available_actions: [&'static str; 5],
+    available_mcp_tools: Vec<&'static str>,
 }
 
 #[derive(Clone)]
@@ -196,9 +199,9 @@ impl Planner {
         }
 
         PlanResult {
-            reply: "我这次没有整理出可靠的下一步。你可以直接说想聊方案、要我先看附近场地，或者告诉我准备建什么、改什么。"
+            reply: "AI 这次没有生成可靠的操作结果，任务没有发送到 Minecraft。请直接重说要做什么，我会按能读取到的世界数据继续处理。"
                 .to_string(),
-            summary: "继续确认需求".to_string(),
+            summary: "AI 未生成可靠操作".to_string(),
             actions: Vec::new(),
         }
     }
@@ -244,7 +247,10 @@ impl Planner {
             .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::Plan,
-                input.codex_session_key.as_deref(),
+                // Planner prompt already carries the full context_bundle. Reusing old Codex
+                // threads makes game commands slower and can pollute the next build with stale
+                // JSON or prior failed examples, so each planning turn is intentionally fresh.
+                None,
                 input.progress_id.as_deref(),
             )
             .await
@@ -266,11 +272,14 @@ impl Planner {
             "codex plan response received; parsing json"
         );
 
-        let plan = match parse_plan_response(&output) {
+        let plan = match parse_plan_response_for_input(&output, &input.text) {
             Some(plan) => plan,
             None => {
                 tracing::warn!("codex unified planning returned invalid json");
-                return None;
+                match repair_invalid_codex_plan(codex, input, &context, &output).await {
+                    Some(plan) => plan,
+                    None => return Some(invalid_codex_plan_fallback(input).await),
+                }
             }
         };
         let mut actions = plan.actions;
@@ -382,6 +391,8 @@ fn action_type_name(action: &GameAction) -> &'static str {
         GameAction::RunCommand { .. } => "run_command",
         GameAction::Chat { .. } => "chat",
         GameAction::ScanNearbyAndPlan { .. } => "scan_nearby_and_plan",
+        GameAction::GetPlayerState { .. } => "get_player_state",
+        GameAction::ScanNearby { .. } => "scan_nearby",
     }
 }
 
@@ -1316,6 +1327,7 @@ async fn build_context_bundle(
         user_text: input.text.trim().to_string(),
         attachments: input.attachments.clone(),
         position: input.position.clone(),
+        player_state: input.player_state.clone(),
         site: build_site_context(input),
         available_blueprints: if history_policy.include_blueprints {
             blueprint_contexts(blueprints).await
@@ -1329,9 +1341,9 @@ async fn build_context_bundle(
         },
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
-            controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。优先使用已有上下文与 skills，只有在确实缺数据且 MCP 工具能直接补齐时才发起 MCP。",
-            safety_boundary: "执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
-            targeting_policy: "建筑或改造需求先看离玩家位置最近的候选；没有玩家位置时看扫描中心最近候选。最近候选不确定、多个候选都合理或目标部位不明确时，只回复确认问题，不输出 Minecraft 动作。",
+            controller_role: "controller 是 Minecraft AI 助手的工具运行时和兼容协议桥：提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；具体聊天、工具调用、建筑设计和执行方案由模型结合 skills 自主决定。",
+            safety_boundary: "Minecraft 执行只能通过受控 GameAction；执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
+            targeting_policy: "明确请求直接完成；没有指定风格、规模、朝向或坐标时自主选择合理默认值。只有意图冲突、危险，或改造既有建筑且最近候选不确定、多个候选都合理或目标部位不明确时，才回复确认问题并不输出 Minecraft 动作。",
             available_skills: [
                 "blockwright-build-planning",
                 "blockwright-site-selection",
@@ -1346,6 +1358,23 @@ async fn build_context_bundle(
                 "run_command",
                 "chat",
                 "scan_nearby_and_plan",
+            ],
+            available_mcp_tools: vec![
+                "blockwright_get_player_state",
+                "blockwright_scan_nearby_blocks",
+                "blockwright_give_item",
+                "blockwright_place_blocks",
+                "blockwright_run_command",
+                "blockwright_send_chat",
+                "blockwright_list_blueprints",
+                "blockwright_get_blueprint",
+                "blockwright_save_blueprint",
+                "blockwright_delete_blueprint",
+                "blockwright_list_builds",
+                "blockwright_get_build",
+                "blockwright_delete_build",
+                "blockwright_search_builds_nearby",
+                "blockwright_enqueue_actions",
             ],
         },
     }
@@ -1585,29 +1614,39 @@ fn round_distance(value: f64) -> f64 {
 fn render_plan_prompt(context: &PlanContextBundle) -> String {
     let context_json = serde_json::to_string_pretty(context).unwrap_or_else(|_| "{}".to_string());
     format!(
-        r#"你是 Blockwright 的 Minecraft AI 助手。你负责理解玩家意图、选择工作流、设计蓝图或动作，并根据可用 skills 自主决定怎么完成。
+        r#"你是 Blockwright 的 Minecraft AI 助手。你不是固定建筑规划器，也不是进度播报器；你像普通聊天助手一样理解玩家的话，然后用 Minecraft MCP 工具和 skills 去读取数据、保存数据、执行动作或回复聊天。
 
-工作原则：先消费 context_bundle 里的基础数据源（位置、扫描、历史构建、蓝图、附件），再组合可用 skills 形成闭环方案；缺数据时主动用 scan_nearby_and_plan 或确认问题补齐。
-- 能直接从 context_bundle 得到的数据，不要再走 MCP 工具重复获取；只有缺关键信息且 MCP 能低成本补齐时才调用。
-- available_blueprints 和 recent_builds 只会在本轮确实可能复用蓝图、匹配或改造既有建筑时预加载；为空不代表没有历史，只代表本轮不需要把历史硬塞进上下文。
-- 适合稳定流程复用的步骤交给 skills，适合一次性读写或查询的动作交给工具；不要把简单查询强行包装成复杂 workflow。
+纯粹分工：
+- Minecraft/Fabric/Paper 提供事实和执行：玩家状态、手持物、物品栏、附近方块、世界放置、发物品、命令执行和校验报告。
+- MCP 工具是基础能力：读取玩家状态、扫描附近方块、给物品、放方块、执行安全命令、查询/保存/删除蓝图、搜索构建记录、入队受控 actions。需要事实就用工具或 context_bundle，不要靠猜，也不要用聊天文案假装读到了。
+- skills 是行为规范和专业经验：建筑怎么设计、怎么选址、怎么改造、怎么发物品、哪些命令安全。skills 指导你的选择，但 controller 不替你写死方案。
+- controller 只是工具运行时和兼容协议桥：它提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；它不应该替你硬编码某一种建筑或替你确认玩家已经说清楚的事。
 
-controller 的角色只是提供基础数据源、保存蓝图、校验协议和执行安全边界；不要把它当成会替你做规划判断的规则引擎。建筑规范、场地策略、图片复刻、改造和安全命令规则都优先按可用 skills 执行。
+聊天和执行原则：
+- 玩家只是聊天或提问时，正常聊天回答即可，不要强行生成建筑流程。
+- 玩家明确要物品时，直接输出 `give_item`；不要扫描场地，不要创建建筑，不要只说“给了”却没有动作。
+- 玩家明确要改变时间、天气、模式、效果等安全操作时，直接输出受控 `run_command`。
+- 玩家明确要建造、放置、修改世界时，结合现场数据和对应 skill 直接设计/执行；没有说风格、大小、朝向时，自主选合理默认值。
+- 只有意图冲突、危险，或改造既有建筑时目标确实不唯一，才追问。不要因为缺少审美细节、位置细节或“你想怎么做”而中断明确请求。
+- 可从 context_bundle 得到的数据不要重复查；缺少关键实时数据时，用 MCP 工具或输出 `scan_nearby_and_plan` 补齐。
 
-让流程丝滑：
-- 同一轮尽量给出可执行下一步；能落地就输出动作，不能落地就只问最关键的一个澄清问题。
-- 优先复用 available_blueprints 和 recent_builds 的摘要、材料和方块样本，避免无谓重画；如果改造旧建筑需要完整细节而样本不够，先输出 scan_nearby_and_plan 获取现场。
-- 需要改造既有建筑时，必须先基于 nearby_scan + recent_builds 做匹配；匹配不唯一就追问，不要直接施工。
-- 玩家提到“按图生成”时，优先走 image-to-blueprint 能力；玩家提到“修改/扩建/换材质”时，优先走 existing-build-edit 能力。
+建筑只是一种 skill 场景：
+- 一个完整建筑对应一个 blueprint 对象和保存后的蓝图文件；blocks 使用相对坐标，materials/count 必须一致。
+- 设计自由交给模型和 skills。已有蓝图是可复用资料，不是限制；现场地形、玩家视角、主题和可玩性都可以影响最终设计。
+- 新建建筑优先让玩家在面前看得到、进得去，但可以根据水、坡、树、空地、遮挡等现场条件微调。
+- 改造既有建筑时，先用 nearby_scan、玩家位置和构建记录匹配目标；多个候选都合理或部位不明确时才问。
 
-输出协议很薄：
+输出协议只是当前 controller 兼容层：
 - 只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。
 - reply 给玩家看，保持自然、简洁，不暴露 JSON、schema、planner、Codex、队列等内部细节。
 - 如果只是聊天、解释或需要追问，blueprint=null，site_plan=null，actions=[]。
 - 如果输出 blueprint，尽量同时输出 site_plan 来表达你选择的落点、清理、地基或场地融合意图；如果暂时缺少坐标，可以让 site_plan.origin=null。
+- 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
+- blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
+- 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
 - 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图与校验语义上保持一致。
 - 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
-- 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan。
+- 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan，动作形状必须是 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}，不要加 player、radius、purpose 等字段。
 - Minecraft 方块 material 使用命名空间 ID，可带方块状态；蓝图 blocks 使用相对坐标。
 
 context_bundle 是本轮可用的数据源：
@@ -1753,13 +1792,282 @@ fn scan_columns(input: &PlannerInput, scan: &WorldScan) -> Vec<ScanColumn> {
     columns
 }
 
+#[cfg(test)]
 fn parse_plan_response(output: &str) -> Option<CodexPlan> {
-    let json = extract_json_object(output.trim())?;
-    let value = serde_json::from_str::<serde_json::Value>(json).ok()?;
-    if !has_required_plan_protocol_fields(&value) {
-        return None;
+    parse_plan_response_for_input(output, "")
+}
+
+fn parse_plan_response_for_input(output: &str, fallback_text: &str) -> Option<CodexPlan> {
+    for json in extract_json_object_candidates(output.trim()) {
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(json) else {
+            continue;
+        };
+        normalize_top_level_plan_shape(&mut value, fallback_text);
+        normalize_plan_value(&mut value, fallback_text);
+        if !has_required_plan_protocol_fields(&value) {
+            continue;
+        }
+        if let Ok(plan) = serde_json::from_value(value) {
+            return Some(plan);
+        }
     }
-    serde_json::from_value(value).ok()
+
+    None
+}
+
+fn normalize_top_level_plan_shape(value: &mut serde_json::Value, fallback_text: &str) {
+    if is_standalone_blueprint_object(value) {
+        let blueprint = std::mem::replace(value, serde_json::Value::Null);
+        *value = serde_json::json!({
+            "reply": "开始建造。",
+            "summary": format!("建造蓝图 {}", blueprint.get("id").and_then(serde_json::Value::as_str).unwrap_or("generated_build")),
+            "blueprint": blueprint,
+            "site_plan": null,
+            "actions": []
+        });
+        return;
+    }
+
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    let looks_like_plan = ["reply", "summary", "blueprint", "site_plan", "actions"]
+        .iter()
+        .any(|field| object.contains_key(*field));
+    if !looks_like_plan {
+        return;
+    }
+
+    if !object.contains_key("reply") {
+        let reply = object
+            .get("summary")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("开始处理。");
+        object.insert(
+            "reply".to_string(),
+            serde_json::Value::String(reply.to_string()),
+        );
+    }
+    if !object.contains_key("summary") {
+        let summary = object
+            .get("reply")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(fallback_text)
+            .trim();
+        object.insert(
+            "summary".to_string(),
+            serde_json::Value::String(if summary.is_empty() {
+                "执行玩家请求".to_string()
+            } else {
+                summary.to_string()
+            }),
+        );
+    }
+    object.entry("blueprint").or_insert(serde_json::Value::Null);
+    object.entry("site_plan").or_insert(serde_json::Value::Null);
+    object
+        .entry("actions")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+}
+
+fn is_standalone_blueprint_object(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object.contains_key("id")
+        && object.contains_key("name")
+        && (object.contains_key("blocks") || object.contains_key("block_list"))
+        && (object.contains_key("size")
+            || object.contains_key("dimensions")
+            || object.contains_key("dimension"))
+}
+
+fn normalize_plan_value(value: &mut serde_json::Value, fallback_text: &str) {
+    normalize_blueprint_shape(value);
+    normalize_site_plan_shape(value);
+    normalize_actions_shape(value);
+
+    let Some(actions) = value
+        .get_mut("actions")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+    for action in actions {
+        normalize_scan_nearby_action(action, fallback_text);
+    }
+}
+
+fn normalize_blueprint_shape(value: &mut serde_json::Value) {
+    let Some(blueprint) = value
+        .get_mut("blueprint")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+
+    if !blueprint.contains_key("size") {
+        if let Some(dimensions) = blueprint
+            .get("dimensions")
+            .or_else(|| blueprint.get("dimension"))
+            .and_then(serde_json::Value::as_object)
+        {
+            let width =
+                dimension_value(dimensions, "width").or_else(|| dimension_value(dimensions, "x"));
+            let height =
+                dimension_value(dimensions, "height").or_else(|| dimension_value(dimensions, "y"));
+            let depth =
+                dimension_value(dimensions, "depth").or_else(|| dimension_value(dimensions, "z"));
+            if let (Some(width), Some(height), Some(depth)) = (width, height, depth) {
+                blueprint.insert(
+                    "size".to_string(),
+                    serde_json::json!({
+                        "width": width,
+                        "height": height,
+                        "depth": depth
+                    }),
+                );
+            }
+        }
+    }
+
+    blueprint
+        .entry("description")
+        .or_insert_with(|| serde_json::Value::String(String::new()));
+    blueprint
+        .entry("tags")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    normalize_blueprint_material_counts(blueprint);
+}
+
+fn dimension_value(
+    dimensions: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Option<u64> {
+    let value = dimensions.get(key)?;
+    value.as_u64().or_else(|| {
+        value
+            .as_i64()
+            .filter(|number| *number >= 0)
+            .map(|number| number as u64)
+    })
+}
+
+fn normalize_blueprint_material_counts(blueprint: &mut serde_json::Map<String, serde_json::Value>) {
+    let Some(blocks) = blueprint
+        .get("blocks")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return;
+    };
+    let mut counts = HashMap::<String, u32>::new();
+    for block in blocks {
+        let Some(material) = block.get("material").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        *counts.entry(material.to_string()).or_default() += 1;
+    }
+    if counts.is_empty() {
+        return;
+    }
+    let mut materials = counts
+        .into_iter()
+        .map(|(material, count)| serde_json::json!({ "material": material, "count": count }))
+        .collect::<Vec<_>>();
+    materials.sort_by(|left, right| {
+        left.get("material")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .cmp(
+                right
+                    .get("material")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default(),
+            )
+    });
+    blueprint.insert("materials".to_string(), serde_json::Value::Array(materials));
+}
+
+fn normalize_site_plan_shape(value: &mut serde_json::Value) {
+    let Some(site_plan) = value.get_mut("site_plan") else {
+        return;
+    };
+    if site_plan.is_null() {
+        return;
+    }
+    let Some(site_plan) = site_plan.as_object_mut() else {
+        return;
+    };
+
+    site_plan.entry("origin").or_insert(serde_json::Value::Null);
+    site_plan
+        .entry("clear_existing")
+        .or_insert(serde_json::Value::Bool(false));
+    site_plan
+        .entry("pre_clear_blocks")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    site_plan
+        .entry("pre_foundation_blocks")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    site_plan
+        .entry("rationale")
+        .or_insert(serde_json::Value::Null);
+}
+
+fn normalize_actions_shape(value: &mut serde_json::Value) {
+    let has_blueprint = value
+        .get("blueprint")
+        .is_some_and(|blueprint| !blueprint.is_null());
+    let Some(actions) = value
+        .get_mut("actions")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return;
+    };
+
+    if has_blueprint {
+        actions.retain(|action| {
+            let Some(object) = action.as_object() else {
+                return true;
+            };
+            object.get("type").and_then(serde_json::Value::as_str) != Some("place_blocks")
+        });
+    }
+}
+
+fn normalize_scan_nearby_action(action: &mut serde_json::Value, fallback_text: &str) {
+    let Some(object) = action.as_object_mut() else {
+        return;
+    };
+    if object.get("type").and_then(serde_json::Value::as_str) != Some("scan_nearby_and_plan") {
+        return;
+    }
+
+    let has_text = object
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    if !has_text {
+        let text = if !fallback_text.trim().is_empty() {
+            fallback_text.trim()
+        } else {
+            object
+                .get("purpose")
+                .or_else(|| object.get("message"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("继续处理当前需求")
+        };
+        object.insert(
+            "text".to_string(),
+            serde_json::Value::String(text.to_string()),
+        );
+    }
+    object
+        .entry("attachments")
+        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
 }
 
 fn has_required_plan_protocol_fields(value: &serde_json::Value) -> bool {
@@ -1808,13 +2116,194 @@ fn append_placement_note(reply: String, placement_note: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn extract_json_object(output: &str) -> Option<&str> {
-    let start = output.find('{')?;
-    let end = output.rfind('}')?;
-    if start > end {
-        return None;
+    extract_json_object_candidates(output).into_iter().next()
+}
+
+fn extract_json_object_candidates(output: &str) -> Vec<&str> {
+    let mut candidates = Vec::new();
+    let mut start = None;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, ch) in output.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    start = Some(index);
+                }
+                depth += 1;
+            }
+            '}' => {
+                if depth == 0 {
+                    continue;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(start) = start.take() {
+                        let end = index + ch.len_utf8();
+                        candidates.push(&output[start..end]);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
-    Some(&output[start..=end])
+
+    candidates
+}
+
+async fn repair_invalid_codex_plan(
+    codex: &CodexClient,
+    input: &PlannerInput,
+    context: &PlanContextBundle,
+    invalid_output: &str,
+) -> Option<CodexPlan> {
+    let context_json = serde_json::to_string_pretty(context).ok()?;
+    let prompt = format!(
+        r#"上一轮 Minecraft 助手输出不是有效协议 JSON。请只做格式修复，不要新增确认问题，不要输出解释文字。
+
+修复规则：
+- 只返回一个 JSON 对象，字段必须是 reply、summary、blueprint、site_plan、actions。
+- 如果原输出里有蓝图、动作或自然语言意图，尽量保留并修成协议字段。
+- 如果是新建建筑并且已有 nearby_scan/position，就直接修成可执行 blueprint 或 actions；不要让 controller 写保底建筑。
+- 如果确实缺现场数据，可以输出 scan_nearby_and_plan，形状为 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}。
+- 不要输出 Markdown，不要输出代码块。
+
+原始玩家需求：
+{user_text}
+
+context_bundle：
+{context_json}
+
+上一轮无效输出：
+{invalid_output}
+"#,
+        user_text = input.text,
+        context_json = context_json,
+        invalid_output = invalid_output
+    );
+    let output = match codex
+        .ask_with_schema_and_progress(
+            &prompt,
+            CodexResponseSchema::Plan,
+            None,
+            input.progress_id.as_deref(),
+        )
+        .await
+    {
+        Ok(Some(output)) if !output.trim().is_empty() => output,
+        Ok(_) => return None,
+        Err(error) => {
+            tracing::warn!(error = %error, "codex plan repair failed");
+            return None;
+        }
+    };
+    let repaired = parse_plan_response_for_input(&output, &input.text);
+    if repaired.is_none() {
+        tracing::warn!(
+            response_bytes = output.len(),
+            "codex plan repair still returned invalid json"
+        );
+    }
+    repaired
+}
+
+async fn invalid_codex_plan_fallback(input: &PlannerInput) -> PlanResult {
+    if looks_like_new_build_request(&input.text) && input.nearby_scan.is_none() {
+        return PlanResult {
+            reply: "我会先读取附近场地，然后直接继续建造。".to_string(),
+            summary: "自动扫描后继续建造".to_string(),
+            actions: vec![GameAction::ScanNearbyAndPlan {
+                text: input.text.clone(),
+                attachments: input.attachments.clone(),
+            }],
+        };
+    }
+
+    PlanResult {
+        reply: "AI 这次没有生成可执行动作，任务没有发送到 Minecraft。".to_string(),
+        summary: "AI 输出格式无效".to_string(),
+        actions: Vec::new(),
+    }
+}
+
+fn looks_like_new_build_request(text: &str) -> bool {
+    let text = text.trim().to_ascii_lowercase();
+    if text.is_empty() {
+        return false;
+    }
+    let strong_build_words = [
+        "建造",
+        "再建",
+        "建个",
+        "建一个",
+        "造个",
+        "造一个",
+        "做个",
+        "做一个",
+        "盖个",
+        "盖一个",
+        "build",
+        "create",
+    ];
+    if strong_build_words.iter().any(|word| text.contains(word)) {
+        return true;
+    }
+    let build_words = [
+        "做", "建", "造", "盖", "修", "搭", "build", "make", "create", "place",
+    ];
+    let structure_words = [
+        "建筑",
+        "房",
+        "屋",
+        "小屋",
+        "木屋",
+        "树屋",
+        "塔",
+        "桥",
+        "城堡",
+        "花园",
+        "农场",
+        "雕像",
+        "雕塑",
+        "模型",
+        "人物",
+        "角色",
+        "生物",
+        "怪物",
+        "末影人",
+        "仿真",
+        "逼真",
+        "苦力怕",
+        "creeper",
+        "enderman",
+        "mob",
+        "figure",
+        "house",
+        "cabin",
+        "tower",
+        "bridge",
+        "statue",
+        "garden",
+        "farm",
+    ];
+    build_words.iter().any(|word| text.contains(word))
+        && structure_words.iter().any(|word| text.contains(word))
 }
 
 #[cfg(test)]
@@ -1849,10 +2338,22 @@ mod tests {
     }
 
     fn planner_with_fake_plan(name: &str, plan_message: &str) -> Planner {
+        planner_with_fake_plan_sequence(name, &[plan_message])
+    }
+
+    fn planner_with_fake_plan_sequence(name: &str, plan_messages: &[&str]) -> Planner {
         let dir = temp_dir(name);
         fs::create_dir_all(&dir).unwrap();
-        let plan_path = dir.join("plan.json");
-        fs::write(&plan_path, plan_message).unwrap();
+        let mut plan_paths = Vec::new();
+        for (index, plan_message) in plan_messages.iter().enumerate() {
+            let plan_path = dir.join(format!("plan-{}.json", index + 1));
+            fs::write(&plan_path, plan_message).unwrap();
+            plan_paths.push(plan_path);
+        }
+        let last_plan_path = plan_paths
+            .last()
+            .expect("fake plan sequence must not be empty")
+            .clone();
         let script_path = dir.join("fake-codex.sh");
         fs::write(
             &script_path,
@@ -1860,6 +2361,7 @@ mod tests {
                 r#"#!/usr/bin/env bash
 set -euo pipefail
 last_message=""
+call_count_file="{call_count_file}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-last-message)
@@ -1879,9 +2381,21 @@ cat >/dev/null
 if [[ -z "$last_message" ]]; then
   exit 2
 fi
-cat "{plan_path}" > "$last_message"
+call_count=0
+if [[ -f "$call_count_file" ]]; then
+  call_count="$(cat "$call_count_file")"
+fi
+call_count=$((call_count + 1))
+printf "%s" "$call_count" > "$call_count_file"
+plan_file="{dir}/plan-${{call_count}}.json"
+if [[ ! -f "$plan_file" ]]; then
+  plan_file="{last_plan_path}"
+fi
+cat "$plan_file" > "$last_message"
 "#,
-                plan_path = plan_path.to_string_lossy()
+                call_count_file = dir.join("call-count").to_string_lossy(),
+                dir = dir.to_string_lossy(),
+                last_plan_path = last_plan_path.to_string_lossy()
             ),
         )
         .unwrap();
@@ -2034,6 +2548,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2075,6 +2590,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2115,6 +2631,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2145,6 +2662,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2153,9 +2671,9 @@ exit 1
             )
             .await;
 
-        assert_eq!(result.summary, "继续确认需求");
+        assert_eq!(result.summary, "AI 输出格式无效");
         assert!(result.actions.is_empty());
-        assert!(result.reply.contains("可靠的下一步"));
+        assert!(result.reply.contains("没有生成可执行动作"));
     }
 
     #[tokio::test]
@@ -2170,6 +2688,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2185,7 +2704,7 @@ exit 1
     }
 
     #[tokio::test]
-    async fn build_failure_reply_contains_rephrase_hints_when_codex_enabled() {
+    async fn build_failure_requests_scan_instead_of_confirmation_when_codex_enabled() {
         let store = empty_store("codex-invalid-blueprint").await;
         let planner = planner_with_fake_codex("codex-invalid-blueprint", "not json");
 
@@ -2196,6 +2715,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2204,9 +2724,80 @@ exit 1
             )
             .await;
 
-        assert_eq!(result.summary, "继续确认需求");
-        assert!(result.actions.is_empty());
-        assert!(result.reply.contains("准备建什么、改什么"));
+        assert_eq!(result.summary, "自动扫描后继续建造");
+        assert!(matches!(
+            result.actions[0],
+            GameAction::ScanNearbyAndPlan { ref text, .. } if text == "帮我盖一个木屋"
+        ));
+        assert!(!result.reply.contains("确认"));
+    }
+
+    #[tokio::test]
+    async fn invalid_build_after_scan_asks_codex_to_repair_plan() {
+        let store = empty_store("codex-repair-build").await;
+        let planner = planner_with_fake_plan_sequence(
+            "codex-repair-build",
+            &[
+                "not json",
+                r#"{
+  "reply": "我会直接把末影人雕像建出来。",
+  "summary": "建造蓝图 repaired_enderman_statue",
+  "blueprint": {
+    "id": "repaired_enderman_statue",
+    "name": "修复后的末影人雕像",
+    "description": "由模型修复输出生成的末影人雕像。",
+    "size": {"width": 1, "height": 2, "depth": 1},
+    "materials": [{"material": "minecraft:black_concrete", "count": 2}],
+    "blocks": [
+      {"x": 0, "y": 0, "z": 0, "material": "minecraft:black_concrete"},
+      {"x": 0, "y": 1, "z": 0, "material": "minecraft:black_concrete"}
+    ],
+    "tags": ["enderman", "statue"]
+  },
+  "site_plan": null,
+  "actions": []
+}"#,
+            ],
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "再建造个逼真末影人".to_string(),
+                    player: Some("Alex".to_string()),
+                    codex_session_key: None,
+                    position: Some(PlayerPosition {
+                        world: "minecraft:overworld".to_string(),
+                        x: 20.0,
+                        y: 64.0,
+                        z: 30.0,
+                        yaw: None,
+                        pitch: None,
+                    }),
+                    player_state: None,
+                    nearby_scan: Some(scan_with_blocks(vec![scan_block(
+                        20,
+                        63,
+                        30,
+                        "minecraft:grass_block",
+                    )])),
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 repaired_enderman_statue");
+        assert!(matches!(
+            result.actions.last(),
+            Some(GameAction::PlaceBlocks {
+                blueprint_id: Some(id),
+                blocks,
+                ..
+            }) if id == "repaired_enderman_statue" && blocks.len() == 2
+        ));
+        assert!(store.get("repaired_enderman_statue").await.is_some());
     }
 
     #[tokio::test]
@@ -2224,6 +2815,7 @@ exit 1
                     player: Some("Alex".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2263,6 +2855,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2309,6 +2902,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2362,6 +2956,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(Vec::new())),
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2420,6 +3015,7 @@ exit 1
                     player: Some("Charles".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2468,6 +3064,7 @@ exit 1
                         yaw: None,
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(vec![
                         scan_block(20, 63, 30, "minecraft:grass_block"),
                         scan_block(20, 64, 30, "minecraft:short_grass"),
@@ -2525,6 +3122,7 @@ exit 1
                         yaw: None,
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(vec![
                         scan_block(19, 63, 30, "minecraft:grass_block"),
                         scan_block(20, 63, 30, "minecraft:grass_block"),
@@ -2593,6 +3191,7 @@ exit 1
                         yaw: None,
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(vec![
                         scan_block(20, 63, 30, "minecraft:water[level=0]"),
                         scan_block(21, 63, 30, "minecraft:grass_block[snowy=false]"),
@@ -2669,6 +3268,7 @@ exit 1
                         yaw: None,
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(vec![scan_block(
                         20,
                         63,
@@ -2758,6 +3358,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: Some(player_position.clone()),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(blocks)),
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2845,6 +3446,7 @@ exit 1
                         yaw: Some(0.0),
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(WorldScan {
                         world: "minecraft:overworld".to_string(),
                         center_x: 64,
@@ -2907,6 +3509,7 @@ exit 1
                         yaw: None,
                         pitch: None,
                     }),
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(blocks)),
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2937,6 +3540,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
                     progress_id: None,
@@ -2972,6 +3576,7 @@ exit 1
                     player: None,
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: None,
                     attachments: vec![ChatAttachment {
                         kind: ChatAttachmentKind::Image,
@@ -2998,6 +3603,7 @@ exit 1
             player: None,
             codex_session_key: None,
             position: None,
+            player_state: None,
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
@@ -3006,15 +3612,17 @@ exit 1
         let prompt = render_plan_prompt(&context);
 
         assert!(prompt.contains("context_bundle"));
-        assert!(prompt.contains("controller 的角色只是提供基础数据源"));
+        assert!(prompt.contains("普通聊天助手"));
+        assert!(prompt.contains("controller 只是工具运行时和兼容协议桥"));
         assert!(prompt.contains("只返回一个 JSON 对象"));
         assert!(prompt.contains("site_plan"));
-        assert!(prompt.contains("可用 skills 自主决定"));
+        assert!(prompt.contains("skills 是行为规范和专业经验"));
         assert!(prompt.contains("available_blueprints"));
         assert!(prompt.contains("recent_builds"));
-        assert!(prompt.contains("建筑或改造需求先看离玩家位置最近的候选"));
+        assert!(prompt.contains("明确请求直接完成"));
         assert!(prompt.contains("blockwright-site-selection"));
         assert!(prompt.contains("scan_nearby_and_plan"));
+        assert!(prompt.contains("blockwright_enqueue_actions"));
         assert!(prompt.contains("相对坐标"));
         assert!(prompt.contains("命名空间 ID"));
         assert!(prompt.contains("give_item"));
@@ -3057,6 +3665,7 @@ exit 1
             player: Some("Steve".to_string()),
             codex_session_key: None,
             position: None,
+            player_state: None,
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
@@ -3142,6 +3751,7 @@ exit 1
                 yaw: None,
                 pitch: None,
             }),
+            player_state: None,
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
@@ -3219,6 +3829,7 @@ exit 1
             player: Some("Steve".to_string()),
             codex_session_key: None,
             position: None,
+            player_state: None,
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
@@ -3294,6 +3905,7 @@ exit 1
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
                     position: None,
+                    player_state: None,
                     nearby_scan: Some(scan_with_blocks(vec![scan_block(
                         20,
                         63,
@@ -3377,7 +3989,7 @@ exit 1
     }
 
     #[test]
-    fn rejects_codex_plan_missing_required_protocol_fields() {
+    fn repairs_plan_missing_safe_protocol_defaults() {
         let output = r#"{
   "reply": "可以，已经准备给你一把钻石镐。",
   "summary": "发放钻石镐",
@@ -3386,7 +3998,18 @@ exit 1
   ]
 }"#;
 
-        assert!(parse_plan_response(output).is_none());
+        let plan = parse_plan_response(output).unwrap();
+
+        assert!(plan.blueprint.is_none());
+        assert!(plan.site_plan.is_none());
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::GiveItem {
+                ref item,
+                count: 1,
+                ..
+            } if item == "minecraft:diamond_pickaxe"
+        ));
     }
 
     #[test]
@@ -3429,6 +4052,66 @@ exit 1
             plan.actions[0],
             GameAction::ScanNearbyAndPlan { ref text, .. } if text.contains("窗户")
         ));
+    }
+
+    #[test]
+    fn repairs_scan_request_with_tool_like_fields() {
+        let output = r#"{
+  "reply": "先看地形。",
+  "summary": "扫描后建造苦力怕建筑",
+  "blueprint": null,
+  "site_plan": null,
+  "actions": [
+    {"type":"scan_nearby_and_plan","player":"Charles","radius":16,"purpose":"选择苦力怕建筑落点"}
+  ]
+}"#;
+
+        let plan = parse_plan_response_for_input(output, "给我做个苦力怕建筑物").unwrap();
+
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::ScanNearbyAndPlan { ref text, ref attachments }
+                if text == "给我做个苦力怕建筑物" && attachments.is_empty()
+        ));
+    }
+
+    #[test]
+    fn repairs_common_blueprint_shape_from_model_output() {
+        let output = r#"{
+  "reply": "开始建苦力怕小屋。",
+  "summary": "建造苦力怕小屋",
+  "blueprint": {
+    "id": "creeper_house_compact",
+    "name": "苦力怕小屋",
+    "origin_mode": "site_plan",
+    "dimensions": {"x": 2, "y": 2, "z": 1},
+    "materials": [{"material": "minecraft:green_concrete", "count": 99}],
+    "blocks": [
+      {"x": 0, "y": 0, "z": 0, "material": "minecraft:green_concrete"},
+      {"x": 1, "y": 0, "z": 0, "material": "minecraft:black_concrete"}
+    ]
+  },
+  "site_plan": {
+    "origin": {"world": "minecraft:overworld", "x": 10, "y": 64, "z": 20},
+    "pre_clear_blocks": [],
+    "pre_foundation_blocks": [],
+    "rationale": "放在玩家面前。"
+  },
+  "actions": [
+    {"type": "place_blocks", "blueprint_id": "creeper_house_compact", "origin": {"world": "minecraft:overworld", "x": 10, "y": 64, "z": 20}}
+  ]
+}"#;
+
+        let plan = parse_plan_response(output).unwrap();
+        let blueprint = plan.blueprint.unwrap();
+        let site_plan = plan.site_plan.unwrap();
+
+        assert_eq!(blueprint.size.width, 2);
+        assert_eq!(blueprint.size.height, 2);
+        assert_eq!(blueprint.size.depth, 1);
+        assert_eq!(blueprint.materials.len(), 2);
+        assert!(site_plan.clear_existing.is_some_and(|value| !value));
+        assert!(plan.actions.is_empty());
     }
 
     #[test]

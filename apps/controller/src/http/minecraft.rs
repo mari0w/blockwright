@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     domain::types::{
-        ChatAttachment, GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan,
+        ChatAttachment, GameAction, GameJob, JobResultRequest, PlayerPosition, PlayerState,
+        WorldScan,
     },
     services::planner::PlannerInput,
     state::AppState,
@@ -20,6 +21,8 @@ pub struct MinecraftMessageRequest {
     pub player: String,
     pub text: String,
     pub position: Option<PlayerPosition>,
+    #[serde(default)]
+    pub player_state: Option<PlayerState>,
     #[serde(default)]
     pub nearby_scan: Option<WorldScan>,
     #[serde(default)]
@@ -73,7 +76,7 @@ async fn handle_message(
     if let Some(progress_id) = request.progress_id.as_deref() {
         state.progress.start(
             progress_id,
-            "Blockwright 已收到 Minecraft 请求，准备交给 Codex",
+            "Blockwright 已收到请求，正在交给 AI 助手",
             None,
         );
     }
@@ -83,6 +86,7 @@ async fn handle_message(
         player: Some(request.player.clone()),
         codex_session_key: Some(format!("minecraft:{}", request.player)),
         position: request.position.clone(),
+        player_state: request.player_state.clone(),
         nearby_scan: request.nearby_scan.clone(),
         attachments: request.attachments.clone(),
         progress_id: request.progress_id.clone(),
@@ -124,11 +128,9 @@ async fn handle_message(
     );
 
     if let Some(progress_id) = request.progress_id.as_deref() {
-        state.progress.finish(
-            progress_id,
-            "Blockwright 已生成回复，准备返回 Minecraft",
-            None,
-        );
+        state
+            .progress
+            .finish(progress_id, "AI 助手已生成回复，准备返回 Minecraft", None);
     }
 
     Ok(Json(MinecraftMessageResponse {
@@ -180,10 +182,7 @@ async fn job_result(
     if updated.is_none() {
         tracing::debug!(job_id = %job_id, "minecraft job result has no matching build record");
     }
-    state
-        .jobs
-        .mark_result(&job_id, request.ok, request.message.clone())
-        .await;
+    state.jobs.mark_job_result(&job_id, request).await;
 
     Ok(Json(JobResultResponse { ok: true }))
 }

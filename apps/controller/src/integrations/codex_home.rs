@@ -43,8 +43,11 @@ struct PackagedSkillsManifest {
 
 pub async fn prepare_project_codex_home(
     runtime_home: &Path,
+    controller_url: &str,
+    shared_token: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sync_packaged_files(runtime_home, PACKAGED_CODEX_HOME_FILES).await?;
+    write_runtime_config(runtime_home, controller_url, shared_token).await?;
     ensure_auth_link(runtime_home).await?;
     Ok(())
 }
@@ -108,6 +111,38 @@ async fn sync_packaged_files(
     Ok(())
 }
 
+async fn write_runtime_config(
+    runtime_home: &Path,
+    controller_url: &str,
+    shared_token: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let current_exe = std::env::current_exe()?;
+    let cwd = std::env::current_dir()?;
+    let token_line = shared_token
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(", \"BLOCKWRIGHT_SHARED_TOKEN\" = {}", toml_string(value)))
+        .unwrap_or_default();
+    let content = format!(
+        r#"approval_policy = "never"
+sandbox_mode = "read-only"
+
+[projects.{cwd}]
+trust_level = "trusted"
+
+[mcp_servers.blockwright]
+command = {command}
+args = ["mcp-proxy"]
+env = {{ "BLOCKWRIGHT_CONTROLLER_URL" = {controller_url}{token_line} }}
+"#,
+        cwd = toml_string(cwd.to_string_lossy().as_ref()),
+        command = toml_string(current_exe.to_string_lossy().as_ref()),
+        controller_url = toml_string(controller_url),
+        token_line = token_line
+    );
+    tokio::fs::write(runtime_home.join("config.toml"), content).await?;
+    Ok(())
+}
+
 async fn read_packaged_manifest(path: &Path) -> PackagedSkillsManifest {
     match tokio::fs::read_to_string(path).await {
         Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
@@ -147,6 +182,10 @@ fn safe_runtime_child(runtime_home: &Path, relative_path: &str) -> Option<PathBu
     }
 
     Some(runtime_home.join(path))
+}
+
+fn toml_string(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 async fn ensure_auth_link(
@@ -287,6 +326,22 @@ mod tests {
             fs::read_to_string(dir.join("skills/new/SKILL.md")).unwrap(),
             "new"
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_config_registers_blockwright_mcp_proxy() {
+        let dir = temp_dir("runtime-config");
+        fs::create_dir_all(&dir).unwrap();
+
+        write_runtime_config(&dir, "http://127.0.0.1:8765", Some("token"))
+            .await
+            .unwrap();
+
+        let config = fs::read_to_string(dir.join("config.toml")).unwrap();
+        assert!(config.contains("[mcp_servers.blockwright]"));
+        assert!(config.contains("mcp-proxy"));
+        assert!(config.contains("BLOCKWRIGHT_CONTROLLER_URL"));
+        assert!(config.contains("BLOCKWRIGHT_SHARED_TOKEN"));
     }
 
     #[cfg(unix)]

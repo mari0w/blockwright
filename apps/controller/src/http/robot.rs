@@ -69,6 +69,7 @@ pub(crate) async fn queue_chat_message(
                     message.platform, message.conversation_id, message.sender
                 )),
                 position: message.position,
+                player_state: None,
                 nearby_scan: None,
                 attachments: message.attachments,
                 progress_id: None,

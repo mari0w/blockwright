@@ -19,6 +19,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|| "serve".to_string());
     init_tracing();
 
+    if mode == "mcp-proxy" {
+        let controller_url = std::env::var("BLOCKWRIGHT_CONTROLLER_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8765".to_string());
+        let shared_token = std::env::var("BLOCKWRIGHT_SHARED_TOKEN").ok();
+        tracing::info!(controller_url = %controller_url, "blockwright MCP proxy starting on stdio");
+        return mcp::serve_stdio_proxy(controller_url, shared_token).await;
+    }
+
     let config = config::load()?;
     let state = AppState::new(config).await?;
 

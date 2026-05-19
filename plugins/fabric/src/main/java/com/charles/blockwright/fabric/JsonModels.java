@@ -14,6 +14,8 @@ public final class JsonModels {
         public String player;
         public String text;
         public PlayerPosition position;
+        @SerializedName("player_state")
+        public PlayerState playerState;
         @SerializedName("nearby_scan")
         public WorldScan nearbyScan;
         public List<ChatAttachment> attachments;
@@ -47,6 +49,10 @@ public final class JsonModels {
         public boolean ok;
         public String message;
         public JobExecutionReport report;
+        @SerializedName("player_state")
+        public PlayerState playerState;
+        @SerializedName("nearby_scan")
+        public WorldScan nearbyScan;
     }
 
     public static final class GameJob {
@@ -67,6 +73,7 @@ public final class JsonModels {
         public String command;
         public String message;
         public String text;
+        public int radius;
         public List<ChatAttachment> attachments;
         @SerializedName("blueprint_id")
         public String blueprintId;
@@ -113,6 +120,27 @@ public final class JsonModels {
         public int y;
         public int z;
         public String material;
+    }
+
+    public static final class PlayerState {
+        @SerializedName("selected_slot")
+        public int selectedSlot;
+        @SerializedName("main_hand")
+        public PlayerItemStack mainHand;
+        @SerializedName("off_hand")
+        public PlayerItemStack offHand;
+        public List<PlayerInventorySlot> inventory;
+    }
+
+    public static class PlayerItemStack {
+        public String item;
+        public int count;
+    }
+
+    public static final class PlayerInventorySlot extends PlayerItemStack {
+        public int slot;
+        public boolean hotbar;
+        public boolean selected;
     }
 
     public static final class BlockOrigin {

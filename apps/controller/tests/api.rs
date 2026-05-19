@@ -426,6 +426,8 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     ));
     assert!(page_body.contains("inputShell.classList.toggle('has-send'"));
     assert!(page_body.contains("function setAddPanel"));
+    assert!(page_body.contains("操作已交给 Minecraft"));
+    assert!(!page_body.contains("我已经准备好方案，正在等 Minecraft 接手"));
     assert!(page_body.contains("切换到文字输入"));
     assert!(page_body.contains("navigator.mediaDevices.getUserMedia"));
     assert!(page_body.contains("网站权限设置"));
@@ -981,6 +983,106 @@ async fn web_job_status_reports_queue_claim_and_result() {
 }
 
 #[tokio::test]
+async fn web_item_job_status_does_not_blame_player_wording() {
+    let app = test_app_with_fake_codex(true, "api-web-item-job-status").await;
+    let message_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Steve",
+                "target_player": "Steve",
+                "server_id": "hmcl-lan",
+                "text": "给我一把钻石剑",
+                "images": []
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    let message_body = response_json(message_response).await;
+    let job_id = message_body["queued_job_id"].as_str().unwrap();
+
+    let queued_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let queued_body = response_json(queued_response).await;
+    assert_eq!(queued_body["phase"], "queued");
+    assert!(queued_body["message"].as_str().unwrap().contains("接手"));
+
+    let next_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let next_body = response_json(next_response).await;
+    assert_eq!(next_body["job"]["actions"][0]["type"], "give_item");
+
+    let running_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let running_body = response_json(running_response).await;
+    assert_eq!(running_body["phase"], "running");
+    assert!(running_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("正在处理"));
+
+    let result_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(json!({
+                "ok": false,
+                "message": "找不到玩家：Steve"
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(result_response.status(), StatusCode::OK);
+
+    let failed_response = app
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let failed_body = response_json(failed_response).await;
+    let failed_message = failed_body["message"].as_str().unwrap();
+    assert_eq!(failed_body["phase"], "failed");
+    assert!(failed_message.contains("没有完成执行"));
+    assert!(!failed_message.contains("发物品失败"));
+    assert!(!failed_message.contains("放到世界"));
+    assert!(!failed_message.contains("调整说法"));
+    assert_eq!(failed_body["result_message"], "找不到玩家：Steve");
+}
+
+#[tokio::test]
 async fn minecraft_build_message_returns_job_id_for_direct_verification() {
     let app = test_app_with_fake_codex(true, "api-minecraft-build").await;
     let minecraft_request = json!({
@@ -1427,7 +1529,7 @@ async fn minecraft_progress_endpoint_reports_codex_phase_for_request() {
     assert!(progress_body["message"]
         .as_str()
         .unwrap()
-        .contains("Blockwright"));
+        .contains("AI 助手"));
 }
 
 #[tokio::test]

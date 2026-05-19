@@ -60,6 +60,18 @@ impl BlueprintStore {
         Ok(blueprint)
     }
 
+    pub async fn delete(&self, id: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        validate_blueprint_id(id)?;
+
+        let removed = self.items.write().await.remove(id).is_some();
+        let file_path = self.file_path(id);
+        match tokio::fs::remove_file(file_path).await {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(removed),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     async fn load_from_disk(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut dir = tokio::fs::read_dir(self.data_dir.as_ref()).await?;
         let mut loaded = HashMap::new();
@@ -180,5 +192,21 @@ mod tests {
 
         assert!(empty_result.is_err());
         assert!(unsafe_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn deletes_blueprint_from_memory_and_disk() {
+        let data_dir = temp_dir("delete");
+        let store = BlueprintStore::new(data_dir.clone()).await.unwrap();
+        store
+            .save(blueprint("old-house", &["house"]))
+            .await
+            .unwrap();
+
+        assert!(store.delete("old-house").await.unwrap());
+        assert!(store.get("old-house").await.is_none());
+
+        let reloaded = BlueprintStore::new(data_dir).await.unwrap();
+        assert!(reloaded.get("old-house").await.is_none());
     }
 }

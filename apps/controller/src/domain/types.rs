@@ -13,6 +13,34 @@ pub struct PlayerPosition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerItemStack {
+    pub item: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerInventorySlot {
+    pub slot: u32,
+    pub item: String,
+    pub count: u32,
+    #[serde(default)]
+    pub hotbar: bool,
+    #[serde(default)]
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerState {
+    pub selected_slot: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_hand: Option<PlayerItemStack>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub off_hand: Option<PlayerItemStack>,
+    #[serde(default)]
+    pub inventory: Vec<PlayerInventorySlot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldScan {
     pub world: String,
     pub center_x: i32,
@@ -132,6 +160,13 @@ pub enum GameAction {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<ChatAttachment>,
     },
+    GetPlayerState {
+        player: Option<String>,
+    },
+    ScanNearby {
+        player: Option<String>,
+        radius: u32,
+    },
 }
 
 fn is_false(value: &bool) -> bool {
@@ -153,6 +188,10 @@ pub struct JobResultRequest {
     pub message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report: Option<JobExecutionReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_state: Option<PlayerState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nearby_scan: Option<WorldScan>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

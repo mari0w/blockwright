@@ -7,8 +7,10 @@ import java.util.Map;
 import java.util.Optional;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.s2c.play.UpdateSelectedSlotS2CPacket;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -22,6 +24,8 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
 public final class ActionExecutor {
+    private static final int HOTBAR_SIZE = 9;
+    private static final int PLAYER_STORAGE_SIZE = 36;
     private static final int MAX_REPORTED_MISMATCHES = 20;
     private static final int PLAYER_SAFETY_RADIUS = 1;
     private static final int PLAYER_SAFETY_HEIGHT_BLOCKS = 3;
@@ -81,8 +85,129 @@ public final class ActionExecutor {
 
         Item item = itemFromId(action.item);
         int count = Math.max(action.count, 1);
-        player.getInventory().insertStack(new ItemStack(item, count));
-        player.sendMessage(Text.literal("Blockwright 已发放：" + Registries.ITEM.getId(item) + " x " + count), false);
+        int heldSlot = putItemInMainHand(player, item, count);
+        player.sendMessage(Text.literal(
+                "Blockwright 已发放并切到手上：" + Registries.ITEM.getId(item) + " x " + count
+                        + "（快捷栏 " + (heldSlot + 1) + "）"), false);
+    }
+
+    private int putItemInMainHand(ServerPlayerEntity player, Item item, int count) {
+        PlayerInventory inventory = player.getInventory();
+        ItemStack handStack = new ItemStack(item, Math.min(count, item.getMaxCount()));
+        int selectedSlot = inventory.getSelectedSlot();
+        int firstStackableHotbarSlot = findStackableHotbarSlot(inventory, handStack);
+        int firstEmptyHotbarSlot = findEmptyHotbarSlot(inventory);
+        int firstEmptyStorageSlot = findEmptyStorageSlot(inventory);
+        int targetSlot = chooseHandSlot(
+                selectedSlot,
+                canSlotAcceptMore(inventory.getStack(selectedSlot), handStack),
+                firstStackableHotbarSlot,
+                firstEmptyHotbarSlot,
+                firstEmptyStorageSlot);
+
+        ItemStack targetStack = inventory.getStack(targetSlot);
+        if (targetSlot == selectedSlot
+                && !targetStack.isEmpty()
+                && !canSlotAcceptMore(targetStack, handStack)) {
+            // 必须优先让新物品到手上；背包也满时，把旧手持物安全掉在玩家脚边。
+            if (firstEmptyStorageSlot >= HOTBAR_SIZE) {
+                inventory.setStack(firstEmptyStorageSlot, targetStack.copy());
+            } else {
+                player.dropItem(targetStack.copy(), false);
+            }
+            inventory.setStack(selectedSlot, ItemStack.EMPTY);
+        }
+
+        int heldCount = moveIntoSlot(inventory, targetSlot, handStack);
+        inventory.setSelectedSlot(targetSlot);
+        insertRemaining(player, inventory, item, count - heldCount);
+        inventory.markDirty();
+        player.currentScreenHandler.sendContentUpdates();
+        player.networkHandler.sendPacket(new UpdateSelectedSlotS2CPacket(targetSlot));
+        return targetSlot;
+    }
+
+    static int chooseHandSlot(
+            int selectedSlot,
+            boolean selectedCanAccept,
+            int firstStackableHotbarSlot,
+            int firstEmptyHotbarSlot,
+            int firstEmptyStorageSlot) {
+        if (selectedCanAccept && isHotbarSlot(selectedSlot)) {
+            return selectedSlot;
+        }
+        if (isHotbarSlot(firstStackableHotbarSlot)) {
+            return firstStackableHotbarSlot;
+        }
+        if (isHotbarSlot(firstEmptyHotbarSlot)) {
+            return firstEmptyHotbarSlot;
+        }
+        if (isHotbarSlot(selectedSlot)) {
+            return selectedSlot;
+        }
+        return 0;
+    }
+
+    private static boolean isHotbarSlot(int slot) {
+        return slot >= 0 && slot < HOTBAR_SIZE;
+    }
+
+    private int findStackableHotbarSlot(PlayerInventory inventory, ItemStack stack) {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (canSlotAcceptMore(inventory.getStack(slot), stack)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int findEmptyHotbarSlot(PlayerInventory inventory) {
+        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
+            if (inventory.getStack(slot).isEmpty()) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int findEmptyStorageSlot(PlayerInventory inventory) {
+        for (int slot = HOTBAR_SIZE; slot < PLAYER_STORAGE_SIZE; slot++) {
+            if (inventory.getStack(slot).isEmpty()) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private boolean canSlotAcceptMore(ItemStack current, ItemStack stack) {
+        return !current.isEmpty()
+                && ItemStack.areItemsAndComponentsEqual(current, stack)
+                && current.getCount() < current.getMaxCount();
+    }
+
+    private int moveIntoSlot(PlayerInventory inventory, int slot, ItemStack stack) {
+        ItemStack current = inventory.getStack(slot);
+        if (current.isEmpty()) {
+            inventory.setStack(slot, stack);
+            return stack.getCount();
+        }
+
+        int moved = Math.min(stack.getCount(), current.getMaxCount() - current.getCount());
+        current.increment(moved);
+        return moved;
+    }
+
+    private void insertRemaining(ServerPlayerEntity player, PlayerInventory inventory, Item item, int count) {
+        int remaining = count;
+        while (remaining > 0) {
+            int chunk = Math.min(remaining, item.getMaxCount());
+            ItemStack stack = new ItemStack(item, chunk);
+            inventory.insertStack(stack);
+            if (!stack.isEmpty()) {
+                player.dropItem(stack, false);
+            }
+            remaining -= chunk;
+        }
     }
 
     private void runCommand(JsonModels.GameAction action, ServerPlayerEntity defaultPlayer) {

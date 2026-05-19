@@ -1,6 +1,6 @@
 # Blockwright
 
-Blockwright 是一个本地优先的 Minecraft 智能建造助手。它把自然语言、蓝图规划、任务队列和构建记录放在外部 controller，把真正修改世界的动作留在 Fabric/Paper 执行端。
+Blockwright 是一个本地优先的 Minecraft AI 助手。它把聊天入口、MCP 工具、蓝图管理、任务队列和构建记录放在外部 controller，把真正读取和修改 Minecraft 世界的动作留在 Fabric/Paper 执行端。
 
 项目当前面向 HMCL、Fabric 单人存档和局域网开放世界优先设计。Paper 插件保留给独立服务端场景。
 
@@ -8,7 +8,7 @@ Blockwright 是一个本地优先的 Minecraft 智能建造助手。它把自然
 
 - 游戏内通过 `/bw ...` 发送需求，例如发物品、调时间、建造木屋或改造已有建筑。
 - 外部机器人通过 controller 统一接入，再把任务下发到 Minecraft 世界。
-- controller 先调用本地 Codex CLI 做意图分类，再把需求规划成结构化动作或蓝图 JSON。
+- controller 调用本地 Codex CLI 作为普通 AI 助手，由模型按需使用 MCP 工具读取玩家状态、物品栏、附近方块、蓝图和构建记录，再生成回复或受控动作。
 - 蓝图使用相对坐标，真正放置时再叠加玩家位置或任务原点。
 - 建筑任务先保存构建记录，再下发同一份方块清单到执行端。
 - Fabric/Paper 执行端逐块读取世界状态生成校验报告，报告和构建记录一致才算成功。
@@ -17,7 +17,7 @@ Blockwright 是一个本地优先的 Minecraft 智能建造助手。它把自然
 
 ## 项目状态
 
-Blockwright 处于早期可运行阶段，已经具备本地 controller、Fabric 模组、Paper 插件、蓝图保存、任务队列、执行校验和 Codex CLI 规划闭环。
+Blockwright 处于早期可运行阶段，已经具备本地 controller、Fabric 模组、Paper 插件、MCP 工具、蓝图保存、任务队列、执行校验和 Codex CLI 助手闭环。
 
 适合当前阶段的用途：
 
@@ -40,7 +40,7 @@ flowchart LR
     Bot["聊天工具<br/>stream / polling / local_command"] --> Controller["Rust controller<br/>Axum API / 队列 / 蓝图 / 构建记录"]
     Fabric --> Controller
     Paper --> Controller
-    Controller --> Codex["Codex CLI<br/>自然语言规划"]
+    Controller --> Codex["Codex CLI<br/>AI 助手 / MCP 工具调用"]
     Controller --> Storage["data/<br/>blueprints / builds / sessions"]
     Controller --> Fabric
     Controller --> Paper
@@ -104,7 +104,7 @@ curl http://127.0.0.1:8765/health
 make
 ```
 
-这个命令会构建 Fabric 模组并安装到默认 `~/.minecraft/mods`。如果 HMCL 使用了自定义游戏目录：
+这个命令会构建 Fabric 模组，自动识别当前正在运行的 Minecraft `--gameDir`，删除目标 `mods/` 目录里的旧 `blockwright-fabric-*.jar`，再安装新 jar。如果 HMCL 没有运行，会优先尝试 `/Applications/.minecraft`，再退回 `~/.minecraft`。如果要手动指定目录：
 
 ```bash
 make HMCL_DIR=<HMCL当前游戏目录>
@@ -126,7 +126,7 @@ make HMCL_DIR=<HMCL当前游戏目录>
 
 配置入口统一放在 controller 的 Web 端，打开 `/web` 后点右上角设置图标保存 Element/Matrix 接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
 
-第一次调用 Codex CLI 或本地模型规划建筑时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
+第一次调用 Codex CLI 或本地模型处理复杂请求时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 
 ```json
 {
@@ -245,7 +245,7 @@ Blockwright 也提供可选 MCP stdio 入口，让 Codex 或其他 MCP 客户端
 cargo run -p blockwright-controller -- mcp
 ```
 
-MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它不暴露裸 `setBlock`、`fill` 或任意命令，仍然走 controller、构建记录和 Fabric/Paper 校验链路。
+MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它还提供读取类工具，用来获取玩家主手/物品栏、扫描附近方块、查询蓝图和构建记录。它不暴露裸 `setBlock`、`fill` 或任意命令，仍然走 controller、构建记录和 Fabric/Paper 校验链路。
 
 详细说明见 [docs/MCP.md](docs/MCP.md)。
 

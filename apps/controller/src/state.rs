@@ -30,7 +30,13 @@ impl AppState {
         let chat = config::load_chat_runtime_config(&config.chat.config_path)?;
         let codex_home = config.storage.data_dir.join("codex_home");
         let codex_home = if config.codex.enabled {
-            prepare_project_codex_home(&codex_home).await?;
+            let controller_url = local_controller_url(&config);
+            prepare_project_codex_home(
+                &codex_home,
+                &controller_url,
+                Some(config.security.shared_token.as_str()),
+            )
+            .await?;
             Some(codex_home)
         } else {
             None
@@ -54,6 +60,15 @@ impl AppState {
             chat,
         })
     }
+}
+
+fn local_controller_url(config: &AppConfig) -> String {
+    let host = if config.server.host == "0.0.0.0" || config.server.host == "::" {
+        "127.0.0.1"
+    } else {
+        config.server.host.as_str()
+    };
+    format!("http://{}:{}", host, config.server.port)
 }
 
 async fn seed_default_blueprint(

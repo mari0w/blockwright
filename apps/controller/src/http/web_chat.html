@@ -2248,7 +2248,7 @@
         assistantMessage.classList.remove('pending');
         updateMessageBody(assistantMessage, payload.reply || '');
         if (payload.queued_job_id) {
-          const queuedText = `进度：我已经准备好方案，正在等 Minecraft 接手${imageStatus(uploads.length)}`;
+          const queuedText = `状态：操作已交给 Minecraft，正在等待执行${imageStatus(uploads.length)}`;
           setStatus(queuedText, false);
           setMessageProgress(assistantMessage, queuedText, false);
           startJobPolling(payload.queued_job_id, assistantMessage);
@@ -2332,9 +2332,9 @@
       const imageHint = imageCount > 0 ? '，同时整理参考图片' : '';
       const phases = [
         {delay: 0, text: `正在接收消息${imageHint}...`},
-        {delay: 900, text: '正在理解你想让我做什么...'},
-        {delay: 2400, text: '正在思考下一步怎么做...'},
-        {delay: 7000, text: '还在处理，可能正在结合场地或图片细节...'},
+        {delay: 900, text: 'AI 正在处理你的请求...'},
+        {delay: 2400, text: '正在整理回复或准备操作...'},
+        {delay: 7000, text: '还在处理，可能正在读取工具结果...'},
         {delay: 15000, text: '还在等回复，请稍等...'}
       ];
       return phases.map((phase) => setTimeout(() => {
@@ -2362,11 +2362,11 @@
         try {
           const response = await fetch(`/web/jobs/${encodeURIComponent(jobId)}/status`);
           if (!response.ok) {
-            throw new Error('暂时看不到进度');
+            throw new Error('暂时看不到状态');
           }
           const payload = await response.json();
           const detail = payload.result_message ? `（${payload.result_message}）` : '';
-          const message = `进度：${payload.message}${detail}`;
+          const message = `状态：${payload.message}${detail}`;
           const isError = payload.phase === 'failed';
           setStatus(message, isError);
           setMessageProgress(item, message, isError);
@@ -2377,7 +2377,7 @@
           if (attempts >= 3) {
             const message = error.message || String(error);
             setStatus(message, true);
-            setMessageProgress(item, `进度：${message}`, true);
+            setMessageProgress(item, `状态：${message}`, true);
           }
         }
       };

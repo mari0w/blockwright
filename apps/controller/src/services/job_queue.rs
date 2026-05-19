@@ -4,11 +4,12 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use tokio::sync::RwLock;
 
-use crate::domain::types::{ChatAttachment, GameAction, GameJob};
+use crate::domain::types::{ChatAttachment, GameAction, GameJob, JobResultRequest};
 
 #[derive(Clone, Default)]
 pub struct JobQueue {
@@ -30,6 +31,7 @@ pub struct JobQueueStatus {
     pub phase: JobQueuePhase,
     pub job: Option<GameJob>,
     pub message: Option<String>,
+    pub result: Option<JobResultRequest>,
 }
 
 impl JobQueue {
@@ -67,6 +69,7 @@ impl JobQueue {
                 phase: JobQueuePhase::Pending,
                 job: Some(job.clone()),
                 message: None,
+                result: None,
             },
         );
         job
@@ -82,6 +85,7 @@ impl JobQueue {
                 phase: JobQueuePhase::Claimed,
                 job: Some(job.clone()),
                 message: None,
+                result: None,
             },
         );
         Some(job)
@@ -110,6 +114,7 @@ impl JobQueue {
                 phase: JobQueuePhase::Pending,
                 job: Some(job.clone()),
                 message: None,
+                result: None,
             },
         );
         Some(job.clone())
@@ -127,6 +132,7 @@ impl JobQueue {
                 phase: JobQueuePhase::Claimed,
                 job: None,
                 message: None,
+                result: None,
             });
         entry.phase = if ok {
             JobQueuePhase::Succeeded
@@ -136,9 +142,32 @@ impl JobQueue {
         entry.message = message;
     }
 
+    pub async fn mark_job_result(&self, job_id: &str, request: JobResultRequest) {
+        let mut statuses = self.statuses.write().await;
+        let entry = statuses
+            .entry(job_id.to_string())
+            .or_insert_with(|| JobQueueStatus {
+                phase: JobQueuePhase::Claimed,
+                job: None,
+                message: None,
+                result: None,
+            });
+        entry.phase = if request.ok {
+            JobQueuePhase::Succeeded
+        } else {
+            JobQueuePhase::Failed
+        };
+        entry.message = request.message.clone();
+        entry.result = Some(request);
+    }
+
     pub fn reserve_job_id(&self) -> String {
         let number = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        format!("hm-job-{number}")
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or_default();
+        format!("hm-job-{millis}-{}-{number}", std::process::id())
     }
 }
 
@@ -240,10 +269,11 @@ mod tests {
             )
             .await;
 
-        assert_eq!(first.id, "hm-job-1");
-        assert_eq!(second.id, "hm-job-2");
+        assert!(first.id.starts_with("hm-job-"));
+        assert!(second.id.starts_with("hm-job-"));
+        assert_ne!(first.id, second.id);
         assert_eq!(
-            queue.status("hm-job-1").await.unwrap().phase,
+            queue.status(&first.id).await.unwrap().phase,
             JobQueuePhase::Pending
         );
     }
@@ -264,7 +294,7 @@ mod tests {
             .await;
 
         assert_eq!(job.id, id);
-        assert_eq!(queue.pop_next("local-paper").await.unwrap().id, "hm-job-1");
+        assert_eq!(queue.pop_next("local-paper").await.unwrap().id, id);
     }
 
     #[tokio::test]
@@ -295,9 +325,10 @@ mod tests {
             )
             .await;
 
-        assert_eq!(queue.pop_next("server-b").await.unwrap().summary, "B1");
+        let server_b_job = queue.pop_next("server-b").await.unwrap();
+        assert_eq!(server_b_job.summary, "B1");
         assert_eq!(
-            queue.status("hm-job-2").await.unwrap().phase,
+            queue.status(&server_b_job.id).await.unwrap().phase,
             JobQueuePhase::Claimed
         );
         assert_eq!(queue.pop_next("server-a").await.unwrap().summary, "A1");
@@ -396,5 +427,46 @@ mod tests {
         let status = queue.status(&job.id).await.unwrap();
         assert_eq!(status.phase, JobQueuePhase::Failed);
         assert_eq!(status.message.as_deref(), Some("执行失败"));
+    }
+
+    #[tokio::test]
+    async fn status_keeps_live_query_result_payload() {
+        let queue = JobQueue::default();
+        let job = queue
+            .enqueue(
+                "hmcl-lan".to_string(),
+                Some("Steve".to_string()),
+                "读取玩家状态".to_string(),
+                vec![GameAction::GetPlayerState {
+                    player: Some("Steve".to_string()),
+                }],
+            )
+            .await;
+
+        queue
+            .mark_job_result(
+                &job.id,
+                JobResultRequest {
+                    ok: true,
+                    message: Some("ok".to_string()),
+                    report: None,
+                    player_state: Some(crate::domain::types::PlayerState {
+                        selected_slot: 0,
+                        main_hand: Some(crate::domain::types::PlayerItemStack {
+                            item: "minecraft:bricks".to_string(),
+                            count: 64,
+                        }),
+                        off_hand: None,
+                        inventory: Vec::new(),
+                    }),
+                    nearby_scan: None,
+                },
+            )
+            .await;
+
+        let status = queue.status(&job.id).await.unwrap();
+        let player_state = status.result.unwrap().player_state.unwrap();
+        assert_eq!(status.phase, JobQueuePhase::Succeeded);
+        assert_eq!(player_state.main_hand.unwrap().item, "minecraft:bricks");
     }
 }

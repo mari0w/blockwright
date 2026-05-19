@@ -55,12 +55,12 @@ mods/
 也可以用脚本直接安装：
 
 ```bash
-./scripts/install-hmcl-mod.sh <HMCL当前游戏目录>
+./scripts/install-hmcl-mod.sh
 ```
 
-这个脚本每次执行都会重新编译 Fabric 模组，并覆盖安装到目标 `mods/` 目录。目标目录里之前已经有 Blockwright jar 时，也会先删除旧的 `blockwright-fabric-*.jar`，再放入本次新编译出来的 jar。
+这个脚本每次执行都会重新编译 Fabric 模组，并自动识别当前正在运行的 Minecraft `--gameDir`，覆盖安装到目标 `mods/` 目录。目标目录里之前已经有 Blockwright jar 时，也会先删除旧的 `blockwright-fabric-*.jar`，再放入本次新编译出来的 jar。
 
-如果你使用默认 `.minecraft`，在项目根目录直接执行下面这个命令即可，它等价于 `./scripts/install-hmcl-mod.sh ~/.minecraft`：
+在项目根目录直接执行下面这个命令即可，它等价于自动识别目录后执行 `./scripts/install-hmcl-mod.sh auto`：
 
 ```bash
 make
@@ -116,7 +116,7 @@ Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 
 Blockwright 的建筑动作走的是世界方块 API：controller 把蓝图方块列表发给 Fabric 模组，Fabric 模组直接在当前世界里按坐标放置方块。这样不会依赖你的背包里有没有材料，也不会因为物品栏位置不同而失败。
 
-发物品才会进入玩家背包，例如：
+发物品才会进入玩家背包，并切换到玩家手上的快捷栏槽位；背包满时也会优先把新物品拿到手上，旧手持物或多余物品会掉在脚边，例如：
 
 ```text
 /bw 给我一把钻石剑
@@ -171,13 +171,13 @@ data/builds/
 
 日常配置入口统一放在 controller 的 `/web` 页面，点右上角设置图标保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
 
-`requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型规划建筑后，复杂建筑可能明显超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
+`requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型处理复杂请求后，读场地、查蓝图、生成建筑或等待工具结果都可能超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
 
 `maxBlocksPerAction` 是单次动作最多放置多少方块，默认 5000，用来防止误生成超大蓝图卡住存档。
 
-`scanRadius` 默认 8，`scanForwardBlocks` 默认 5，`maxScanBlocks` 默认 8000。Fabric 模组现在每次 `/bw ...` 都会扫描玩家视线前方附近的非空气方块，并把结果发给 controller；controller 再由 Codex 判断这是新建蓝图、发物品/指令，还是改造已有建筑。这样不会因为本地关键词没覆盖到“旋转木马、蛋糕、雕像”等说法而漏掉场地信息。
+`scanRadius` 默认 8，`scanForwardBlocks` 默认 5，`maxScanBlocks` 默认 8000。Fabric 模组会把玩家视线前方附近的非空气方块作为基础上下文发给 controller；Codex 也可以通过 MCP 工具继续读取玩家状态、物品栏、手持物和附近方块。这样发物品、查状态、改造已有建筑和自由建造都走同一套真实世界数据，不靠本地关键词猜测。
 
 `pollControllerJobs` 默认是 `true`，意思是 Fabric 模组会主动轮询 controller 里的任务队列。钉钉、通用机器人这类本地聊天入口发来的任务，会通过这个轮询进入你的当前世界，不需要公网 webhook。
 
@@ -191,17 +191,17 @@ Paper 插件仍然保留在 `plugins/paper`，但那是给独立 Paper 服务器
 
 ## 图片和复杂建筑
 
-当前本地配置默认启用 Codex CLI。controller 会优先调用本机 `codex exec` 理解自然语言；只要 Codex 是启用状态，Codex 失败时会明确提示失败，不会再退回关键词规则冒充理解。
+当前本地配置默认启用 Codex CLI。controller 会优先调用本机 `codex exec` 作为 Minecraft AI 助手；只要 Codex 是启用状态，Codex 失败时会明确提示失败，不会再退回关键词规则冒充理解。
 
-默认配置使用 `command: "codex --ignore-user-config -m gpt-5.5 -c model_reasoning_effort=medium"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--json` 读取 session id、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。controller 不使用 Codex CLI 的 `--output-schema`，而是要求模型按 JSON 协议回复后在本地解析和校验字段；这样可以避开当前 CLI 结构化输出通道的流式断开问题。默认中等思考强度，优先保证建筑规划质量；修改 `config/servers/local.yaml` 后，需要重启 controller。
+默认配置使用 `command: "codex -m gpt-5.5 -c model_reasoning_effort=medium"`。这里的参数会放到 `codex exec` 后面执行，并且 controller 会自动使用 `--json` 读取 session id、用 `--output-last-message` 读取模型最终回复，避免把 Codex CLI 的启动日志、插件日志或 MCP 报错当成模型结果。controller 不使用 Codex CLI 的 `--output-schema`，而是要求模型按 JSON 协议回复后在本地解析和校验字段；这样可以避开当前 CLI 结构化输出通道的流式断开问题。默认中等思考强度，优先保证工具调用和复杂建造质量；修改 `config/servers/local.yaml` 后，需要重启 controller。
 
-controller 会把项目内置 skills 同步到隔离的 `data/codex_home/skills/`，然后用 `CODEX_HOME=data/codex_home` 运行 Codex CLI。这样游戏里的 Codex 只会看到 Blockwright 打包的建造、择址、校验、图片复刻、改造和安全命令 skills，不会读你全局 `~/.codex/skills` 里的其他项目技能。这个目录会软链接本机 `~/.codex/auth.json`，因此仍然复用你的本机 Codex 登录状态；如果你的登录文件不在默认位置，可以用 `BLOCKWRIGHT_CODEX_AUTH_JSON=/path/to/auth.json` 指定。
+controller 会把项目内置 skills 和 Blockwright MCP 配置同步到隔离的 `data/codex_home/`，然后用 `CODEX_HOME=data/codex_home` 运行 Codex CLI。这样游戏里的 Codex 只会看到 Blockwright 打包的建造、择址、校验、图片复刻、改造、安全命令 skills，以及读取玩家状态、扫描附近方块、查询/保存/删除蓝图、查询/删除/搜索构建记录、直接给物品、放方块、执行安全命令和发送聊天的 MCP 工具，不会读你全局 `~/.codex/skills` 里的其他项目技能。这个目录会软链接本机 `~/.codex/auth.json`，因此仍然复用你的本机 Codex 登录状态；如果你的登录文件不在默认位置，可以用 `BLOCKWRIGHT_CODEX_AUTH_JSON=/path/to/auth.json` 指定。
 
 Codex 会话按人隔离：Minecraft 里同一个玩家连续说话会复用同一个 Codex 会话；不同玩家各自独立。机器人入口按发送人隔离，例如同一个钉钉发送人复用自己的会话。会话映射保存在 `data/codex_sessions.json`，`data/` 已经忽略，不会提交到仓库。
 
-controller 日志不会打印模型原始思考链路或完整模型正文，但会打印可排查的阶段进度：`starting codex cli request`、实时的 `codex cli progress event`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。`codex cli progress event` 会把 Codex JSON 事件转成“开始分析玩家需求”“准备调用工具”“最终结构化回复已经生成”等阶段说明，并只保留安全的工具/命令名字。如果 1800 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
+controller 日志不会打印模型原始思考链路或完整模型正文，但会打印可排查的状态：`starting codex cli request`、实时的 `codex cli progress event`、每 10 秒一次的 `codex cli request still running`、`codex blueprint json parsed`、`codex blueprint placement assessed`、`finished codex cli request`。`codex cli progress event` 会把 Codex JSON 事件转成“AI 正在处理你的请求”“AI 正在准备工具调用”“AI 回复已经生成”等状态说明，并只保留安全的工具/命令名字。如果 1800 秒超时，就能从这些日志判断是 Codex 一直没返回，还是已经返回后卡在解析、场地校验或保存。
 
-controller 会先让 Codex 输出 `intent`，再进入蓝图规划、动作规划或已有建筑改造流程，不再先套本地关键词模板。比如“生成一个树屋”“建一个房间”“盖一个木屋”“给我旋转木马，可以大点”都会由 Codex 判断是否属于新建蓝图；“给我钻石剑”“把时间调到白天”会由 Codex 判断为动作。`codex.enabled=false` 时不会再用本地关键词规则冒充理解，而是直接提示需要启用 Codex。
+controller 不再把玩家请求硬塞进本地意图模板。Codex 会像普通助手一样先理解聊天内容，需要事实就调 MCP 读取，需要发物品就用给物品动作，需要放明确方块就用放方块工具，需要建筑经验就按 skills 生成蓝图和落点。比如“生成一个树屋”“建一个房间”“盖一个木屋”“给我旋转木马，可以大点”会进入自由建造流程；“给我钻石剑”“把时间调到白天”“看看我手上是什么”会进入对应的工具或动作。`codex.enabled=false` 时不会再用本地关键词规则冒充理解，而是直接提示需要启用 Codex。
 
 Blockwright 会要求 Codex 按 Minecraft 可玩性规划建筑：住宅、木屋、房间、树屋默认不是空壳，应该有地板、墙、屋顶、入口、两格高室内空间、床、照明、窗户和可到达路径。树屋或树冠用到树叶时，优先生成 `minecraft:oak_leaves[persistent=true]` 这类持久树叶，避免放完后自然凋零；门和床这类两格结构会带上 `half=lower/upper`、`part=foot/head` 等方块状态，并和普通方块一样进入保存、放置和校验。
 

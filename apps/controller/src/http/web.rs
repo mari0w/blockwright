@@ -14,7 +14,9 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{BuildStatus, ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
+    domain::types::{
+        BuildStatus, ChatAttachment, ChatAttachmentKind, ChatAttachmentSource, GameAction,
+    },
     http::robot::queue_chat_message,
     https,
     services::chat::IncomingChatMessage,
@@ -238,12 +240,27 @@ async fn web_job_status(
     AxumPath(job_id): AxumPath<String>,
 ) -> Result<Json<WebJobStatusResponse>, StatusCode> {
     let queue_status = state.jobs.status(&job_id).await;
-    let build = state.builds.get(&job_id).await;
+    let build = if should_read_build_record(queue_status.as_ref()) {
+        state.builds.get(&job_id).await
+    } else {
+        None
+    };
     if queue_status.is_none() && build.is_none() {
         return Err(StatusCode::NOT_FOUND);
     }
 
     Ok(Json(web_job_status_response(queue_status, build)))
+}
+
+fn should_read_build_record(queue_status: Option<&JobQueueStatus>) -> bool {
+    queue_status
+        .and_then(|status| status.job.as_ref())
+        .map(|job| {
+            job.actions
+                .iter()
+                .any(|action| matches!(action, GameAction::PlaceBlocks { .. }))
+        })
+        .unwrap_or(true)
 }
 
 fn web_job_status_response(
@@ -265,14 +282,14 @@ fn web_job_status_response(
     match build.as_ref().map(|item| &item.status) {
         Some(BuildStatus::Succeeded) => WebJobStatusResponse {
             phase: "succeeded".to_string(),
-            message: "Minecraft 已经完成这次操作。".to_string(),
+            message: status_message(JobQueuePhase::Succeeded),
             summary,
             build_status,
             result_message,
         },
         Some(BuildStatus::Failed) => WebJobStatusResponse {
             phase: "failed".to_string(),
-            message: "这次没能放到世界里，可以调整说法后再试。".to_string(),
+            message: status_message(JobQueuePhase::Failed),
             summary,
             build_status,
             result_message,
@@ -284,11 +301,11 @@ fn web_job_status_response(
             );
             WebJobStatusResponse {
                 phase: if pending { "queued" } else { "running" }.to_string(),
-                message: if pending {
-                    "我已经准备好方案，正在等 Minecraft 接手。".to_string()
+                message: status_message(if pending {
+                    JobQueuePhase::Pending
                 } else {
-                    "Minecraft 正在处理，可能在扫描现场或放置方块。".to_string()
-                },
+                    JobQueuePhase::Claimed
+                }),
                 summary,
                 build_status,
                 result_message,
@@ -297,28 +314,28 @@ fn web_job_status_response(
         None => match queue_status.as_ref().map(|item| &item.phase) {
             Some(JobQueuePhase::Pending) => WebJobStatusResponse {
                 phase: "queued".to_string(),
-                message: "我已经准备好方案，正在等 Minecraft 接手。".to_string(),
+                message: status_message(JobQueuePhase::Pending),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Claimed) => WebJobStatusResponse {
                 phase: "running".to_string(),
-                message: "Minecraft 正在处理，可能在扫描现场或放置方块。".to_string(),
+                message: status_message(JobQueuePhase::Claimed),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Succeeded) => WebJobStatusResponse {
                 phase: "succeeded".to_string(),
-                message: "Minecraft 已经完成这次操作。".to_string(),
+                message: status_message(JobQueuePhase::Succeeded),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Failed) => WebJobStatusResponse {
                 phase: "failed".to_string(),
-                message: "这次没能放到世界里，可以调整说法后再试。".to_string(),
+                message: status_message(JobQueuePhase::Failed),
                 summary,
                 build_status,
                 result_message,
@@ -334,12 +351,83 @@ fn web_job_status_response(
     }
 }
 
+fn status_message(phase: JobQueuePhase) -> String {
+    let message = match phase {
+        JobQueuePhase::Pending => "我已经准备好操作，正在等 Minecraft 接手。",
+        JobQueuePhase::Claimed => "Minecraft 正在处理这次操作。",
+        JobQueuePhase::Succeeded => "Minecraft 已经完成这次操作。",
+        JobQueuePhase::Failed => "Minecraft 这次没有完成执行，请查看具体原因。",
+    };
+    message.to_string()
+}
+
 fn clean_user_status_detail(message: String) -> Option<String> {
     let value = message.trim();
     if value.is_empty() || value.eq_ignore_ascii_case("ok") || value == "成功" {
         return None;
     }
     Some(value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::types::{BlockOrigin, BlueprintBlock, GameJob};
+
+    #[test]
+    fn non_build_queue_jobs_do_not_read_stale_build_records() {
+        let status = JobQueueStatus {
+            phase: JobQueuePhase::Succeeded,
+            job: Some(GameJob {
+                id: "hm-job-1".to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: "发放红砖".to_string(),
+                actions: vec![GameAction::GiveItem {
+                    player: Some("Steve".to_string()),
+                    item: "minecraft:red_concrete".to_string(),
+                    count: 64,
+                }],
+            }),
+            message: Some("ok".to_string()),
+            result: None,
+        };
+
+        assert!(!should_read_build_record(Some(&status)));
+    }
+
+    #[test]
+    fn build_queue_jobs_still_read_build_records() {
+        let status = JobQueueStatus {
+            phase: JobQueuePhase::Claimed,
+            job: Some(GameJob {
+                id: "hm-job-1".to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: "建造".to_string(),
+                actions: vec![GameAction::PlaceBlocks {
+                    blueprint_id: Some("test".to_string()),
+                    origin: BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x: 0,
+                        y: 64,
+                        z: 0,
+                    },
+                    blocks: vec![BlueprintBlock {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:stone".to_string(),
+                    }],
+                    clear_existing: false,
+                }],
+            }),
+            message: None,
+            result: None,
+        };
+
+        assert!(should_read_build_record(Some(&status)));
+    }
 }
 
 struct TranslationLanguage {

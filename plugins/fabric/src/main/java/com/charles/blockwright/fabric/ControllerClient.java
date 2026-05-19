@@ -58,6 +58,7 @@ public final class ControllerClient {
         request.player = player.name();
         request.text = text;
         request.position = player.position();
+        request.playerState = player.playerState();
         request.nearbyScan = nearbyScan;
         request.attachments = attachments;
         request.progressId = "fabric-" + UUID.randomUUID();
@@ -146,7 +147,11 @@ public final class ControllerClient {
         request.ok = ok;
         request.message = message;
         request.report = report;
+        sendJobResult(jobId, request);
+    }
 
+    public void sendJobResult(String jobId, JsonModels.JobResultRequest request)
+            throws IOException, InterruptedException {
         HttpRequest httpRequest = baseRequest(ControllerPaths.jobResultPath(jobId))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(request)))
                 .build();

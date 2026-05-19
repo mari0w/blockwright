@@ -17,6 +17,11 @@ final class WorldScanner {
     }
 
     static JsonModels.WorldScan scan(ServerPlayerEntity player, BlockwrightConfig config) {
+        return scan(player, config, config.scanRadius);
+    }
+
+    static JsonModels.WorldScan scan(ServerPlayerEntity player, BlockwrightConfig config, int requestedRadius) {
+        int radius = requestedRadius > 0 ? Math.min(requestedRadius, 32) : config.scanRadius;
         ServerWorld world = player.getWorld();
         Vec3d look = player.getRotationVec(1.0F);
         BlockPos playerCenter = player.getBlockPos();
@@ -30,12 +35,12 @@ final class WorldScanner {
         scan.centerX = lookCenter.getX();
         scan.centerY = lookCenter.getY();
         scan.centerZ = lookCenter.getZ();
-        scan.radius = config.scanRadius;
+        scan.radius = radius;
         scan.blocks = new ArrayList<>();
 
         Set<BlockPos> visited = new HashSet<>();
-        collectArea(world, scan, playerCenter, config, visited);
-        collectArea(world, scan, lookCenter, config, visited);
+        collectArea(world, scan, playerCenter, radius, config.maxScanBlocks, visited);
+        collectArea(world, scan, lookCenter, radius, config.maxScanBlocks, visited);
 
         return scan;
     }
@@ -44,13 +49,13 @@ final class WorldScanner {
             ServerWorld world,
             JsonModels.WorldScan scan,
             BlockPos center,
-            BlockwrightConfig config,
+            int radius,
+            int maxScanBlocks,
             Set<BlockPos> visited) {
-        int radius = config.scanRadius;
         for (int x = center.getX() - radius; x <= center.getX() + radius; x++) {
             for (int y = center.getY() - radius; y <= center.getY() + radius; y++) {
                 for (int z = center.getZ() - radius; z <= center.getZ() + radius; z++) {
-                    if (scan.blocks.size() >= config.maxScanBlocks) {
+                    if (scan.blocks.size() >= maxScanBlocks) {
                         return;
                     }
 

@@ -141,7 +141,7 @@ impl CodexClient {
         } else {
             None
         };
-        let resume_thread_id = if let Some(session_key) = session_key.as_deref() {
+        let mut resume_thread_id = if let Some(session_key) = session_key.as_deref() {
             self.sessions.get(session_key).await
         } else {
             None
@@ -169,6 +169,7 @@ impl CodexClient {
 
         let started_at = std::time::Instant::now();
         let mut attempt = 1;
+        let mut context_session_reset = false;
         let (output, last_message_path) = loop {
             let last_message_path = codex_last_message_path();
             let attempt_started_at = std::time::Instant::now();
@@ -227,6 +228,20 @@ impl CodexClient {
                         error = %failure,
                         "codex cli request failed"
                     );
+                    if self
+                        .reset_session_after_context_overflow(
+                            &session_key,
+                            &mut resume_thread_id,
+                            &mut context_session_reset,
+                            attempt,
+                            &failure,
+                            progress_id,
+                        )
+                        .await?
+                    {
+                        attempt += 1;
+                        continue;
+                    }
                     if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
                     {
                         attempt += 1;
@@ -246,6 +261,20 @@ impl CodexClient {
                         error = %failure,
                         "codex cli request failed before process exit"
                     );
+                    if self
+                        .reset_session_after_context_overflow(
+                            &session_key,
+                            &mut resume_thread_id,
+                            &mut context_session_reset,
+                            attempt,
+                            &failure,
+                            progress_id,
+                        )
+                        .await?
+                    {
+                        attempt += 1;
+                        continue;
+                    }
                     if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
                     {
                         attempt += 1;
@@ -296,6 +325,39 @@ impl CodexClient {
         };
         progress.record(progress_id, phase, detail);
     }
+
+    async fn reset_session_after_context_overflow(
+        &self,
+        session_key: &Option<String>,
+        resume_thread_id: &mut Option<String>,
+        context_session_reset: &mut bool,
+        attempt: u32,
+        failure: &str,
+        progress_id: Option<&str>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let Some(session_key) = session_key.as_deref() else {
+            return Ok(false);
+        };
+        if *context_session_reset
+            || resume_thread_id.is_none()
+            || attempt >= CODEX_MAX_REQUEST_ATTEMPTS
+            || !codex_failure_is_context_window_full(failure)
+        {
+            return Ok(false);
+        }
+
+        self.sessions.remove(session_key).await?;
+        *resume_thread_id = None;
+        *context_session_reset = true;
+        tracing::warn!(
+            command = %self.config.command,
+            session_key = %session_key,
+            attempt,
+            "codex session context window is full; cleared saved thread and retrying fresh"
+        );
+        self.record_progress(progress_id, "Codex 会话历史过长，已自动换新会话重试", None);
+        Ok(true)
+    }
 }
 
 impl CodexSessionStore {
@@ -345,13 +407,30 @@ impl CodexSessionStore {
             sessions.clone()
         };
 
+        self.persist_snapshot(&snapshot).await
+    }
+
+    async fn remove(&self, key: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let snapshot = {
+            let mut sessions = self.sessions.lock().await;
+            sessions.remove(key);
+            sessions.clone()
+        };
+
+        self.persist_snapshot(&snapshot).await
+    }
+
+    async fn persist_snapshot(
+        &self,
+        snapshot: &HashMap<String, String>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let Some(path) = self.path.as_ref() else {
             return Ok(());
         };
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        let json = serde_json::to_string_pretty(&snapshot)?;
+        let json = serde_json::to_string_pretty(snapshot)?;
         tokio::fs::write(path.as_ref(), json).await?;
         Ok(())
     }
@@ -650,15 +729,15 @@ fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
 
 fn schema_start_phase(schema_label: &str) -> &'static str {
     match schema_label {
-        "plan" => "Codex 正在理解需求并决定下一步",
-        _ => "Codex 正在处理请求",
+        "plan" => "AI 正在处理你的请求",
+        _ => "AI 正在处理请求",
     }
 }
 
 fn schema_finish_phase(schema_label: &str) -> &'static str {
     match schema_label {
-        "plan" => "Codex 已给出回复和下一步动作",
-        _ => "Codex 已完成本阶段处理",
+        "plan" => "AI 已生成回复和操作结果",
+        _ => "AI 已完成本阶段处理",
     }
 }
 
@@ -678,32 +757,26 @@ fn codex_progress_event(value: &Value) -> Option<CodexProgressEvent> {
 
 fn codex_progress_phase(event_type: &str) -> Option<&'static str> {
     match event_type {
-        "thread.started" => Some("会话已准备好，开始承接本次请求"),
-        "turn.started" => Some("开始分析玩家需求并准备生成结构化结果"),
-        "turn.completed" => Some("本轮 Codex 处理完成，准备整理最终结果"),
-        "agent_message.started" => Some("开始生成最终结构化回复"),
-        "agent_message.completed" => Some("最终结构化回复已经生成"),
-        "error" | "turn.failed" => Some("Codex 处理失败，准备返回错误"),
+        "thread.started" => Some("AI 会话已准备好"),
+        "turn.started" => Some("AI 正在处理你的请求"),
+        "turn.completed" => Some("AI 已完成本轮处理"),
+        "agent_message.started" => Some("AI 正在整理回复"),
+        "agent_message.completed" => Some("AI 回复已经生成"),
+        "error" | "turn.failed" => Some("AI 处理失败，准备返回错误"),
         value if value.contains("reasoning") && value.ends_with(".started") => {
-            Some("开始分析需求和可执行方案")
+            Some("AI 正在分析需求")
         }
         value if value.contains("reasoning") && value.ends_with(".completed") => {
-            Some("需求分析阶段完成")
+            Some("AI 分析阶段完成")
         }
-        value if value.contains("tool") && value.ends_with(".started") => {
-            Some("准备调用工具获取上下文或执行辅助步骤")
-        }
-        value if value.contains("tool") && value.ends_with(".completed") => {
-            Some("工具调用完成，继续整理结果")
-        }
+        value if value.contains("tool") && value.ends_with(".started") => Some("AI 准备调用工具"),
+        value if value.contains("tool") && value.ends_with(".completed") => Some("工具调用完成"),
         value if value.contains("command") && value.ends_with(".started") => {
-            Some("准备执行内部命令或检查步骤")
+            Some("准备执行内部检查")
         }
-        value if value.contains("command") && value.ends_with(".completed") => {
-            Some("内部命令或检查步骤完成")
-        }
-        value if value.ends_with(".started") => Some("进入新的处理阶段"),
-        value if value.ends_with(".completed") => Some("当前处理阶段完成"),
+        value if value.contains("command") && value.ends_with(".completed") => Some("内部检查完成"),
+        value if value.ends_with(".started") => Some("AI 进入新的处理阶段"),
+        value if value.ends_with(".completed") => Some("AI 当前处理阶段完成"),
         _ => None,
     }
 }
@@ -752,6 +825,15 @@ fn codex_failure_is_retriable(message: &str) -> bool {
     message.contains("stream disconnected before completion")
         || message.contains("timeout waiting for child process to exit")
         || message.contains("Reconnecting... 5/5")
+}
+
+fn codex_failure_is_context_window_full(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("ran out of room in the model's context window")
+        || lower.contains("context window")
+            && lower.contains("start a new thread")
+            && lower.contains("clear earlier history")
+        || lower.contains("context_length_exceeded")
 }
 
 fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
@@ -1146,6 +1228,81 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
+    async fn context_window_full_resets_saved_session_and_retries_fresh() {
+        let dir = temp_dir("session-context-reset");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-context-reset.sh");
+        let args_log = dir.join("args.log");
+        let session_path = dir.join("sessions.json");
+        fs::write(&session_path, r#"{"minecraft:steve":"thread-old"}"#).unwrap();
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{}'
+last_message=""
+resume_thread=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    resume)
+      resume_thread="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ "$resume_thread" == "thread-old" ]]; then
+  printf '{{"type":"error","error":"Codex ran out of room in the model'\''s context window. Start a new thread or clear earlier history before retrying."}}\n'
+  exit 1
+fi
+printf '{{"type":"thread.started","thread_id":"thread-new"}}\n'
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::with_session_path(
+            CodexConfig {
+                enabled: true,
+                command: script_path.to_string_lossy().to_string(),
+                timeout_seconds: 5,
+            },
+            session_path.clone(),
+        );
+
+        let output = client
+            .ask_with_schema("hello", CodexResponseSchema::Plan, Some("minecraft:steve"))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(output.contains("\"summary\":\"测试\""));
+        let args = fs::read_to_string(args_log).unwrap();
+        let lines = args.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("resume thread-old"));
+        assert!(!lines[1].contains("resume thread-old"));
+        assert!(fs::read_to_string(session_path)
+            .unwrap()
+            .contains("thread-new"));
+    }
+
+    #[tokio::test]
     async fn schema_requests_do_not_pass_output_schema_to_cli() {
         let dir = temp_dir("schema-request-without-output-schema");
         fs::create_dir_all(&dir).unwrap();
@@ -1351,7 +1508,7 @@ BLOCKWRIGHT_JSON
         let progress = codex_progress_event(&event).unwrap();
 
         assert_eq!(progress.event_type, "agent_message.completed");
-        assert_eq!(progress.phase, "最终结构化回复已经生成");
+        assert_eq!(progress.phase, "AI 回复已经生成");
         assert_eq!(progress.detail, None);
     }
 
@@ -1369,12 +1526,12 @@ BLOCKWRIGHT_JSON
         let tool_progress = codex_progress_event(&tool_event).unwrap();
         let command_progress = codex_progress_event(&command_event).unwrap();
 
-        assert_eq!(tool_progress.phase, "准备调用工具获取上下文或执行辅助步骤");
+        assert_eq!(tool_progress.phase, "AI 准备调用工具");
         assert_eq!(
             tool_progress.detail.as_deref(),
             Some("blockwright_blueprint_validator")
         );
-        assert_eq!(command_progress.phase, "内部命令或检查步骤完成");
+        assert_eq!(command_progress.phase, "内部检查完成");
         assert_eq!(command_progress.detail.as_deref(), Some("python3"));
     }
 
@@ -1391,7 +1548,7 @@ BLOCKWRIGHT_JSON
 
         let progress = codex_progress_event(&event).unwrap();
 
-        assert_eq!(progress.phase, "Codex 处理失败，准备返回错误");
+        assert_eq!(progress.phase, "AI 处理失败，准备返回错误");
         assert_eq!(
             progress.detail.as_deref(),
             Some(

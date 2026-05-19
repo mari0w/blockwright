@@ -88,6 +88,9 @@ public final class JobPoller {
             if (player == null) {
                 throw new IllegalStateException("没有在线玩家可执行任务");
             }
+            if (executeLiveQueryJob(controllerClient, job, player)) {
+                return;
+            }
             if (executeScanAndPlanJob(controllerClient, job, player)) {
                 return;
             }
@@ -108,6 +111,38 @@ public final class JobPoller {
         CompletableFuture.runAsync(
                 () -> sendJobResult(controllerClient, job.id, resultOk, resultMessage, resultReport),
                 executor);
+    }
+
+    private boolean executeLiveQueryJob(
+            ControllerClient controllerClient,
+            JsonModels.GameJob job,
+            ServerPlayerEntity player) {
+        JsonModels.GameAction stateAction = firstAction(job.actions, "get_player_state");
+        if (stateAction != null) {
+            PlayerSnapshot snapshot = PlayerSnapshot.from(player);
+            JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
+            result.ok = true;
+            result.message = "ok";
+            result.playerState = snapshot.playerState();
+            CompletableFuture.runAsync(
+                    () -> sendJobResult(controllerClient, job.id, result),
+                    executor);
+            return true;
+        }
+
+        JsonModels.GameAction scanAction = firstAction(job.actions, "scan_nearby");
+        if (scanAction != null) {
+            JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
+            result.ok = true;
+            result.message = "ok";
+            result.nearbyScan = WorldScanner.scan(player, configSupplier.get(), scanAction.radius);
+            CompletableFuture.runAsync(
+                    () -> sendJobResult(controllerClient, job.id, result),
+                    executor);
+            return true;
+        }
+
+        return false;
     }
 
     private boolean executeScanAndPlanJob(
@@ -152,12 +187,16 @@ public final class JobPoller {
     }
 
     private JsonModels.GameAction firstScanAction(List<JsonModels.GameAction> actions) {
+        return firstAction(actions, "scan_nearby_and_plan");
+    }
+
+    private JsonModels.GameAction firstAction(List<JsonModels.GameAction> actions, String type) {
         if (actions == null) {
             return null;
         }
 
         for (JsonModels.GameAction action : actions) {
-            if (action != null && "scan_nearby_and_plan".equals(action.type)) {
+            if (action != null && type.equals(action.type)) {
                 return action;
             }
         }
@@ -255,8 +294,19 @@ public final class JobPoller {
             boolean ok,
             String message,
             JsonModels.JobExecutionReport report) {
+        JsonModels.JobResultRequest request = new JsonModels.JobResultRequest();
+        request.ok = ok;
+        request.message = message;
+        request.report = report;
+        sendJobResult(controllerClient, jobId, request);
+    }
+
+    private void sendJobResult(
+            ControllerClient controllerClient,
+            String jobId,
+            JsonModels.JobResultRequest request) {
         try {
-            controllerClient.sendJobResult(jobId, ok, message, report);
+            controllerClient.sendJobResult(jobId, request);
         } catch (Exception error) {
             LOGGER.warn("Blockwright send job result failed: {}", error.getMessage());
         }
