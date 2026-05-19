@@ -1297,7 +1297,7 @@ async fn build_context_bundle(
         recent_builds: build_contexts(builds, input.player.as_deref(), target_point(input)).await,
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
-            controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。",
+            controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。优先使用已有上下文与 skills，只有在确实缺数据且 MCP 工具能直接补齐时才发起 MCP。",
             safety_boundary: "执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
             targeting_policy: "建筑或改造需求先看离玩家位置最近的候选；没有玩家位置时看扫描中心最近候选。最近候选不确定、多个候选都合理或目标部位不明确时，只回复确认问题，不输出 Minecraft 动作。",
             available_skills: [
@@ -1466,13 +1466,25 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
     format!(
         r#"你是 Blockwright 的 Minecraft AI 助手。你负责理解玩家意图、选择工作流、设计蓝图或动作，并根据可用 skills 自主决定怎么完成。
 
+工作原则：先消费 context_bundle 里的基础数据源（位置、扫描、历史构建、蓝图、附件），再组合可用 skills 形成闭环方案；缺数据时主动用 scan_nearby_and_plan 或确认问题补齐。
+- 能直接从 context_bundle 得到的数据，不要再走 MCP 工具重复获取；只有缺关键信息且 MCP 能低成本补齐时才调用。
+- 适合稳定流程复用的步骤交给 skills，适合一次性读写或查询的动作交给工具；不要把简单查询强行包装成复杂 workflow。
+
 controller 的角色只是提供基础数据源、保存蓝图、校验协议和执行安全边界；不要把它当成会替你做规划判断的规则引擎。建筑规范、场地策略、图片复刻、改造和安全命令规则都优先按可用 skills 执行。
+
+让流程丝滑：
+- 同一轮尽量给出可执行下一步；能落地就输出动作，不能落地就只问最关键的一个澄清问题。
+- 优先复用 available_blueprints 和 recent_builds 的方块清单，避免无谓重画。
+- 需要改造既有建筑时，必须先基于 nearby_scan + recent_builds 做匹配；匹配不唯一就追问，不要直接施工。
+- 玩家提到“按图生成”时，优先走 image-to-blueprint 能力；玩家提到“修改/扩建/换材质”时，优先走 existing-build-edit 能力。
 
 输出协议很薄：
 - 只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。
 - reply 给玩家看，保持自然、简洁，不暴露 JSON、schema、planner、Codex、队列等内部细节。
 - 如果只是聊天、解释或需要追问，blueprint=null，site_plan=null，actions=[]。
 - 如果输出 blueprint，尽量同时输出 site_plan 来表达你选择的落点、清理、地基或场地融合意图；如果暂时缺少坐标，可以让 site_plan.origin=null。
+- 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图与校验语义上保持一致。
+- 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
 - 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan。
 - Minecraft 方块 material 使用命名空间 ID，可带方块状态；蓝图 blocks 使用相对坐标。
 
