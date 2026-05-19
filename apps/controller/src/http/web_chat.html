@@ -59,7 +59,7 @@
       color: var(--muted);
       font-size: 13px;
     }
-    input, textarea, button {
+    input, textarea, select, button {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -67,9 +67,17 @@
       color: var(--text);
       font: inherit;
     }
-    input, textarea {
+    input, textarea, select {
       padding: 10px 12px;
       outline: none;
+    }
+    select {
+      appearance: none;
+      background:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 17px) 50% / 6px 6px no-repeat,
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 12px) 50% / 6px 6px no-repeat,
+        var(--panel);
+      padding-right: 30px;
     }
     textarea {
       min-height: 52px;
@@ -79,7 +87,8 @@
       background: transparent;
       padding: 13px 14px;
     }
-    input:focus {
+    input:focus,
+    select:focus {
       border-color: var(--focus);
       box-shadow: 0 0 0 3px rgba(123, 183, 255, .14);
     }
@@ -180,7 +189,7 @@
     }
     .composer-actions {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) 118px;
+      grid-template-columns: auto auto minmax(0, 1fr) 118px;
       gap: 10px;
       align-items: center;
       padding: 10px;
@@ -217,6 +226,72 @@
     .icon-button:focus-visible {
       border-color: var(--accent-warm);
       outline: none;
+    }
+    .icon-button svg {
+      width: 21px;
+      height: 21px;
+      stroke: currentColor;
+    }
+    .voice-toggle.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .voice-panel {
+      display: grid;
+      grid-template-columns: 132px 146px minmax(180px, 1fr);
+      gap: 10px;
+      align-items: end;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      background: rgba(0, 0, 0, .08);
+    }
+    .voice-panel[hidden] {
+      display: none;
+    }
+    .voice-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .voice-field span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .voice-field select {
+      height: 42px;
+    }
+    .voice-hold {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 42px;
+      padding: 0 14px;
+      border-color: var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+      touch-action: none;
+      user-select: none;
+    }
+    .voice-hold:hover,
+    .voice-hold:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+    }
+    .voice-hold.recording {
+      border-color: var(--danger);
+      background: rgba(255, 107, 107, .16);
+      color: #ffdede;
+    }
+    .voice-hold svg {
+      width: 19px;
+      height: 19px;
+      flex: 0 0 auto;
+      stroke: currentColor;
     }
     .preview {
       display: grid;
@@ -291,7 +366,13 @@
         border-bottom: 1px solid var(--line);
       }
       .composer-actions {
-        grid-template-columns: auto minmax(0, 1fr) 96px;
+        grid-template-columns: auto auto minmax(0, 1fr) 96px;
+      }
+      .voice-panel {
+        grid-template-columns: 1fr 1fr;
+      }
+      .voice-hold {
+        grid-column: 1 / -1;
       }
     }
   </style>
@@ -313,9 +394,47 @@
         <div class="input-shell">
           <textarea id="text" placeholder="说你想建什么、改什么，图片会一起发过去。"></textarea>
           <div id="preview" class="preview" hidden></div>
+          <div id="voicePanel" class="voice-panel" hidden>
+            <label class="voice-field" for="voiceSource">
+              <span>识别语言</span>
+              <select id="voiceSource">
+                <option value="zh-CN">中文</option>
+                <option value="en-US">English</option>
+                <option value="pt-BR">Português</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="es-ES">Español</option>
+              </select>
+            </label>
+            <label class="voice-field" for="voiceTarget">
+              <span>翻译为</span>
+              <select id="voiceTarget">
+                <option value="zh-CN">中文</option>
+                <option value="en">English</option>
+                <option value="pt-BR">Português</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="es">Español</option>
+                <option value="original">不翻译</option>
+              </select>
+            </label>
+            <button id="voiceHold" class="voice-hold" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <path d="M12 19v3"></path>
+              </svg>
+              <span id="voiceHoldText">按住说话，松手发送</span>
+            </button>
+          </div>
           <div class="composer-actions">
             <input id="images" class="sr-only" type="file" accept="image/*" multiple>
             <label class="icon-button" for="images" title="选择图片" aria-label="选择图片">+</label>
+            <button id="voiceToggle" class="icon-button voice-toggle" type="button" title="语音输入" aria-label="语音输入">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <path d="M12 19v3"></path>
+              </svg>
+            </button>
             <div id="status" class="status"></div>
             <button id="send" type="submit">发送</button>
           </div>
@@ -335,17 +454,40 @@
     const messages = document.getElementById('messages');
     const statusEl = document.getElementById('status');
     const send = document.getElementById('send');
+    const voiceToggle = document.getElementById('voiceToggle');
+    const voicePanel = document.getElementById('voicePanel');
+    const voiceSource = document.getElementById('voiceSource');
+    const voiceTarget = document.getElementById('voiceTarget');
+    const voiceHold = document.getElementById('voiceHold');
+    const voiceHoldText = document.getElementById('voiceHoldText');
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     let pendingImages = [];
     let nextImageId = 1;
     let activeJobPoll = null;
+    let recognition = null;
+    let voiceHoldActive = false;
+    let voiceStopping = false;
+    let voiceSending = false;
+    let voiceFinalText = '';
+    let voiceInterimText = '';
 
     username.value = localStorage.getItem('bw.username') || '';
     targetPlayer.value = localStorage.getItem('bw.targetPlayer') || '';
     serverId.value = localStorage.getItem('bw.serverId') || 'hmcl-lan';
+    voiceSource.value = localStorage.getItem('bw.voiceSource') || 'zh-CN';
+    voiceTarget.value = localStorage.getItem('bw.voiceTarget') || 'zh-CN';
 
     [username, targetPlayer, serverId].forEach((input) => {
       input.addEventListener('input', () => localStorage.setItem(`bw.${input.id}`, input.value));
     });
+    voiceSource.addEventListener('change', () => localStorage.setItem('bw.voiceSource', voiceSource.value));
+    voiceTarget.addEventListener('change', () => localStorage.setItem('bw.voiceTarget', voiceTarget.value));
+    setVoicePanel(localStorage.getItem('bw.voiceEnabled') === '1');
+
+    if (!SpeechRecognitionCtor) {
+      voiceHold.disabled = true;
+      voiceHoldText.textContent = '当前浏览器不支持语音识别';
+    }
 
     images.addEventListener('change', () => {
       addImageFiles([...images.files]);
@@ -368,6 +510,31 @@
 
     text.addEventListener('input', resizeComposer);
     resizeComposer();
+
+    voiceToggle.addEventListener('click', () => {
+      const enabled = voicePanel.hidden;
+      setVoicePanel(enabled);
+      if (enabled && !SpeechRecognitionCtor) {
+        setStatus('当前浏览器不支持语音识别，建议用 Chrome 打开。', true);
+      }
+    });
+
+    voiceHold.addEventListener('pointerdown', startVoiceInput);
+    voiceHold.addEventListener('pointerup', stopVoiceInput);
+    voiceHold.addEventListener('pointercancel', cancelVoiceInput);
+    voiceHold.addEventListener('contextmenu', (event) => event.preventDefault());
+    voiceHold.addEventListener('keydown', (event) => {
+      if ((event.key === ' ' || event.key === 'Enter') && !voiceHoldActive) {
+        event.preventDefault();
+        startVoiceInput(event);
+      }
+    });
+    voiceHold.addEventListener('keyup', (event) => {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        stopVoiceInput(event);
+      }
+    });
 
     function addImageFiles(files) {
       const imageFiles = files.filter((file) => file && file.type.startsWith('image/'));
@@ -467,6 +634,191 @@
       text.style.height = `${Math.min(text.scrollHeight, 220)}px`;
     }
 
+    function setVoicePanel(enabled) {
+      voicePanel.hidden = !enabled;
+      voiceToggle.classList.toggle('active', enabled);
+      voiceToggle.setAttribute('aria-pressed', String(enabled));
+      localStorage.setItem('bw.voiceEnabled', enabled ? '1' : '0');
+    }
+
+    function startVoiceInput(event) {
+      if (!SpeechRecognitionCtor) {
+        setStatus('当前浏览器不支持语音识别，建议用 Chrome 打开。', true);
+        return;
+      }
+      if (send.disabled || voiceSending || voiceHoldActive) {
+        return;
+      }
+      event?.preventDefault?.();
+      if (event?.pointerId != null && voiceHold.setPointerCapture) {
+        voiceHold.setPointerCapture(event.pointerId);
+      }
+
+      voiceFinalText = '';
+      voiceInterimText = '';
+      voiceStopping = false;
+      voiceHoldActive = true;
+      recognition = new SpeechRecognitionCtor();
+      recognition.lang = voiceSource.value;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.onresult = handleVoiceResult;
+      recognition.onerror = (error) => {
+        const message = voiceErrorMessage(error.error);
+        setStatus(message, true);
+      };
+      recognition.onend = () => {
+        recognition = null;
+        voiceHold.classList.remove('recording');
+        voiceHoldText.textContent = '按住说话，松手发送';
+        if (voiceStopping) {
+          finishVoiceInput();
+        }
+      };
+
+      try {
+        recognition.start();
+        voiceHold.classList.add('recording');
+        voiceHoldText.textContent = '松手发送';
+        setStatus('正在听，松手后会翻译并发送。', false);
+      } catch (error) {
+        recognition = null;
+        voiceHoldActive = false;
+        voiceHold.classList.remove('recording');
+        setStatus(error.message || '语音识别启动失败。', true);
+      }
+    }
+
+    function handleVoiceResult(event) {
+      let interim = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result[0]?.transcript || '';
+        if (result.isFinal) {
+          voiceFinalText += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      voiceInterimText = interim || voiceInterimText;
+      const previewText = `${voiceFinalText}${voiceInterimText}`.trim();
+      if (previewText) {
+        setStatus(`已听到：${shortText(previewText, 56)}`, false);
+      }
+    }
+
+    function stopVoiceInput(event) {
+      if (!voiceHoldActive) {
+        return;
+      }
+      event?.preventDefault?.();
+      if (event?.pointerId != null && voiceHold.releasePointerCapture) {
+        try {
+          voiceHold.releasePointerCapture(event.pointerId);
+        } catch (_) {
+        }
+      }
+      voiceHoldActive = false;
+      voiceStopping = true;
+      if (recognition) {
+        recognition.stop();
+      } else {
+        finishVoiceInput();
+      }
+    }
+
+    function cancelVoiceInput(event) {
+      event?.preventDefault?.();
+      voiceHoldActive = false;
+      voiceStopping = false;
+      if (recognition) {
+        recognition.abort();
+      }
+      recognition = null;
+      voiceHold.classList.remove('recording');
+      voiceHoldText.textContent = '按住说话，松手发送';
+      setStatus('语音输入已取消。', false);
+    }
+
+    async function finishVoiceInput() {
+      if (voiceSending) {
+        return;
+      }
+      const spokenText = `${voiceFinalText}${voiceInterimText}`.trim();
+      voiceFinalText = '';
+      voiceInterimText = '';
+      voiceStopping = false;
+      if (!spokenText) {
+        setStatus('没有听清内容，按住再说一次。', true);
+        return;
+      }
+
+      voiceSending = true;
+      voiceHold.disabled = true;
+      try {
+        const translated = await translateVoiceText(spokenText);
+        text.value = translated;
+        resizeComposer();
+        await sendCurrentMessage();
+      } catch (error) {
+        text.value = spokenText;
+        resizeComposer();
+        setStatus(`${error.message || String(error)}，已保留识别文字。`, true);
+      } finally {
+        voiceSending = false;
+        voiceHold.disabled = !SpeechRecognitionCtor;
+      }
+    }
+
+    async function translateVoiceText(spokenText) {
+      const target = voiceTarget.value;
+      if (target === 'original') {
+        setStatus('已按语音原文发送。', false);
+        return spokenText;
+      }
+
+      const targetLabel = voiceTarget.options[voiceTarget.selectedIndex]?.textContent || '目标语言';
+      setStatus(`正在翻译为${targetLabel}...`, false);
+      const response = await fetch('/web/translate', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({
+          text: spokenText,
+          target_language: target
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || await response.text() || '语音翻译失败');
+      }
+      const translated = (payload.translated_text || '').trim();
+      if (!translated) {
+        throw new Error('语音翻译结果为空');
+      }
+      return translated;
+    }
+
+    function voiceErrorMessage(code) {
+      switch (code) {
+        case 'not-allowed':
+        case 'service-not-allowed':
+          return '浏览器没有麦克风权限，允许后再试。';
+        case 'no-speech':
+          return '没有听到声音，按住再说一次。';
+        case 'audio-capture':
+          return '没有可用麦克风。';
+        case 'network':
+          return '语音识别服务暂时不可用。';
+        default:
+          return '语音识别失败。';
+      }
+    }
+
+    function shortText(value, maxLength) {
+      return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+    }
+
     function sentImageSummary(count) {
       if (count === 0) {
         return '';
@@ -490,15 +842,21 @@
       return `，图片 ${count} 张`;
     }
 
-    form.addEventListener('submit', async (event) => {
+    form.addEventListener('submit', (event) => {
       event.preventDefault();
+      sendCurrentMessage();
+    });
+
+    async function sendCurrentMessage() {
       const name = username.value.trim();
       if (!name) {
         setStatus('先填用户名。', true);
         username.focus();
         return;
       }
+      const voiceWasDisabled = voiceHold.disabled;
       send.disabled = true;
+      voiceHold.disabled = true;
       stopJobPolling();
       setStatus('正在发送给 Blockwright...', false);
       let assistantMessage = null;
@@ -551,8 +909,9 @@
         }
       } finally {
         send.disabled = false;
+        voiceHold.disabled = voiceWasDisabled || !SpeechRecognitionCtor;
       }
-    });
+    }
 
     function addMessage(kind, who, content, imageUrls) {
       const item = document.createElement('article');

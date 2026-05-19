@@ -250,6 +250,15 @@ JSON
 }
 JSON
     ;;
+  "")
+    if grep -q "Blockwright 网页语音输入的翻译器" "$prompt_file"; then
+      cat > "$last_message" <<'TEXT'
+帮我建一个小木屋
+TEXT
+    else
+      exit 3
+    fi
+    ;;
   *)
     exit 3
     ;;
@@ -285,6 +294,11 @@ async fn response_json(response: axum::response::Response) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
+async fn response_text(response: axum::response::Response) -> String {
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    String::from_utf8(body.to_vec()).unwrap()
+}
+
 #[tokio::test]
 async fn public_health_does_not_require_token() {
     let app = test_app(true).await;
@@ -311,6 +325,9 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         .await
         .unwrap();
     assert_eq!(page_response.status(), StatusCode::OK);
+    let page_body = response_text(page_response).await;
+    assert!(page_body.contains("voiceHold"));
+    assert!(page_body.contains("voiceTarget"));
 
     let message_response = app
         .oneshot(request(
@@ -342,6 +359,30 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         .unwrap()
         .starts_with("hm-job-"));
     assert!(body["reply"].as_str().unwrap().contains("蓝图"));
+}
+
+#[tokio::test]
+async fn web_voice_translate_uses_codex_without_api_token() {
+    let app = test_app_with_fake_codex(true, "api-web-voice-translate").await;
+
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/web/translate",
+            Some(json!({
+                "text": "build me a small wooden house",
+                "target_language": "zh-CN"
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+
+    assert_eq!(body["translated"], true);
+    assert_eq!(body["target_language"], "zh-CN");
+    assert_eq!(body["translated_text"], "帮我建一个小木屋");
 }
 
 #[tokio::test]

@@ -24,6 +24,7 @@ use crate::{
 const WEB_CHAT_HTML: &str = include_str!("web_chat.html");
 const MAX_IMAGES_PER_MESSAGE: usize = 4;
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_TRANSLATION_CHARS: usize = 4000;
 
 #[derive(Debug, Deserialize)]
 struct WebChatRequest {
@@ -54,6 +55,19 @@ struct WebChatResponse {
     attachment_count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct WebTranslateRequest {
+    text: String,
+    target_language: String,
+}
+
+#[derive(Debug, Serialize)]
+struct WebTranslateResponse {
+    translated_text: String,
+    target_language: String,
+    translated: bool,
+}
+
 #[derive(Debug, Serialize)]
 struct WebJobStatusResponse {
     phase: String,
@@ -71,6 +85,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(web_chat_page))
         .route("/web", get(web_chat_page))
         .route("/web/message", post(handle_web_message))
+        .route("/web/translate", post(handle_web_translate))
         .route("/web/jobs/{job_id}/status", get(web_job_status))
 }
 
@@ -120,6 +135,66 @@ async fn handle_web_message(
         queued_job_id,
         queued_summary,
         attachment_count: request.images.len(),
+    }))
+}
+
+async fn handle_web_translate(
+    State(state): State<AppState>,
+    Json(request): Json<WebTranslateRequest>,
+) -> Result<Json<WebTranslateResponse>, (StatusCode, String)> {
+    let text = request.text.trim();
+    if text.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "没有识别到可翻译的语音文字。".to_string(),
+        ));
+    }
+    if text.chars().count() > MAX_TRANSLATION_CHARS {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("语音文字太长，最多支持 {MAX_TRANSLATION_CHARS} 个字符。"),
+        ));
+    }
+
+    let target_language = normalize_translation_language(&request.target_language)?;
+    if target_language.code == "original" || !state.codex.enabled() {
+        return Ok(Json(WebTranslateResponse {
+            translated_text: text.to_string(),
+            target_language: target_language.code.to_string(),
+            translated: false,
+        }));
+    }
+
+    let prompt = build_translation_prompt(text, target_language.label);
+    let translated = state
+        .codex
+        .ask(&prompt)
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "web voice translation failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                "Codex 翻译失败，请稍后重试。".to_string(),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_GATEWAY,
+                "Codex 未返回翻译结果。".to_string(),
+            )
+        })?;
+    let translated_text = clean_translation_output(&translated);
+    if translated_text.is_empty() {
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            "Codex 返回的翻译结果为空。".to_string(),
+        ));
+    }
+
+    Ok(Json(WebTranslateResponse {
+        translated_text,
+        target_language: target_language.code.to_string(),
+        translated: true,
     }))
 }
 
@@ -221,6 +296,75 @@ fn web_job_status_response(
             },
         },
     }
+}
+
+struct TranslationLanguage {
+    code: &'static str,
+    label: &'static str,
+}
+
+fn normalize_translation_language(
+    value: &str,
+) -> Result<TranslationLanguage, (StatusCode, String)> {
+    match value.trim() {
+        "" | "original" => Ok(TranslationLanguage {
+            code: "original",
+            label: "原文",
+        }),
+        "zh" | "zh-CN" | "中文" => Ok(TranslationLanguage {
+            code: "zh-CN",
+            label: "中文",
+        }),
+        "en" | "en-US" | "English" => Ok(TranslationLanguage {
+            code: "en",
+            label: "英文",
+        }),
+        "pt" | "pt-BR" | "Português" => Ok(TranslationLanguage {
+            code: "pt-BR",
+            label: "巴西葡萄牙语",
+        }),
+        "hi" | "hi-IN" | "Hindi" => Ok(TranslationLanguage {
+            code: "hi-IN",
+            label: "印地语",
+        }),
+        "es" | "es-ES" | "Spanish" => Ok(TranslationLanguage {
+            code: "es",
+            label: "西班牙语",
+        }),
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            "不支持这个翻译目标语言。".to_string(),
+        )),
+    }
+}
+
+fn build_translation_prompt(text: &str, target_language: &str) -> String {
+    format!(
+        r#"你是 Blockwright 网页语音输入的翻译器。
+把 <speech_text> 里的语音识别文字翻译成{target_language}。
+只输出翻译后的文本，不要解释，不要加引号，不要 Markdown。
+如果原文已经是目标语言，只做必要的错别字和口语整理。
+
+<speech_text>
+{text}
+</speech_text>"#
+    )
+}
+
+fn clean_translation_output(value: &str) -> String {
+    let mut text = value.trim();
+    if let Some(stripped) = text.strip_prefix("```") {
+        text = stripped.trim_start();
+        if let Some((_, rest)) = text.split_once('\n') {
+            text = rest;
+        }
+        if let Some((body, _)) = text.rsplit_once("```") {
+            text = body.trim();
+        }
+    }
+    text.trim_matches(|ch| matches!(ch, '"' | '\'' | '“' | '”' | '‘' | '’'))
+        .trim()
+        .to_string()
 }
 
 async fn save_uploaded_images(
