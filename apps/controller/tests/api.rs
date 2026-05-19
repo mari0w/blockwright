@@ -329,6 +329,13 @@ async fn response_text(response: axum::response::Response) -> String {
     String::from_utf8(body.to_vec()).unwrap()
 }
 
+async fn response_bytes(response: axum::response::Response) -> Vec<u8> {
+    to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap()
+        .to_vec()
+}
+
 #[tokio::test]
 async fn public_health_does_not_require_token() {
     let app = test_app(true).await;
@@ -362,13 +369,61 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("id=\"cameraImage\""));
     assert!(page_body.contains("capture=\"environment\""));
     assert!(page_body.contains("id=\"libraryImages\""));
+    assert!(page_body.contains("id=\"addToggle\""));
+    assert!(page_body.contains("id=\"addPanel\""));
+    assert!(page_body.contains("aria-controls=\"addPanel\""));
+    assert!(page_body.contains("--top-control-size: 42px"));
+    assert!(page_body.contains("--composer-control-height: 42px"));
+    assert!(page_body.contains(".topbar .icon-button"));
+    assert!(page_body.contains(
+        "grid-template-columns: var(--composer-control-height) minmax(0, 1fr) var(--composer-control-height)"
+    ));
+    assert!(page_body.contains(">相册</span>"));
+    assert!(page_body.contains("id=\"voiceToggleKeyboard\""));
+    assert!(page_body.contains(".icon-button svg[hidden]"));
+    assert!(page_body.contains("toggle-icon-hidden"));
     assert!(page_body.contains("Minecraft 用户名"));
-    assert!(page_body.contains("Web 配置"));
+    assert!(page_body.contains("id=\"usernameGate\""));
+    assert!(page_body.contains("进入聊天"));
+    assert!(page_body.contains("function showUsernameGate"));
+    assert!(page_body.contains("class=\"brand-mark\""));
+    assert!(page_body.contains("aria-label=\"打开设置\""));
+    assert!(page_body.contains("M21 4h-7"));
+    assert!(page_body.contains("id=\"configPage\""));
+    assert!(page_body.contains("申请麦克风权限"));
+    assert!(page_body.contains("手机 HTTPS"));
+    assert!(page_body.contains("/web/blockwright-local-root-ca.cer"));
+    assert!(page_body.contains("下载 Blockwright 本地根证书文件"));
+    assert!(page_body.contains("Files by Google"));
+    assert!(page_body.contains("不是上传到 Google"));
+    assert!(page_body.contains("进入设置后不会自动提醒"));
+    assert!(page_body.contains("安装证书 > CA 证书"));
+    assert!(page_body.contains("请用 Safari 打开证书下载链接"));
+    assert!(page_body.contains("已下载描述文件"));
+    assert!(page_body.contains("证书信任设置"));
+    assert!(page_body.contains("id=\"httpsGuide\""));
+    assert!(page_body.contains("HTTPS 设置步骤"));
+    assert!(page_body.contains("我已安装证书"));
+    assert!(page_body.contains("我已信任证书"));
+    assert!(page_body.contains("function certificateInstallHelp"));
+    assert!(page_body.contains("function certificateTrustHelp"));
     assert!(page_body.contains("/api/chat/matrix/local-config"));
     assert!(page_body.contains("text.hidden = active"));
-    assert!(page_body.contains("send.hidden = active"));
+    assert!(page_body.contains("function composerControlHeight"));
+    assert!(page_body.contains(
+        "send.hidden = inputShell.classList.contains('voice-mode') || !hasSendContent()"
+    ));
+    assert!(page_body.contains("inputShell.classList.toggle('has-send'"));
+    assert!(page_body.contains("function setAddPanel"));
     assert!(page_body.contains("切换到文字输入"));
+    assert!(page_body.contains("navigator.mediaDevices.getUserMedia"));
+    assert!(page_body.contains("网站权限设置"));
+    assert!(page_body.contains("-webkit-user-select: none"));
+    assert!(page_body.contains("preventVoiceHoldSelection"));
+    assert!(!page_body.contains("正在听，松手后会发送。"));
+    assert!(!page_body.contains("已听到："));
     assert!(!page_body.contains("Minecraft 玩家"));
+    assert!(!page_body.contains("class=\"userbar\""));
     assert!(!page_body.contains("id=\"serverId\""));
     assert!(!page_body.contains("服务器</span>"));
     assert!(!page_body.contains("server_id:"));
@@ -407,6 +462,41 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         .unwrap()
         .starts_with("hm-job-"));
     assert!(body["reply"].as_str().unwrap().contains("蓝图"));
+}
+
+#[tokio::test]
+async fn web_https_ca_certificate_download_uses_cer_inline_response() {
+    let config = config(false);
+    let cert_dir = config.storage.data_dir.join("https");
+    std::fs::create_dir_all(&cert_dir).unwrap();
+    std::fs::write(
+        cert_dir.join("blockwright-local-ca.crt"),
+        "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----\n",
+    )
+    .unwrap();
+    let state = AppState::new(config).await.unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .oneshot(request(
+            "GET",
+            "/web/blockwright-local-root-ca.cer",
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/x-x509-ca-cert"
+    );
+    assert_eq!(
+        response.headers().get(header::CONTENT_DISPOSITION).unwrap(),
+        "inline; filename=\"Blockwright-Local-Root-CA.cer\""
+    );
+    assert_eq!(response_bytes(response).await, vec![1, 2, 3]);
 }
 
 #[tokio::test]

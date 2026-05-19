@@ -86,11 +86,16 @@ make HMCL_DIR=<HMCL当前游戏目录>
 cargo run -p blockwright-controller
 ```
 
-默认地址是：
+启动后控制台会输出两个地址：
 
 ```text
-http://127.0.0.1:8765
+Blockwright 本机访问：http://127.0.0.1:8765/web
+Blockwright 局域网访问：http://<当前机器局域网 IP>:8765/web
+Blockwright 本机 HTTPS：https://127.0.0.1:8766/web
+Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 ```
+
+手机语音请使用 HTTPS 地址。第一次使用时，在 Web 设置页下载 `Blockwright 本地根证书`。Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是保存证书文件，不是上传到 Google，也不是安装完成；进入设置后也通常不会自动提醒，需要手动进入“安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 `Blockwright-Local-Root-CA.cer`。iPhone/iPad 请用 Safari 打开证书下载链接；下载后在“设置”顶部的“已下载描述文件”或“通用 > VPN 与设备管理/描述文件”里安装，再到“通用 > 关于本机 > 证书信任设置”打开完全信任。完成后重新打开 HTTPS 地址并允许麦克风权限。
 
 ## 启动游戏
 
@@ -164,7 +169,7 @@ data/builds/
 
 正常本机使用不用改。只有 controller 地址或 token 改了才需要改。
 
-日常配置入口统一放在 controller 的 `/web` 页面，点“Web 配置”保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
+日常配置入口统一放在 controller 的 `/web` 页面，点右上角设置图标保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
 
 `requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型规划建筑后，复杂建筑可能明显超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
 

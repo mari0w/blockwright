@@ -2,6 +2,7 @@ pub mod app;
 pub mod config;
 pub mod domain;
 pub mod http;
+pub mod https;
 pub mod integrations;
 pub mod mcp;
 pub mod services;

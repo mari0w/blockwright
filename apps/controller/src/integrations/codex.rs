@@ -188,15 +188,17 @@ impl CodexClient {
 
         if !output.status.success() {
             let _ = tokio::fs::remove_file(&last_message_path).await;
+            let failure = codex_failure_message(output.status, &output.stderr);
             tracing::warn!(
                 command = %self.config.command,
                 schema = schema_label,
                 session_key = session_key.as_deref().unwrap_or("ephemeral"),
                 elapsed_ms,
                 status = %output.status,
+                error = %failure,
                 "codex cli request failed"
             );
-            return Err(codex_failure_message(output.status, &output.stderr).into());
+            return Err(failure.into());
         }
 
         let last_message = tokio::fs::read_to_string(&last_message_path)
@@ -632,6 +634,12 @@ fn codex_last_message_path() -> PathBuf {
 }
 
 fn codex_failure_message(status: ExitStatus, stderr: &[u8]) -> String {
+    if stderr.is_empty() {
+        return format!(
+            "codex command exited with {status}; no stderr returned. Check Codex login status, model access, network connectivity, and CLI version."
+        );
+    }
+
     let stderr_text = String::from_utf8_lossy(stderr);
     if let Some(api_error) = extract_codex_api_error(&stderr_text) {
         return format!("codex command exited with {status}: {api_error}");
@@ -925,5 +933,14 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
         assert!(message.contains("stderr omitted"));
         assert!(!message.contains("给我钻石斧头"));
         assert!(!message.contains("<html>"));
+    }
+
+    #[test]
+    fn failure_message_reports_empty_stderr_hint() {
+        let message = codex_failure_message(ExitStatus::from_raw(1), b"");
+
+        assert!(message.contains("no stderr returned"));
+        assert!(message.contains("Codex login status"));
+        assert!(!message.contains("stderr omitted"));
     }
 }

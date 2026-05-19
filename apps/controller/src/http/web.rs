@@ -5,8 +5,8 @@ use std::{
 
 use axum::{
     extract::{Path as AxumPath, State},
-    http::StatusCode,
-    response::Html,
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     domain::types::{BuildStatus, ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
     http::robot::queue_chat_message,
+    https,
     services::chat::IncomingChatMessage,
     services::job_queue::{JobQueuePhase, JobQueueStatus},
     state::AppState,
@@ -84,6 +85,11 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(web_chat_page))
         .route("/web", get(web_chat_page))
+        .route("/web/https-ca.crt", get(download_https_ca_certificate))
+        .route(
+            "/web/blockwright-local-root-ca.cer",
+            get(download_https_ca_certificate),
+        )
         .route("/web/message", post(handle_web_message))
         .route("/web/translate", post(handle_web_translate))
         .route("/web/jobs/{job_id}/status", get(web_job_status))
@@ -91,6 +97,35 @@ pub fn router() -> Router<AppState> {
 
 async fn web_chat_page() -> Html<&'static str> {
     Html(WEB_CHAT_HTML)
+}
+
+async fn download_https_ca_certificate(
+    State(state): State<AppState>,
+) -> Result<Response, (StatusCode, String)> {
+    let path = https::ca_certificate_path(&state.config.storage.data_dir);
+    let source = tokio::fs::read_to_string(&path).await.map_err(|error| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("HTTPS 根证书还没有生成，请先重启 controller：{error}"),
+        )
+    })?;
+    let certificate = https::certificate_der_from_pem(&source).map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("HTTPS 根证书格式不正确，请重启 controller 后重试：{error}"),
+        )
+    })?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/x-x509-ca-cert"),
+            (
+                header::CONTENT_DISPOSITION,
+                "inline; filename=\"Blockwright-Local-Root-CA.cer\"",
+            ),
+        ],
+        certificate,
+    )
+        .into_response())
 }
 
 async fn handle_web_message(

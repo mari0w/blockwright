@@ -270,6 +270,7 @@ mod tests {
         let config = yaml_serde::from_str::<AppConfig>(config_source).unwrap();
 
         assert_eq!(1800, config.codex.timeout_seconds);
+        assert_eq!("0.0.0.0", config.server.host);
         assert!(config
             .codex
             .command

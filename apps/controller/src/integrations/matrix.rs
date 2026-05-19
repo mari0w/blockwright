@@ -93,7 +93,22 @@ async fn run_matrix_poller(state: AppState, tool: ChatToolConfig) {
     let own_user_id = match matrix_whoami(&client, &homeserver_url, &access_token).await {
         Ok(user_id) => user_id,
         Err(error) => {
-            tracing::warn!(tool = %tool.name, error = %error, "matrix whoami failed");
+            if is_matrix_unauthorized_error(&error) {
+                tracing::warn!(
+                    tool = %tool.name,
+                    homeserver = %homeserver_url,
+                    access_token_env = %matrix.access_token_env,
+                    error = %error,
+                    "Matrix 已启用，但 access token 无效；请在 Web 设置里重新配置或关闭 Matrix"
+                );
+            } else {
+                tracing::warn!(
+                    tool = %tool.name,
+                    homeserver = %homeserver_url,
+                    error = %error,
+                    "matrix polling disabled because whoami failed"
+                );
+            }
             return;
         }
     };
@@ -444,6 +459,10 @@ fn ensure_matrix_success(status: StatusCode) -> Result<(), String> {
     }
 }
 
+fn is_matrix_unauthorized_error(error: &str) -> bool {
+    error.contains("401") || error.to_ascii_lowercase().contains("unauthorized")
+}
+
 #[derive(Debug, Default)]
 struct SentEventIds {
     order: VecDeque<String>,
@@ -769,5 +788,18 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].text, "给我盖一个亭子");
+    }
+
+    #[test]
+    fn matrix_unauthorized_error_is_detected_for_config_hint() {
+        assert!(is_matrix_unauthorized_error(
+            "whoami returned HTTP 401 Unauthorized"
+        ));
+        assert!(is_matrix_unauthorized_error(
+            "WHOAMI returned http 403 unauthorized"
+        ));
+        assert!(!is_matrix_unauthorized_error(
+            "sync returned HTTP 500 Internal Server Error"
+        ));
     }
 }

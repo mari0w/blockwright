@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Blockwright</title>
   <link rel="icon" href="data:,">
   <style>
@@ -21,6 +21,11 @@
       --focus: #7bb7ff;
       --danger: #ff6b6b;
       --shadow: 0 18px 46px rgba(0, 0, 0, .28);
+      --composer-height: 176px;
+      --top-control-size: 42px;
+      --top-control-offset: 12px;
+      --composer-control-height: 42px;
+      --composer-control-max-height: 104px;
     }
     * {
       box-sizing: border-box;
@@ -28,6 +33,8 @@
     html {
       height: 100%;
       overflow: hidden;
+      touch-action: pan-x pan-y;
+      -webkit-text-size-adjust: 100%;
     }
     body {
       margin: 0;
@@ -35,38 +42,34 @@
       min-height: 100dvh;
       height: 100%;
       overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: pan-x pan-y;
       background: var(--bg);
       color: var(--text);
       font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     .app {
       display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       min-height: 100vh;
       min-height: 100dvh;
       height: 100vh;
       height: 100dvh;
-    }
-    aside {
-      border-right: 1px solid var(--line);
-      padding: 24px;
-      background: var(--side);
+      position: relative;
+      overflow: hidden;
     }
     main {
       display: grid;
-      grid-template-rows: 1fr auto;
+      grid-template-rows: minmax(0, 1fr) auto;
       min-width: 0;
       min-height: 0;
-    }
-    h1 {
-      margin: 0 0 24px;
-      font-size: 23px;
-      font-weight: 650;
-      letter-spacing: 0;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
     }
     .setup-field {
       display: block;
-      margin: 14px 0 6px;
+      margin: 0;
       color: var(--muted);
       font-size: 13px;
     }
@@ -107,6 +110,9 @@
       border-color: var(--focus);
       box-shadow: 0 0 0 3px rgba(123, 183, 255, .14);
     }
+    a {
+      color: var(--accent);
+    }
     button {
       padding: 11px 14px;
       border-color: var(--accent-strong);
@@ -119,11 +125,53 @@
       cursor: wait;
       opacity: .65;
     }
+    .brand-mark {
+      position: fixed;
+      top: calc(var(--top-control-offset) + env(safe-area-inset-top));
+      left: calc(var(--top-control-offset) + env(safe-area-inset-left));
+      z-index: 12;
+      display: inline-flex;
+      align-items: center;
+      height: var(--top-control-size);
+      padding: 0 2px;
+      color: rgba(237, 244, 239, .78);
+      font-size: 16px;
+      font-weight: 720;
+      letter-spacing: 0;
+      line-height: 1;
+      pointer-events: none;
+      user-select: none;
+    }
+    .brand-mark::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 8px;
+      border-radius: 2px;
+      background: var(--accent);
+      flex: 0 0 auto;
+    }
+    .topbar {
+      display: flex;
+      position: fixed;
+      top: calc(var(--top-control-offset) + env(safe-area-inset-top));
+      right: calc(var(--top-control-offset) + env(safe-area-inset-right));
+      z-index: 12;
+      justify-content: center;
+      align-items: center;
+      touch-action: manipulation;
+    }
     .messages {
-      overflow: auto;
+      position: fixed;
+      inset: 0 0 var(--composer-height) 0;
+      z-index: 1;
+      overflow-x: hidden;
+      overflow-y: auto;
       min-height: 0;
-      padding: 24px;
+      padding: calc(var(--top-control-size) + var(--top-control-offset) + env(safe-area-inset-top) + 10px) 24px 24px;
       overscroll-behavior: contain;
+      touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
       background:
         linear-gradient(180deg, rgba(255, 255, 255, .02), transparent 180px),
@@ -187,14 +235,20 @@
       background: #0b0d0f;
     }
     .composer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 11;
       border-top: 1px solid var(--line);
       padding: 16px 22px calc(18px + env(safe-area-inset-bottom));
       background: rgba(21, 25, 29, .96);
       backdrop-filter: blur(10px);
+      touch-action: manipulation;
     }
     .input-shell {
       display: grid;
-      grid-template-rows: auto auto;
+      gap: 0;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
@@ -211,12 +265,10 @@
     }
     .composer-actions {
       display: grid;
-      grid-template-columns: auto auto auto minmax(0, 1fr) 118px;
-      gap: 10px;
+      grid-template-columns: var(--composer-control-height) minmax(0, 1fr) var(--composer-control-height);
+      gap: 8px;
       align-items: center;
-      padding: 10px;
-      border-top: 1px solid var(--line);
-      background: rgba(0, 0, 0, .12);
+      padding: 8px;
     }
     .sr-only {
       position: absolute;
@@ -254,14 +306,41 @@
       height: 21px;
       stroke: currentColor;
     }
+    .icon-button svg[hidden] {
+      display: none;
+    }
+    .icon-button .toggle-icon-hidden {
+      display: none;
+    }
+    .topbar .icon-button {
+      width: var(--top-control-size);
+      height: var(--top-control-size);
+    }
+    .config-open {
+      border-color: transparent;
+      background: rgba(34, 40, 46, .72);
+      color: var(--muted);
+      box-shadow: none;
+      backdrop-filter: blur(8px);
+    }
+    .config-open:hover,
+    .config-open:focus-visible {
+      border-color: var(--line);
+      color: var(--text);
+    }
     .voice-toggle.active {
       border-color: var(--accent);
       color: var(--accent);
     }
+    .voice-toggle {
+      grid-column: 1;
+      grid-row: 1;
+    }
     .voice-panel {
-      display: grid;
-      gap: 10px;
-      padding: 10px;
+      grid-column: 2;
+      grid-row: 1;
+      min-width: 0;
+      padding: 0;
       background: transparent;
     }
     .voice-panel[hidden] {
@@ -272,13 +351,23 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      height: 58px;
+      height: var(--composer-control-height);
       padding: 0 16px;
+      border-radius: 6px;
       border-color: var(--line);
       background: var(--panel-soft);
       color: var(--text);
       font-size: 16px;
       touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .voice-hold,
+    .voice-hold * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
       user-select: none;
     }
     .voice-hold:hover,
@@ -299,13 +388,88 @@
       width: 19px;
       height: 19px;
       flex: 0 0 auto;
+      pointer-events: none;
       stroke: currentColor;
     }
     .voice-hold span {
       min-width: 0;
       overflow: hidden;
+      pointer-events: none;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .composer textarea {
+      grid-column: 2;
+      grid-row: 1;
+      height: var(--composer-control-height);
+      min-height: var(--composer-control-height);
+      max-height: var(--composer-control-max-height);
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-soft);
+      line-height: 1.35;
+      overflow-y: auto;
+    }
+    .input-shell.has-send textarea {
+      padding-right: 76px;
+    }
+    .send-button {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      align-self: center;
+      z-index: 2;
+      width: auto;
+      min-width: 64px;
+      height: 42px;
+      padding: 0 14px;
+      border-radius: 6px;
+    }
+    .add-toggle {
+      grid-column: 3;
+      grid-row: 1;
+    }
+    .add-toggle.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .add-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 8px;
+      padding: 8px;
+      border-top: 1px solid var(--line);
+      background: rgba(0, 0, 0, .12);
+    }
+    .add-panel[hidden] {
+      display: none;
+    }
+    .add-option {
+      display: grid;
+      place-items: center;
+      gap: 6px;
+      min-height: 72px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .add-option:hover,
+    .add-option:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+    }
+    .add-option svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+    }
+    .add-option span {
+      font-size: 13px;
+      color: var(--muted);
     }
     .preview {
       display: grid;
@@ -361,12 +525,16 @@
       white-space: nowrap;
     }
     .status {
-      min-height: 20px;
+      min-height: 0;
+      padding: 0 10px;
       color: var(--muted);
       font-size: 13px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .status:empty {
+      display: none;
     }
     .status.error {
       color: var(--danger);
@@ -376,37 +544,80 @@
       background: var(--panel-soft);
       color: var(--text);
     }
-    aside > .secondary-button {
-      margin-top: 14px;
-    }
     .secondary-button:hover,
     .secondary-button:focus-visible {
       border-color: var(--accent-warm);
       outline: none;
     }
-    .config-dialog {
-      width: min(560px, calc(100vw - 28px));
-      max-height: calc(100dvh - 28px);
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--side);
+    .config-page {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      overflow: auto;
+      background: var(--bg);
       color: var(--text);
-      box-shadow: var(--shadow);
     }
-    .config-dialog::backdrop {
-      background: rgba(0, 0, 0, .52);
+    .config-page[hidden] {
+      display: none;
+    }
+    .config-shell {
+      min-height: 100%;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .config-header {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--side);
+    }
+    .config-title {
+      min-width: 0;
+    }
+    .config-title h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .config-title p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .config-body {
+      width: min(760px, 100%);
+      padding: 20px;
     }
     .config-form {
       display: grid;
-      gap: 14px;
-      padding: 20px;
+      gap: 16px;
     }
-    .config-form h2 {
+    .config-section {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .config-section h3 {
       margin: 0;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 650;
       letter-spacing: 0;
+    }
+    .config-section p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .config-section p.error {
+      color: var(--danger);
     }
     .config-form label {
       display: grid;
@@ -433,6 +644,12 @@
       width: auto;
       min-width: 96px;
     }
+    .permission-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
     .config-status {
       min-height: 20px;
       color: var(--muted);
@@ -442,30 +659,149 @@
     .config-status.error {
       color: var(--danger);
     }
+    .guide-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, .56);
+    }
+    .guide-backdrop[hidden] {
+      display: none;
+    }
+    .guide-panel {
+      position: relative;
+      width: min(560px, 100%);
+      max-height: min(680px, calc(100dvh - 36px));
+      overflow: auto;
+      display: grid;
+      gap: 16px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--side);
+      box-shadow: var(--shadow);
+    }
+    .guide-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+    }
+    .guide-head {
+      display: grid;
+      gap: 6px;
+      padding-right: 42px;
+    }
+    .guide-head h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .guide-head p,
+    .guide-detail p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .guide-steps {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .guide-steps li {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .guide-steps li.active {
+      border-color: var(--accent);
+      background: rgba(89, 179, 196, .12);
+    }
+    .guide-step-number {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--panel-soft);
+      color: var(--text);
+      font-weight: 650;
+    }
+    .guide-step-copy {
+      display: grid;
+      gap: 3px;
+    }
+    .guide-step-copy strong {
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .guide-step-copy span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .guide-detail {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .guide-detail h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .button-link {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: fit-content;
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 1px solid var(--accent-strong);
+      border-radius: 8px;
+      background: var(--accent);
+      color: #081013;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .guide-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .guide-actions button {
+      width: auto;
+      min-width: 92px;
+    }
     #send[hidden] {
       display: none;
     }
     @media (max-width: 760px) {
+      :root {
+        --top-control-size: 50px;
+        --top-control-offset: 8px;
+        --composer-control-height: 50px;
+        --composer-control-max-height: 110px;
+      }
       body {
         font-size: 14px;
       }
       .app {
         grid-template-columns: 1fr;
-        grid-template-rows: auto minmax(0, 1fr);
-      }
-      aside {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-        padding: 10px 12px;
-      }
-      h1 {
-        margin: 0 0 10px;
-        font-size: 18px;
-      }
-      .settings-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
       }
       .setup-field {
         min-width: 0;
@@ -487,7 +823,7 @@
         padding: 8px 10px;
       }
       .messages {
-        padding: 12px 10px;
+        padding: calc(var(--top-control-size) + var(--top-control-offset) + env(safe-area-inset-top) + 6px) 10px 12px;
       }
       .message {
         max-width: 94%;
@@ -512,8 +848,14 @@
         max-height: 34dvh;
         padding: 11px;
       }
+      .composer textarea {
+        height: var(--composer-control-height);
+        min-height: var(--composer-control-height);
+        max-height: var(--composer-control-max-height);
+        padding: 12px 11px;
+      }
       .composer-actions {
-        grid-template-columns: 50px 50px 50px minmax(88px, 1fr);
+        grid-template-columns: var(--composer-control-height) minmax(0, 1fr) var(--composer-control-height);
         gap: 8px;
         padding: 8px;
       }
@@ -521,24 +863,50 @@
         width: 50px;
         height: 50px;
       }
+      .config-header {
+        grid-template-columns: 50px minmax(0, 1fr);
+        padding: 10px 12px;
+      }
+      .config-body {
+        padding: 12px;
+      }
+      .permission-row,
+      .config-actions {
+        grid-template-columns: 1fr;
+      }
+      .config-actions button {
+        width: 100%;
+      }
+      .guide-backdrop {
+        align-items: end;
+        padding: 10px;
+      }
+      .guide-panel {
+        max-height: calc(100dvh - 20px);
+        padding: 16px;
+      }
+      .guide-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .guide-actions button,
+      .button-link {
+        width: 100%;
+      }
       #send {
-        grid-column: 4;
         grid-row: 1;
-        min-height: 50px;
+        height: 50px;
       }
       .status {
-        grid-column: 1 / -1;
-        grid-row: 2;
         min-height: 18px;
         line-height: 1.35;
         white-space: normal;
       }
       .voice-panel {
-        gap: 8px;
-        padding: 8px;
+        padding: 0;
       }
       .voice-hold {
-        height: 54px;
+        height: var(--composer-control-height);
       }
       .preview {
         grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
@@ -549,109 +917,236 @@
 </head>
 <body>
   <div class="app">
-    <aside>
-      <h1>Blockwright</h1>
-      <div class="settings-grid">
-        <label class="setup-field" for="username">
-          <span>Minecraft 用户名</span>
-          <input id="username" autocomplete="username" placeholder="Charles">
-        </label>
-      </div>
-      <button id="configOpen" class="secondary-button" type="button">Web 配置</button>
-    </aside>
     <main>
+      <div class="brand-mark" aria-label="Blockwright">Blockwright</div>
+      <header class="topbar">
+        <button id="configOpen" class="icon-button config-open" type="button" title="打开设置" aria-label="打开设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 4h-7"></path>
+            <path d="M10 4H3"></path>
+            <path d="M21 12h-9"></path>
+            <path d="M8 12H3"></path>
+            <path d="M21 20h-5"></path>
+            <path d="M12 20H3"></path>
+            <circle cx="12" cy="4" r="2"></circle>
+            <circle cx="10" cy="12" r="2"></circle>
+            <circle cx="14" cy="20" r="2"></circle>
+          </svg>
+        </button>
+      </header>
       <section id="messages" class="messages" aria-live="polite"></section>
       <form id="form" class="composer">
         <div class="input-shell">
-          <textarea id="text" placeholder="说你想建什么、改什么，图片会一起发过去。"></textarea>
           <div id="preview" class="preview" hidden></div>
-          <div id="voicePanel" class="voice-panel" hidden>
-            <button id="voiceHold" class="voice-hold" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+          <div id="status" class="status"></div>
+          <div class="composer-actions">
+            <button id="voiceToggle" class="icon-button voice-toggle" type="button" title="语音输入" aria-label="语音输入">
+              <svg id="voiceToggleMic" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                 <path d="M12 19v3"></path>
               </svg>
-              <span id="voiceHoldText">按住说话，松手发送</span>
+              <svg id="voiceToggleKeyboard" class="toggle-icon-hidden" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                <rect x="3" y="6" width="18" height="12" rx="2"></rect>
+                <path d="M7 10h.01"></path>
+                <path d="M11 10h.01"></path>
+                <path d="M15 10h.01"></path>
+                <path d="M19 10h.01"></path>
+                <path d="M7 14h10"></path>
+              </svg>
+            </button>
+            <textarea id="text" placeholder="说你想建什么、改什么。"></textarea>
+            <div id="voicePanel" class="voice-panel" hidden>
+              <button id="voiceHold" class="voice-hold" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                  <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <path d="M12 19v3"></path>
+                </svg>
+                <span id="voiceHoldText">按住说话，松手发送</span>
+              </button>
+            </div>
+            <button id="send" class="send-button" type="submit" hidden>发送</button>
+            <button id="addToggle" class="icon-button add-toggle" type="button" title="更多" aria-label="更多" aria-expanded="false" aria-controls="addPanel">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
             </button>
           </div>
-          <div class="composer-actions">
+          <div id="addPanel" class="add-panel" hidden>
             <input id="cameraImage" class="sr-only" type="file" accept="image/*" capture="environment">
-            <label class="icon-button" for="cameraImage" title="拍照" aria-label="拍照">
+            <label class="add-option" for="cameraImage" title="拍照" aria-label="拍照">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M14.5 4 16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l1.5-3h5Z"></path>
                 <circle cx="12" cy="13" r="3"></circle>
               </svg>
+              <span>拍照</span>
             </label>
             <input id="libraryImages" class="sr-only" type="file" accept="image/*" multiple>
-            <label class="icon-button" for="libraryImages" title="从相册选择" aria-label="从相册选择">
+            <label class="add-option" for="libraryImages" title="从相册选择" aria-label="从相册选择">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2"></rect>
                 <path d="m8 13 2.5-2.5L15 15l1.5-1.5L21 18"></path>
                 <circle cx="8" cy="9" r="1.5"></circle>
               </svg>
+              <span>相册</span>
             </label>
-            <button id="voiceToggle" class="icon-button voice-toggle" type="button" title="语音输入" aria-label="语音输入">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
-                <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <path d="M12 19v3"></path>
-              </svg>
-            </button>
-            <div id="status" class="status"></div>
-            <button id="send" type="submit">发送</button>
           </div>
         </div>
       </form>
     </main>
   </div>
-  <dialog id="configDialog" class="config-dialog">
-    <form id="configForm" class="config-form">
-      <h2>Web 配置</h2>
-      <label for="controllerToken">
-        <span>Controller Token</span>
-        <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
-      </label>
-      <label class="config-checkbox" for="matrixEnabled">
-        <input id="matrixEnabled" type="checkbox" checked>
-        <span>启用 Element/Matrix</span>
-      </label>
-      <label for="matrixHomeserver">
-        <span>Matrix 主服务器 URL</span>
-        <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
-      </label>
-      <label for="matrixAccessToken">
-        <span>Matrix Access Token</span>
-        <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token">
-      </label>
-      <label for="matrixAllowedSender">
-        <span>允许发指令的 Matrix 用户</span>
-        <input id="matrixAllowedSender" placeholder="@user:matrix.org">
-      </label>
-      <label class="config-checkbox" for="matrixAllowOwn">
-        <input id="matrixAllowOwn" type="checkbox" checked>
-        <span>个人 token 允许处理自己发出的消息</span>
-      </label>
-      <label class="config-checkbox" for="matrixAutoJoin">
-        <input id="matrixAutoJoin" type="checkbox" checked>
-        <span>自动加入邀请房间</span>
-      </label>
-      <div id="configStatus" class="config-status"></div>
-      <div class="config-actions">
-        <button id="configSave" type="submit">保存配置</button>
-        <button id="configClose" class="secondary-button" type="button">关闭</button>
+  <section id="usernameGate" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="usernameGateTitle">
+    <form id="usernameGateForm" class="guide-panel">
+      <div class="guide-head">
+        <h2 id="usernameGateTitle">填写 Minecraft 用户名</h2>
+        <p>Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。</p>
       </div>
+      <label class="setup-field" for="usernameGateInput">
+        <span>Minecraft 用户名</span>
+        <input id="usernameGateInput" autocomplete="username" placeholder="例如 Steve">
+      </label>
+      <p id="usernameGateError" class="config-status error"></p>
+      <button id="usernameGateSubmit" type="submit">进入聊天</button>
     </form>
-  </dialog>
+  </section>
+  <section id="configPage" class="config-page" hidden>
+    <div class="config-shell">
+      <header class="config-header">
+        <button id="configBack" class="icon-button secondary-button" type="button" title="返回聊天" aria-label="返回聊天">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"></path>
+          </svg>
+        </button>
+        <div class="config-title">
+          <h2>设置</h2>
+          <p>聊天接入和浏览器权限都在这里处理。</p>
+        </div>
+      </header>
+      <div class="config-body">
+        <form id="configForm" class="config-form">
+          <section class="config-section">
+            <h3>玩家</h3>
+            <label for="username">
+              <span>Minecraft 用户名</span>
+              <input id="username" autocomplete="username" placeholder="例如 Steve">
+            </label>
+            <p>这里填游戏里的用户名，聊天和语音都会发给这个玩家。</p>
+          </section>
+          <section class="config-section">
+            <h3>Controller</h3>
+            <label for="controllerToken">
+              <span>Controller Token</span>
+              <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
+            </label>
+          </section>
+          <section class="config-section">
+            <h3>浏览器权限</h3>
+            <div class="permission-row">
+              <p id="permissionStatus">正在检查麦克风权限...</p>
+              <button id="permissionRequest" class="secondary-button" type="button">申请麦克风权限</button>
+            </div>
+            <p id="permissionHelp"></p>
+          </section>
+          <section class="config-section">
+            <h3>手机 HTTPS</h3>
+            <p>controller 会自动生成本地自签根证书和局域网 HTTPS 地址。手机第一次使用前，需要先安装并信任这个根证书。</p>
+            <p>HTTPS 地址：<a id="httpsAccessUrl" href="#"></a></p>
+            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer">下载 Blockwright 本地根证书文件</a></p>
+            <p>iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。</p>
+            <p>Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。</p>
+            <p>Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。</p>
+          </section>
+          <section class="config-section">
+            <h3>Element/Matrix</h3>
+            <label class="config-checkbox" for="matrixEnabled">
+              <input id="matrixEnabled" type="checkbox" checked>
+              <span>启用 Element/Matrix</span>
+            </label>
+            <label for="matrixHomeserver">
+              <span>Matrix 主服务器 URL</span>
+              <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
+            </label>
+            <label for="matrixAccessToken">
+              <span>Matrix Access Token</span>
+              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token">
+            </label>
+            <label for="matrixAllowedSender">
+              <span>允许发指令的 Matrix 用户</span>
+              <input id="matrixAllowedSender" placeholder="@user:matrix.org">
+            </label>
+            <label class="config-checkbox" for="matrixAllowOwn">
+              <input id="matrixAllowOwn" type="checkbox" checked>
+              <span>个人 token 允许处理自己发出的消息</span>
+            </label>
+            <label class="config-checkbox" for="matrixAutoJoin">
+              <input id="matrixAutoJoin" type="checkbox" checked>
+              <span>自动加入邀请房间</span>
+            </label>
+          </section>
+          <div id="configStatus" class="config-status"></div>
+          <div class="config-actions">
+            <button id="configSave" type="submit">保存配置</button>
+            <button id="configClose" class="secondary-button" type="button">返回聊天</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+  <section id="httpsGuide" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="httpsGuideTitle">
+    <div class="guide-panel">
+      <button id="httpsGuideClose" class="icon-button guide-close secondary-button" type="button" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+          <path d="m18 6-12 12"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+      <div class="guide-head">
+        <h2 id="httpsGuideTitle">手机语音需要 HTTPS</h2>
+        <p>当前地址不是安全地址，手机浏览器不会开放麦克风。按下面几步处理后，再回到页面申请麦克风权限。</p>
+      </div>
+      <ol id="httpsGuideSteps" class="guide-steps" aria-label="HTTPS 设置步骤"></ol>
+      <div class="guide-detail">
+        <h3 id="httpsGuideStepTitle"></h3>
+        <p id="httpsGuideStepText"></p>
+        <a id="httpsGuidePrimaryLink" class="button-link" href="#"></a>
+        <button id="httpsGuidePrimaryButton" type="button"></button>
+      </div>
+      <div class="guide-actions">
+        <button id="httpsGuideBack" class="secondary-button" type="button">上一步</button>
+        <button id="httpsGuideNext" type="button">下一步</button>
+      </div>
+    </div>
+  </section>
   <script>
     const MAX_IMAGES = 4;
     const username = document.getElementById('username');
+    const usernameGate = document.getElementById('usernameGate');
+    const usernameGateForm = document.getElementById('usernameGateForm');
+    const usernameGateInput = document.getElementById('usernameGateInput');
+    const usernameGateError = document.getElementById('usernameGateError');
     const configOpen = document.getElementById('configOpen');
-    const configDialog = document.getElementById('configDialog');
+    const configPage = document.getElementById('configPage');
+    const configBack = document.getElementById('configBack');
     const configForm = document.getElementById('configForm');
     const configClose = document.getElementById('configClose');
     const configStatus = document.getElementById('configStatus');
     const configSave = document.getElementById('configSave');
+    const permissionStatus = document.getElementById('permissionStatus');
+    const permissionRequest = document.getElementById('permissionRequest');
+    const permissionHelp = document.getElementById('permissionHelp');
+    const httpsAccessUrl = document.getElementById('httpsAccessUrl');
+    const caDownloadLink = document.getElementById('caDownloadLink');
+    const httpsGuide = document.getElementById('httpsGuide');
+    const httpsGuideClose = document.getElementById('httpsGuideClose');
+    const httpsGuideSteps = document.getElementById('httpsGuideSteps');
+    const httpsGuideStepTitle = document.getElementById('httpsGuideStepTitle');
+    const httpsGuideStepText = document.getElementById('httpsGuideStepText');
+    const httpsGuidePrimaryLink = document.getElementById('httpsGuidePrimaryLink');
+    const httpsGuidePrimaryButton = document.getElementById('httpsGuidePrimaryButton');
+    const httpsGuideBack = document.getElementById('httpsGuideBack');
+    const httpsGuideNext = document.getElementById('httpsGuideNext');
     const controllerToken = document.getElementById('controllerToken');
     const matrixEnabled = document.getElementById('matrixEnabled');
     const matrixHomeserver = document.getElementById('matrixHomeserver');
@@ -668,7 +1163,11 @@
     const messages = document.getElementById('messages');
     const statusEl = document.getElementById('status');
     const send = document.getElementById('send');
+    const addToggle = document.getElementById('addToggle');
+    const addPanel = document.getElementById('addPanel');
     const voiceToggle = document.getElementById('voiceToggle');
+    const voiceToggleMic = document.getElementById('voiceToggleMic');
+    const voiceToggleKeyboard = document.getElementById('voiceToggleKeyboard');
     const voicePanel = document.getElementById('voicePanel');
     const voiceHold = document.getElementById('voiceHold');
     const voiceHoldText = document.getElementById('voiceHoldText');
@@ -684,8 +1183,34 @@
     let voiceHadError = false;
     let voiceFinalText = '';
     let voiceInterimText = '';
+    let voicePressing = false;
+    let microphonePermissionWatcher = null;
+    let httpsGuideStep = 0;
+    let lastTouchEndAt = 0;
 
-    username.value = localStorage.getItem('bw.username') || '';
+    document.addEventListener('gesturestart', preventViewportZoom, {passive: false});
+    document.addEventListener('gesturechange', preventViewportZoom, {passive: false});
+    document.addEventListener('gestureend', preventViewportZoom, {passive: false});
+    document.addEventListener('dblclick', preventViewportZoom, {passive: false});
+    document.addEventListener('touchstart', (event) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    }, {passive: false});
+    document.addEventListener('touchmove', (event) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    }, {passive: false});
+    document.addEventListener('touchend', (event) => {
+      const now = Date.now();
+      if (now - lastTouchEndAt < 300) {
+        event.preventDefault();
+      }
+      lastTouchEndAt = now;
+    }, {passive: false});
+
+    setUsername(localStorage.getItem('bw.username') || '');
     controllerToken.value = localStorage.getItem('bw.controllerToken') || 'local-dev-token';
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
     matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
@@ -693,8 +1218,9 @@
     matrixAllowOwn.checked = localStorage.getItem('bw.matrixAllowOwn') !== '0';
     matrixAutoJoin.checked = localStorage.getItem('bw.matrixAutoJoin') !== '0';
 
-    [username].forEach((input) => {
-      input.addEventListener('input', () => localStorage.setItem(`bw.${input.id}`, input.value));
+    username.addEventListener('input', () => setUsername(username.value));
+    usernameGateInput.addEventListener('input', () => {
+      usernameGateError.textContent = '';
     });
     [
       [controllerToken, 'bw.controllerToken'],
@@ -710,21 +1236,35 @@
     ].forEach(([input, key]) => {
       input.addEventListener('change', () => localStorage.setItem(key, input.checked ? '1' : '0'));
     });
+    renderHttpsAccessInfo();
     setVoicePanel(!voiceUnavailable && localStorage.getItem('bw.voiceEnabled') === '1');
 
     if (voiceUnavailable) {
       voiceHold.disabled = true;
       voiceHoldText.textContent = voiceUnavailable;
     }
+    if (!username.value.trim()) {
+      showUsernameGate();
+    }
+
+    updateComposerHeight();
+    if (window.ResizeObserver) {
+      new ResizeObserver(updateComposerHeight).observe(form);
+    } else {
+      window.addEventListener('resize', updateComposerHeight);
+      window.addEventListener('orientationchange', updateComposerHeight);
+    }
 
     cameraImage.addEventListener('change', () => {
       addImageFiles([...cameraImage.files], 'camera');
       cameraImage.value = '';
+      setAddPanel(false);
     });
 
     libraryImages.addEventListener('change', () => {
       addImageFiles([...libraryImages.files], 'library');
       libraryImages.value = '';
+      setAddPanel(false);
     });
 
     form.addEventListener('paste', (event) => {
@@ -735,16 +1275,35 @@
     });
 
     configOpen.addEventListener('click', () => {
-      clearConfigStatus();
-      if (typeof configDialog.showModal === 'function') {
-        configDialog.showModal();
-      } else {
-        configDialog.setAttribute('open', '');
-      }
+      openConfigPage();
     });
 
-    configClose.addEventListener('click', closeConfigDialog);
+    configBack.addEventListener('click', closeConfigPage);
+    configClose.addEventListener('click', closeConfigPage);
     configForm.addEventListener('submit', saveWebConfig);
+    usernameGateForm.addEventListener('submit', saveUsernameGate);
+    permissionRequest.addEventListener('click', requestMicrophonePermission);
+    refreshMicrophonePermission(false);
+    httpsGuideClose.addEventListener('click', closeHttpsGuide);
+    httpsGuideBack.addEventListener('click', () => setHttpsGuideStep(httpsGuideStep - 1));
+    httpsGuideNext.addEventListener('click', () => {
+      if (httpsGuideStep >= httpsGuideStepData().length - 1) {
+        closeHttpsGuide();
+      } else {
+        setHttpsGuideStep(httpsGuideStep + 1);
+      }
+    });
+    httpsGuidePrimaryButton.addEventListener('click', () => setHttpsGuideStep(httpsGuideStep + 1));
+    httpsGuide.addEventListener('click', (event) => {
+      if (event.target === httpsGuide) {
+        closeHttpsGuide();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !httpsGuide.hidden) {
+        closeHttpsGuide();
+      }
+    });
 
     text.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -753,13 +1312,18 @@
       }
     });
 
-    text.addEventListener('input', resizeComposer);
+    text.addEventListener('input', handleTextInput);
     resizeComposer();
+    updateComposerControls();
+
+    addToggle.addEventListener('click', () => {
+      setAddPanel(addPanel.hidden);
+    });
 
     voiceToggle.addEventListener('click', () => {
       const enabled = voicePanel.hidden;
       if (enabled && voiceUnavailable) {
-        setStatus(voiceUnavailable, true);
+        handleVoiceUnavailable();
         setVoicePanel(false);
         return;
       }
@@ -769,6 +1333,8 @@
     voiceHold.addEventListener('pointerdown', startVoiceInput);
     voiceHold.addEventListener('pointerup', stopVoiceInput);
     voiceHold.addEventListener('pointercancel', cancelVoiceInput);
+    voiceHold.addEventListener('selectstart', preventVoiceHoldSelection);
+    voiceHold.addEventListener('dragstart', preventVoiceHoldSelection);
     voiceHold.addEventListener('contextmenu', (event) => event.preventDefault());
     voiceHold.addEventListener('keydown', (event) => {
       if ((event.key === ' ' || event.key === 'Enter') && !voiceHoldActive) {
@@ -933,11 +1499,54 @@
       }
     }
 
-    function closeConfigDialog() {
-      if (typeof configDialog.close === 'function') {
-        configDialog.close();
+    function setUsername(value) {
+      const name = value.trim();
+      username.value = name;
+      usernameGateInput.value = name;
+      if (name) {
+        localStorage.setItem('bw.username', name);
       } else {
-        configDialog.removeAttribute('open');
+        localStorage.removeItem('bw.username');
+      }
+      return name;
+    }
+
+    function saveUsernameGate(event) {
+      event.preventDefault();
+      const name = setUsername(usernameGateInput.value);
+      if (!name) {
+        usernameGateError.textContent = '请先填写 Minecraft 用户名。';
+        usernameGateInput.focus();
+        return;
+      }
+      usernameGateError.textContent = '';
+      closeUsernameGate();
+    }
+
+    function showUsernameGate() {
+      usernameGate.hidden = false;
+      usernameGateInput.value = username.value.trim();
+      usernameGateInput.focus();
+    }
+
+    function closeUsernameGate() {
+      usernameGate.hidden = true;
+      text.focus();
+    }
+
+    function openConfigPage() {
+      clearConfigStatus();
+      configPage.hidden = false;
+      refreshMicrophonePermission(true);
+      configBack.focus();
+    }
+
+    function closeConfigPage() {
+      configPage.hidden = true;
+      if (!username.value.trim()) {
+        showUsernameGate();
+      } else {
+        configOpen.focus();
       }
     }
 
@@ -948,6 +1557,278 @@
 
     function clearConfigStatus() {
       setConfigStatus('', false);
+    }
+
+    function renderHttpsAccessInfo() {
+      const url = suggestedHttpsUrl();
+      httpsAccessUrl.textContent = url;
+      httpsAccessUrl.href = url;
+      caDownloadLink.href = caCertificateUrl();
+      renderHttpsGuideStep();
+    }
+
+    function suggestedHttpsUrl() {
+      if (window.location.protocol === 'https:') {
+        return window.location.href;
+      }
+      const hostname = window.location.hostname || '127.0.0.1';
+      const currentPort = Number(window.location.port);
+      const httpsPort = Number.isFinite(currentPort) && currentPort > 0 ? currentPort + 1 : 443;
+      return `https://${hostname}:${httpsPort}/web`;
+    }
+
+    function preventViewportZoom(event) {
+      event.preventDefault();
+    }
+
+    async function refreshMicrophonePermission(showFallback) {
+      if (voiceUnavailable) {
+        setPermissionStatus(voiceUnavailable, true, microphonePermissionHelp());
+        return 'unavailable';
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setPermissionStatus('当前浏览器不支持主动申请麦克风权限。', true, browserSettingsHelp());
+        return 'unsupported';
+      }
+      if (!navigator.permissions || !navigator.permissions.query) {
+        if (showFallback) {
+          setPermissionStatus('当前浏览器不能直接读取权限状态，可以点击按钮申请麦克风权限。', false, '');
+        }
+        return 'prompt';
+      }
+      try {
+        const status = await navigator.permissions.query({name: 'microphone'});
+        microphonePermissionWatcher = status;
+        status.onchange = () => applyMicrophonePermissionState(status.state);
+        applyMicrophonePermissionState(status.state);
+        return status.state;
+      } catch (_) {
+        if (showFallback) {
+          setPermissionStatus('当前浏览器不能直接读取权限状态，可以点击按钮申请麦克风权限。', false, '');
+        }
+        return 'prompt';
+      }
+    }
+
+    async function requestMicrophonePermission() {
+      if (voiceUnavailable) {
+        setPermissionStatus(voiceUnavailable, true, microphonePermissionHelp());
+        handleVoiceUnavailable();
+        return false;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const message = '当前浏览器不支持主动申请麦克风权限。';
+        setPermissionStatus(message, true, browserSettingsHelp());
+        setStatus(message, true);
+        return false;
+      }
+      permissionRequest.disabled = true;
+      setPermissionStatus('正在向浏览器申请麦克风权限...', false, '');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        stream.getTracks().forEach((track) => track.stop());
+        applyMicrophonePermissionState('granted');
+        setStatus('麦克风权限已允许，可以按住说话。', false);
+        return true;
+      } catch (error) {
+        const message = microphoneRequestErrorMessage(error);
+        setPermissionStatus(message, true, microphonePermissionHelp());
+        setStatus(message, true);
+        return false;
+      } finally {
+        permissionRequest.disabled = false;
+        refreshMicrophonePermission(false);
+      }
+    }
+
+    async function ensureMicrophonePermission(shouldRequest) {
+      const state = await refreshMicrophonePermission(false);
+      if (state === 'granted') {
+        return true;
+      }
+      if (state === 'denied') {
+        const message = `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
+        setStatus(message, true);
+        setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+        return false;
+      }
+      if (!shouldRequest) {
+        return state !== 'unavailable' && state !== 'unsupported';
+      }
+      return requestMicrophonePermission();
+    }
+
+    function applyMicrophonePermissionState(state) {
+      if (state === 'granted') {
+        setPermissionStatus('麦克风权限已允许。', false, '');
+      } else if (state === 'denied') {
+        setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+      } else {
+        setPermissionStatus('麦克风权限尚未授权，点击按钮申请。', false, '');
+      }
+    }
+
+    function setPermissionStatus(message, isError, help) {
+      permissionStatus.textContent = message;
+      permissionStatus.classList.toggle('error', Boolean(isError));
+      permissionHelp.textContent = help || '';
+    }
+
+    function microphoneRequestErrorMessage(error) {
+      if (!error) {
+        return '麦克风权限申请失败。';
+      }
+      if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+        return `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
+      }
+      if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        return '没有检测到可用麦克风。';
+      }
+      return error.message || '麦克风权限申请失败。';
+    }
+
+    function microphonePermissionHelp() {
+      if (!window.isSecureContext && !isLocalhost()) {
+        return '请按弹窗引导下载并信任本地根证书，然后打开 HTTPS 地址。';
+      }
+      return browserSettingsHelp();
+    }
+
+    function handleVoiceUnavailable() {
+      setStatus(voiceUnavailable, true);
+      if (isHttpsVoiceIssue()) {
+        showHttpsGuide();
+      }
+    }
+
+    function isHttpsVoiceIssue() {
+      return !window.isSecureContext && !isLocalhost();
+    }
+
+    function showHttpsGuide(step = 0) {
+      setHttpsGuideStep(step);
+      httpsGuide.hidden = false;
+      httpsGuidePrimaryLink.focus();
+    }
+
+    function closeHttpsGuide() {
+      httpsGuide.hidden = true;
+      voiceToggle.focus();
+    }
+
+    function setHttpsGuideStep(step) {
+      const steps = httpsGuideStepData();
+      httpsGuideStep = Math.max(0, Math.min(step, steps.length - 1));
+      renderHttpsGuideStep(steps);
+    }
+
+    function renderHttpsGuideStep(steps = httpsGuideStepData()) {
+      if (!httpsGuideSteps) {
+        return;
+      }
+      httpsGuideSteps.replaceChildren();
+      steps.forEach((step, index) => {
+        const item = document.createElement('li');
+        item.classList.toggle('active', index === httpsGuideStep);
+        const number = document.createElement('span');
+        number.className = 'guide-step-number';
+        number.textContent = String(index + 1);
+        const copy = document.createElement('span');
+        copy.className = 'guide-step-copy';
+        const title = document.createElement('strong');
+        title.textContent = step.title;
+        const summary = document.createElement('span');
+        summary.textContent = step.summary;
+        copy.append(title, summary);
+        item.append(number, copy);
+        httpsGuideSteps.appendChild(item);
+      });
+      const current = steps[httpsGuideStep];
+      httpsGuideStepTitle.textContent = current.title;
+      httpsGuideStepText.textContent = current.text;
+      if (current.href) {
+        httpsGuidePrimaryLink.hidden = false;
+        httpsGuidePrimaryLink.href = current.href;
+        httpsGuidePrimaryLink.textContent = current.actionText;
+        httpsGuidePrimaryButton.hidden = true;
+      } else {
+        httpsGuidePrimaryLink.hidden = true;
+        httpsGuidePrimaryButton.hidden = false;
+        httpsGuidePrimaryButton.textContent = current.actionText;
+      }
+      httpsGuideBack.disabled = httpsGuideStep === 0;
+      httpsGuideNext.textContent = httpsGuideStep === steps.length - 1 ? '完成' : '下一步';
+    }
+
+    function httpsGuideStepData() {
+      return [
+        {
+          title: '下载证书文件',
+          summary: '文件名是 Blockwright-Local-Root-CA.cer',
+          text: '点击下载证书。如果 Android 弹出 Files by Google、Google 文件或文件管理器，直接保存即可；这只是系统在选择保存位置，不是上传到 Google，也不是安装完成。iPhone/iPad 请尽量用 Safari 打开这个下载链接，否则可能只保存文件，不出现描述文件提醒。',
+          actionText: '下载证书文件',
+          href: caCertificateUrl()
+        },
+        {
+          title: '安装描述文件/证书',
+          summary: 'Android 要手动安装 CA 证书',
+          text: certificateInstallHelp(),
+          actionText: '我已安装证书'
+        },
+        {
+          title: '信任根证书',
+          summary: 'iPhone 还需要单独打开完全信任',
+          text: certificateTrustHelp(),
+          actionText: '我已信任证书'
+        },
+        {
+          title: '打开 HTTPS 地址',
+          summary: '回到安全地址后再申请麦克风权限',
+          text: '证书信任完成后，打开下面的 HTTPS 地址。页面加载后再次点击语音按钮，浏览器就可以弹出麦克风授权。',
+          actionText: '打开 HTTPS 地址',
+          href: suggestedHttpsUrl()
+        }
+      ];
+    }
+
+    function caCertificateUrl() {
+      return `${window.location.origin}/web/blockwright-local-root-ca.cer`;
+    }
+
+    function certificateInstallHelp() {
+      const agent = navigator.userAgent || '';
+      if (/iPhone|iPad|iPod/i.test(agent)) {
+        return 'iPhone/iPad：请用 Safari 打开证书下载链接。下载后打开系统“设置”，顶部会出现“已下载描述文件”；如果没看到，就进入“设置 > 通用 > VPN 与设备管理/描述文件”，选择 Blockwright Local Root CA 并安装。用 Chrome 或其他浏览器保存到文件 App 时，设置里可能不会出现提醒。';
+      }
+      if (/Android/i.test(agent)) {
+        return 'Android：保存到 Files by Google、Google 文件或文件管理器后，进入设置不会自动提醒。需要手动进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 Blockwright-Local-Root-CA.cer 并确认。不同品牌菜单名字可能略有不同。';
+      }
+      return '下载后在系统或浏览器的证书管理里安装 Blockwright Local Root CA。保存目录由浏览器决定；如果系统没有自动安装，就手动打开 Blockwright-Local-Root-CA.cer。';
+    }
+
+    function certificateTrustHelp() {
+      const agent = navigator.userAgent || '';
+      if (/iPhone|iPad|iPod/i.test(agent)) {
+        return 'iPhone/iPad：安装描述文件后，还必须进入“设置 > 通用 > 关于本机 > 证书信任设置”，打开 Blockwright Local Root CA 的完全信任。只安装描述文件还不够。';
+      }
+      if (/Android/i.test(agent)) {
+        return 'Android：安装为 CA 证书后通常已经信任。部分机型会要求设置锁屏密码，或提示网络可能被监控，按系统提示确认即可。';
+      }
+      return '安装证书后，把 Blockwright Local Root CA 设为受信任根证书，然后回到浏览器打开 HTTPS 地址。';
+    }
+
+    function browserSettingsHelp() {
+      const agent = navigator.userAgent || '';
+      if (/Chrome|Edg/i.test(agent)) {
+        return '在地址栏左侧的网站信息里，把“麦克风”改为允许，然后刷新页面。';
+      }
+      if (/Safari/i.test(agent) && !/Chrome|Chromium|Edg/i.test(agent)) {
+        return '在 Safari 的网站设置里允许当前页面使用麦克风，然后刷新页面。';
+      }
+      if (/Firefox/i.test(agent)) {
+        return '在地址栏左侧权限图标里允许麦克风，然后刷新页面。';
+      }
+      return '请到浏览器的网站权限设置里允许当前页面使用麦克风，然后刷新页面。';
     }
 
     function renderPreview() {
@@ -972,6 +1853,8 @@
         item.append(img, remove, name);
         preview.appendChild(item);
       });
+      updateComposerHeight();
+      updateComposerControls();
     }
 
     function removeImage(id) {
@@ -993,13 +1876,67 @@
       libraryImages.value = '';
       pendingImages.forEach((entry) => URL.revokeObjectURL(entry.url));
       pendingImages = [];
+      setAddPanel(false);
       renderPreview();
       resizeComposer();
+      updateComposerControls();
+    }
+
+    function handleTextInput() {
+      resizeComposer();
+      updateComposerControls();
+    }
+
+    function composerControlHeight() {
+      const value = getComputedStyle(document.documentElement)
+        .getPropertyValue('--composer-control-height')
+        .trim();
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 42;
+    }
+
+    function composerMaxHeight() {
+      const value = getComputedStyle(document.documentElement)
+        .getPropertyValue('--composer-control-max-height')
+        .trim();
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 104;
     }
 
     function resizeComposer() {
+      const baseHeight = composerControlHeight();
+      text.style.height = `${baseHeight}px`;
+      if (!text.value) {
+        updateComposerHeight();
+        return;
+      }
       text.style.height = 'auto';
-      text.style.height = `${Math.min(text.scrollHeight, 220)}px`;
+      text.style.height = `${Math.min(Math.max(text.scrollHeight, baseHeight), composerMaxHeight())}px`;
+      updateComposerHeight();
+    }
+
+    function updateComposerHeight() {
+      const height = Math.ceil(form.getBoundingClientRect().height);
+      if (height > 0) {
+        document.documentElement.style.setProperty('--composer-height', `${height}px`);
+      }
+    }
+
+    function hasSendContent() {
+      return Boolean(text.value.trim()) || pendingImages.length > 0;
+    }
+
+    function updateComposerControls() {
+      send.hidden = inputShell.classList.contains('voice-mode') || !hasSendContent();
+      inputShell.classList.toggle('has-send', !send.hidden);
+      updateComposerHeight();
+    }
+
+    function setAddPanel(open) {
+      addPanel.hidden = !open;
+      addToggle.classList.toggle('active', Boolean(open));
+      addToggle.setAttribute('aria-expanded', String(Boolean(open)));
+      updateComposerHeight();
     }
 
     function setVoicePanel(enabled) {
@@ -1009,26 +1946,33 @@
       }
       voicePanel.hidden = !active;
       text.hidden = active;
-      send.hidden = active;
       inputShell.classList.toggle('voice-mode', active);
       voiceToggle.classList.toggle('active', active);
       voiceToggle.setAttribute('aria-pressed', String(active));
       voiceToggle.title = active ? '切换到文字输入' : '切换到语音输入';
       voiceToggle.setAttribute('aria-label', voiceToggle.title);
+      voiceToggleMic.classList.toggle('toggle-icon-hidden', active);
+      voiceToggleKeyboard.classList.toggle('toggle-icon-hidden', !active);
       localStorage.setItem('bw.voiceEnabled', active ? '1' : '0');
       if (active) {
         text.blur();
         resetVoiceHoldLabel();
+        setStatus('', false);
       } else {
         resizeComposer();
       }
+      updateComposerControls();
     }
 
     function resetVoiceHoldLabel() {
       voiceHoldText.textContent = voiceUnavailable || '按住说话，松手发送';
     }
 
-    function startVoiceInput(event) {
+    function preventVoiceHoldSelection(event) {
+      event.preventDefault();
+    }
+
+    async function startVoiceInput(event) {
       if (voiceUnavailable) {
         setStatus(voiceUnavailable, true);
         return;
@@ -1039,6 +1983,16 @@
       event?.preventDefault?.();
       if (event?.pointerId != null && voiceHold.setPointerCapture) {
         voiceHold.setPointerCapture(event.pointerId);
+      }
+      voicePressing = true;
+      const permissionOk = await ensureMicrophonePermission(true);
+      if (!permissionOk) {
+        voicePressing = false;
+        return;
+      }
+      if (!voicePressing) {
+        setStatus('按住说话时会开始录音。', false);
+        return;
       }
 
       voiceFinalText = '';
@@ -1055,6 +2009,9 @@
         voiceHadError = true;
         const message = voiceErrorMessage(error.error);
         setStatus(message, true);
+        if (error.error === 'not-allowed' || error.error === 'service-not-allowed') {
+          setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+        }
       };
       recognition.onend = () => {
         const shouldFinish = voiceStopping && !voiceHadError;
@@ -1077,7 +2034,7 @@
         voiceHold.classList.add('recording');
         voiceHold.classList.remove('sending');
         voiceHoldText.textContent = '松手发送';
-        setStatus('正在听，松手后会发送。', false);
+        setStatus('', false);
       } catch (error) {
         recognition = null;
         voiceHoldActive = false;
@@ -1101,14 +2058,11 @@
         }
       }
       voiceInterimText = interim;
-      const previewText = `${voiceFinalText}${voiceInterimText}`.trim();
-      if (previewText) {
-        setStatus(`已听到：${shortText(previewText, 56)}`, false);
-      }
     }
 
     function stopVoiceInput(event) {
       if (!voiceHoldActive) {
+        voicePressing = false;
         return;
       }
       event?.preventDefault?.();
@@ -1119,6 +2073,7 @@
         }
       }
       voiceHoldActive = false;
+      voicePressing = false;
       voiceStopping = true;
       voiceHoldText.textContent = '正在识别...';
       if (recognition) {
@@ -1131,6 +2086,7 @@
     function cancelVoiceInput(event) {
       event?.preventDefault?.();
       voiceHoldActive = false;
+      voicePressing = false;
       voiceStopping = false;
       voiceHadError = false;
       if (recognition) {
@@ -1179,11 +2135,11 @@
     }
 
     function voiceUnavailableMessage() {
-      if (!SpeechRecognitionCtor) {
-        return '当前浏览器不支持语音识别';
-      }
       if (!window.isSecureContext && !isLocalhost()) {
         return '手机语音需要 HTTPS 地址';
+      }
+      if (!SpeechRecognitionCtor) {
+        return '当前浏览器不支持语音识别';
       }
       return '';
     }
@@ -1196,7 +2152,7 @@
       switch (code) {
         case 'not-allowed':
         case 'service-not-allowed':
-          return '浏览器没有麦克风权限，允许后再试。';
+          return `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
         case 'no-speech':
           return '没有听到声音，按住再说一次。';
         case 'audio-capture':
@@ -1243,8 +2199,12 @@
     async function sendCurrentMessage() {
       const name = username.value.trim();
       if (!name) {
-        setStatus('先填用户名。', true);
-        username.focus();
+        setStatus('先填写 Minecraft 用户名。', true);
+        showUsernameGate();
+        return;
+      }
+      if (!hasSendContent()) {
+        setStatus('先输入内容，或点加号选择图片。', true);
         return;
       }
       const voiceWasDisabled = voiceHold.disabled;

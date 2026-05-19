@@ -77,11 +77,16 @@ cp .env.example .env
 cargo run -p blockwright-controller
 ```
 
-默认监听：
+默认会同时输出本机和局域网访问地址：
 
 ```text
-http://127.0.0.1:8765
+Blockwright 本机访问：http://127.0.0.1:8765/web
+Blockwright 局域网访问：http://<当前机器局域网 IP>:8765/web
+Blockwright 本机 HTTPS：https://127.0.0.1:8766/web
+Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 ```
+
+HTTPS 是给手机语音用的本地自签方案。controller 会自动生成根证书和服务器证书；手机第一次访问 HTTPS 地址前，需要先在 `/web` 设置页下载 `Blockwright 本地根证书`。Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是保存证书文件，不是上传到 Google，也不是安装完成；进入设置后也通常不会自动提醒，需要手动进入“安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 `Blockwright-Local-Root-CA.cer`。iPhone/iPad 请用 Safari 打开证书下载链接；下载后在“设置”顶部的“已下载描述文件”或“通用 > VPN 与设备管理/描述文件”里安装，再到“通用 > 关于本机 > 证书信任设置”打开完全信任。HTTPS 端口默认是 HTTP 端口 + 1，也可以用 `HTTPS_PORT` 指定；如需临时关闭，设置 `HTTPS_ENABLED=false`。
 
 健康检查：
 
@@ -89,7 +94,7 @@ http://127.0.0.1:8765
 curl http://127.0.0.1:8765/health
 ```
 
-默认配置位于 [config/servers/local.yaml](config/servers/local.yaml)。本地开发默认 `require_token: false`，如果要把 controller 暴露给其他机器，必须启用共享 token 或放在受控网络里。
+默认配置位于 [config/servers/local.yaml](config/servers/local.yaml)。本地开发默认 `require_token: false`，适合可信局域网；如果放到不受控网络，必须启用共享 token。
 
 ### 安装 HMCL / Fabric 模组
 
@@ -119,7 +124,7 @@ make HMCL_DIR=<HMCL当前游戏目录>
 /bw config
 ```
 
-配置入口统一放在 controller 的 Web 端，打开 `/web` 后点“Web 配置”保存 Element/Matrix 接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
+配置入口统一放在 controller 的 Web 端，打开 `/web` 后点右上角设置图标保存 Element/Matrix 接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
 
 第一次调用 Codex CLI 或本地模型规划建筑时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 
@@ -230,7 +235,7 @@ tools:
 
 当前 Matrix 适配读取普通 `m.room.message` 文本事件，不处理端到端加密房间；请给 bot 使用未开启 E2EE 的专用房间。
 
-Element/Matrix 等聊天入口统一在 controller 的 `/web` 页面里点“Web 配置”保存；真实 token 仍只写入本地未追踪配置，不写进仓库示例。
+Element/Matrix 等聊天入口统一在 controller 的 `/web` 页面里点右上角设置图标保存；真实 token 仍只写入本地未追踪配置，不写进仓库示例。
 
 ## MCP 助手入口
 
