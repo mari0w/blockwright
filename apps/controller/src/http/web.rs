@@ -4,7 +4,7 @@ use std::{
 };
 
 use axum::{
-    extract::State,
+    extract::{Path as AxumPath, State},
     http::StatusCode,
     response::Html,
     routing::{get, post},
@@ -14,9 +14,10 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
+    domain::types::{BuildStatus, ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
     http::robot::queue_chat_message,
     services::chat::IncomingChatMessage,
+    services::job_queue::{JobQueuePhase, JobQueueStatus},
     state::AppState,
 };
 
@@ -53,11 +54,24 @@ struct WebChatResponse {
     attachment_count: usize,
 }
 
+#[derive(Debug, Serialize)]
+struct WebJobStatusResponse {
+    phase: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build_status: Option<BuildStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result_message: Option<String>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(web_chat_page))
         .route("/web", get(web_chat_page))
         .route("/web/message", post(handle_web_message))
+        .route("/web/jobs/{job_id}/status", get(web_job_status))
 }
 
 async fn web_chat_page() -> Html<&'static str> {
@@ -107,6 +121,106 @@ async fn handle_web_message(
         queued_summary,
         attachment_count: request.images.len(),
     }))
+}
+
+async fn web_job_status(
+    State(state): State<AppState>,
+    AxumPath(job_id): AxumPath<String>,
+) -> Result<Json<WebJobStatusResponse>, StatusCode> {
+    let queue_status = state.jobs.status(&job_id).await;
+    let build = state.builds.get(&job_id).await;
+    if queue_status.is_none() && build.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    Ok(Json(web_job_status_response(queue_status, build)))
+}
+
+fn web_job_status_response(
+    queue_status: Option<JobQueueStatus>,
+    build: Option<crate::domain::types::BuildRecord>,
+) -> WebJobStatusResponse {
+    let summary = build.as_ref().map(|item| item.summary.clone()).or_else(|| {
+        queue_status
+            .as_ref()
+            .and_then(|item| item.job.as_ref().map(|job| job.summary.clone()))
+    });
+    let build_status = build.as_ref().map(|item| item.status.clone());
+    let result_message = build
+        .as_ref()
+        .and_then(|item| item.message.clone())
+        .or_else(|| queue_status.as_ref().and_then(|item| item.message.clone()));
+
+    match build.as_ref().map(|item| &item.status) {
+        Some(BuildStatus::Succeeded) => WebJobStatusResponse {
+            phase: "succeeded".to_string(),
+            message: "Minecraft 执行完成，校验报告已回写。".to_string(),
+            summary,
+            build_status,
+            result_message,
+        },
+        Some(BuildStatus::Failed) => WebJobStatusResponse {
+            phase: "failed".to_string(),
+            message: "Minecraft 执行失败，已回写失败原因。".to_string(),
+            summary,
+            build_status,
+            result_message,
+        },
+        Some(BuildStatus::Planned) => {
+            let pending = matches!(
+                queue_status.as_ref().map(|item| &item.phase),
+                Some(JobQueuePhase::Pending)
+            );
+            WebJobStatusResponse {
+                phase: if pending { "queued" } else { "running" }.to_string(),
+                message: if pending {
+                    "任务还在队列里，等待 Minecraft 执行端领取。".to_string()
+                } else {
+                    "Minecraft 执行端已领取任务，正在放置方块并生成校验报告。".to_string()
+                },
+                summary,
+                build_status,
+                result_message,
+            }
+        }
+        None => match queue_status.as_ref().map(|item| &item.phase) {
+            Some(JobQueuePhase::Pending) => WebJobStatusResponse {
+                phase: "queued".to_string(),
+                message: "任务还在队列里，等待 Minecraft 执行端领取。".to_string(),
+                summary,
+                build_status,
+                result_message,
+            },
+            Some(JobQueuePhase::Claimed) => WebJobStatusResponse {
+                phase: "running".to_string(),
+                message: "Minecraft 执行端已领取任务，正在扫描或执行。".to_string(),
+                summary,
+                build_status,
+                result_message,
+            },
+            Some(JobQueuePhase::Succeeded) => WebJobStatusResponse {
+                phase: "succeeded".to_string(),
+                message: "Minecraft 执行端已回写成功。".to_string(),
+                summary,
+                build_status,
+                result_message,
+            },
+            Some(JobQueuePhase::Failed) => WebJobStatusResponse {
+                phase: "failed".to_string(),
+                message: "Minecraft 执行端已回写失败。".to_string(),
+                summary,
+                build_status,
+                result_message,
+            },
+            None => WebJobStatusResponse {
+                phase: "unknown".to_string(),
+                message: "没有找到这个任务的实时状态。".to_string(),
+                summary,
+                build_status,
+                result_message,
+            },
+        },
+    }
 }
 
 async fn save_uploaded_images(

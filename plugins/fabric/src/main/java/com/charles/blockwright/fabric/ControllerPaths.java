@@ -23,6 +23,10 @@ final class ControllerPaths {
         return "/api/minecraft/message";
     }
 
+    static String minecraftProgressPath(String progressId) {
+        return "/api/minecraft/progress/" + encode(progressId);
+    }
+
     static String nextJobPath(String serverId) {
         return "/api/minecraft/jobs/next?server_id=" + encode(serverId);
     }

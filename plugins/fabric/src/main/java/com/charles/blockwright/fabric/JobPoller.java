@@ -88,6 +88,9 @@ public final class JobPoller {
             if (player == null) {
                 throw new IllegalStateException("没有在线玩家可执行任务");
             }
+            if (executeScanAndPlanJob(controllerClient, job, player)) {
+                return;
+            }
             report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
             ok = report.isOk();
             if (!ok) {
@@ -105,6 +108,136 @@ public final class JobPoller {
         CompletableFuture.runAsync(
                 () -> sendJobResult(controllerClient, job.id, resultOk, resultMessage, resultReport),
                 executor);
+    }
+
+    private boolean executeScanAndPlanJob(
+            ControllerClient controllerClient,
+            JsonModels.GameJob job,
+            ServerPlayerEntity player) {
+        JsonModels.GameAction scanAction = firstScanAction(job.actions);
+        if (scanAction == null) {
+            return false;
+        }
+
+        PlayerSnapshot playerSnapshot = PlayerSnapshot.from(player);
+        JsonModels.WorldScan nearbyScan = WorldScanner.scan(player, configSupplier.get());
+        String text = scanAction.text == null || scanAction.text.isBlank()
+                ? scanAction.message
+                : scanAction.text;
+        if (text == null || text.isBlank()) {
+            CompletableFuture.runAsync(
+                    () -> sendJobResult(controllerClient, job.id, false, "缺少要继续处理的原始需求", null),
+                    executor);
+            return true;
+        }
+
+        CompletableFuture
+                .supplyAsync(
+                        () -> sendScannedRequest(
+                                controllerClient,
+                                playerSnapshot,
+                                text,
+                                scanAction.attachments,
+                                nearbyScan),
+                        executor)
+                .thenAccept(response -> server.execute(() -> executeScannedResponse(controllerClient, job, playerSnapshot, response)))
+                .exceptionally(error -> {
+                    CompletableFuture.runAsync(
+                            () -> sendJobResult(controllerClient, job.id, false, rootMessage(error), null),
+                            executor);
+                    LOGGER.warn("Blockwright queued scan planning failed", error);
+                    return null;
+                });
+        return true;
+    }
+
+    private JsonModels.GameAction firstScanAction(List<JsonModels.GameAction> actions) {
+        if (actions == null) {
+            return null;
+        }
+
+        for (JsonModels.GameAction action : actions) {
+            if (action != null && "scan_nearby_and_plan".equals(action.type)) {
+                return action;
+            }
+        }
+        return null;
+    }
+
+    private JsonModels.MinecraftMessageResponse sendScannedRequest(
+            ControllerClient controllerClient,
+            PlayerSnapshot playerSnapshot,
+            String text,
+            List<JsonModels.ChatAttachment> attachments,
+            JsonModels.WorldScan nearbyScan) {
+        try {
+            return controllerClient.sendMinecraftMessage(
+                    playerSnapshot,
+                    text,
+                    nearbyScan,
+                    attachments,
+                    progress -> {
+                        if (progress != null && progress.message != null && !progress.message.isBlank()) {
+                            LOGGER.info(
+                                    "Blockwright Codex progress [queued-scan:{} #{}]: {}",
+                                    playerSnapshot.name(),
+                                    progress.sequence,
+                                    progress.message);
+                        }
+                    });
+        } catch (Exception error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
+    private void executeScannedResponse(
+            ControllerClient controllerClient,
+            JsonModels.GameJob originalJob,
+            PlayerSnapshot playerSnapshot,
+            JsonModels.MinecraftMessageResponse response) {
+        ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerSnapshot.name());
+        if (currentPlayer == null) {
+            CompletableFuture.runAsync(
+                    () -> sendJobResult(controllerClient, originalJob.id, false, "玩家已离线", null),
+                    executor);
+            return;
+        }
+
+        currentPlayer.sendMessage(net.minecraft.text.Text.literal(response.reply), false);
+        boolean ok = true;
+        String message = "ok";
+        JsonModels.JobExecutionReport report = null;
+        try {
+            report = new ActionExecutor(server, configSupplier.get()).executeActions(response.actions, currentPlayer);
+            ok = report.isOk();
+            if (!ok) {
+                message = "建筑校验失败，已回传差异报告";
+            }
+        } catch (Exception error) {
+            ok = false;
+            message = rootMessage(error);
+            LOGGER.warn("Blockwright queued scanned action failed", error);
+        }
+
+        boolean resultOk = ok;
+        String resultMessage = message;
+        JsonModels.JobExecutionReport resultReport = report;
+        CompletableFuture.runAsync(
+                () -> {
+                    sendJobResult(controllerClient, originalJob.id, resultOk, resultMessage, resultReport);
+                    if (response.jobId != null && !response.jobId.isBlank()) {
+                        sendJobResult(controllerClient, response.jobId, resultOk, resultMessage, resultReport);
+                    }
+                },
+                executor);
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.toString() : current.getMessage();
     }
 
     private ServerPlayerEntity resolveTargetPlayer(String targetPlayer) {

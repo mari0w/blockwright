@@ -14,7 +14,7 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 3. Generate a blueprint, not Minecraft commands and not inventory/manual interaction steps.
 4. Keep all block coordinates relative to the blueprint origin.
 5. Use common vanilla Minecraft block IDs with the `minecraft:` namespace.
-6. Keep the first-phase blueprint under 500 blocks unless the controller explicitly allows more.
+6. Keep ordinary blueprints compact, but use up to 2000 blocks when the user explicitly asks for a large, detailed, realistic, or reference-image-based build.
 7. Make `materials` match the exact block counts in `blocks`.
 8. Use block states inside `material` when Minecraft needs them, for example `minecraft:oak_leaves[persistent=true]`, `minecraft:oak_door[half=lower,facing=south]`, and `minecraft:red_bed[part=foot,facing=north]`.
 9. Treat blueprint `y=0` as the first placed layer on top of the selected ground surface. Do not encode absolute world height in the blueprint.

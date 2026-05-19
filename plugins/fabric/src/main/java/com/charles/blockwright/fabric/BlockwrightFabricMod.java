@@ -2,6 +2,7 @@ package com.charles.blockwright.fabric;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -86,9 +87,18 @@ public final class BlockwrightFabricMod implements ModInitializer {
         String playerName = playerSnapshot.name();
         player.sendMessage(Text.literal("Blockwright 正在处理你的需求..."), false);
         ControllerClient controllerClient = new ControllerClient(config);
+        ControllerClient.ProgressListener progressListener = progressLogger("direct", playerName);
 
         CompletableFuture
-                .supplyAsync(() -> sendRequest(controllerClient, playerSnapshot, text, nearbyScan), REQUEST_EXECUTOR)
+                .supplyAsync(
+                        () -> sendRequest(
+                                controllerClient,
+                                playerSnapshot,
+                                text,
+                                nearbyScan,
+                                null,
+                                progressListener),
+                        REQUEST_EXECUTOR)
                 .thenAccept(response -> server.execute(() -> {
                     ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerName);
                     if (currentPlayer == null) {
@@ -120,11 +130,43 @@ public final class BlockwrightFabricMod implements ModInitializer {
             PlayerSnapshot player,
             String text,
             JsonModels.WorldScan nearbyScan) {
+        return sendRequest(controllerClient, player, text, nearbyScan, null);
+    }
+
+    private static JsonModels.MinecraftMessageResponse sendRequest(
+            ControllerClient controllerClient,
+            PlayerSnapshot player,
+            String text,
+            JsonModels.WorldScan nearbyScan,
+            List<JsonModels.ChatAttachment> attachments) {
+        return sendRequest(controllerClient, player, text, nearbyScan, attachments, null);
+    }
+
+    private static JsonModels.MinecraftMessageResponse sendRequest(
+            ControllerClient controllerClient,
+            PlayerSnapshot player,
+            String text,
+            JsonModels.WorldScan nearbyScan,
+            List<JsonModels.ChatAttachment> attachments,
+            ControllerClient.ProgressListener progressListener) {
         try {
-            return controllerClient.sendMinecraftMessage(player, text, nearbyScan);
+            return controllerClient.sendMinecraftMessage(player, text, nearbyScan, attachments, progressListener);
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
+    }
+
+    private static ControllerClient.ProgressListener progressLogger(String scope, String playerName) {
+        return progress -> {
+            if (progress == null || progress.message == null || progress.message.isBlank()) {
+                return;
+            }
+            LOGGER.info("Blockwright Codex progress [{}:{} #{}]: {}",
+                    scope,
+                    playerName,
+                    progress.sequence,
+                    progress.message);
+        };
     }
 
     private static void executeDirectActions(
@@ -196,7 +238,15 @@ public final class BlockwrightFabricMod implements ModInitializer {
         }
 
         CompletableFuture
-                .supplyAsync(() -> sendRequest(controllerClient, playerSnapshot, text, nearbyScan), REQUEST_EXECUTOR)
+                .supplyAsync(
+                        () -> sendRequest(
+                                controllerClient,
+                                playerSnapshot,
+                                text,
+                                nearbyScan,
+                                action.attachments,
+                                progressLogger("scan-retry", playerName)),
+                        REQUEST_EXECUTOR)
                 .thenAccept(response -> server.execute(() -> {
                     ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerName);
                     if (currentPlayer == null) {

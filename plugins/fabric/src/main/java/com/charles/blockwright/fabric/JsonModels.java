@@ -16,6 +16,9 @@ public final class JsonModels {
         public PlayerPosition position;
         @SerializedName("nearby_scan")
         public WorldScan nearbyScan;
+        public List<ChatAttachment> attachments;
+        @SerializedName("progress_id")
+        public String progressId;
     }
 
     public static final class MinecraftMessageResponse {
@@ -27,6 +30,17 @@ public final class JsonModels {
 
     public static final class NextJobResponse {
         public GameJob job;
+    }
+
+    public static final class ProgressSnapshot {
+        public String id;
+        public long sequence;
+        public String phase;
+        public String detail;
+        public String message;
+        public boolean done;
+        @SerializedName("updated_at_millis")
+        public long updatedAtMillis;
     }
 
     public static final class JobResultRequest {
@@ -53,6 +67,7 @@ public final class JsonModels {
         public String command;
         public String message;
         public String text;
+        public List<ChatAttachment> attachments;
         @SerializedName("blueprint_id")
         public String blueprintId;
         public BlockOrigin origin;
@@ -112,6 +127,25 @@ public final class JsonModels {
         public int y;
         public int z;
         public String material;
+    }
+
+    public static final class ChatAttachment {
+        public String kind;
+        public ChatAttachmentSource source;
+        @SerializedName("file_name")
+        public String fileName;
+        @SerializedName("mime_type")
+        public String mimeType;
+    }
+
+    public static final class ChatAttachmentSource {
+        public String type;
+        public String url;
+        public String path;
+        @SerializedName("download_code")
+        public String downloadCode;
+        @SerializedName("picture_download_code")
+        public String pictureDownloadCode;
     }
 
     public static final class JobExecutionReport {

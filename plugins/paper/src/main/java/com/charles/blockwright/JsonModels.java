@@ -14,6 +14,8 @@ public final class JsonModels {
         public String player;
         public String text;
         public PlayerPosition position;
+        @SerializedName("progress_id")
+        public String progressId;
     }
 
     public static final class MinecraftMessageResponse {
@@ -25,6 +27,17 @@ public final class JsonModels {
 
     public static final class NextJobResponse {
         public GameJob job;
+    }
+
+    public static final class ProgressSnapshot {
+        public String id;
+        public long sequence;
+        public String phase;
+        public String detail;
+        public String message;
+        public boolean done;
+        @SerializedName("updated_at_millis")
+        public long updatedAtMillis;
     }
 
     public static final class JobResultRequest {

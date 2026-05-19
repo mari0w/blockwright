@@ -8,14 +8,19 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0f1412;
-      --panel: #171d1a;
-      --line: #2d3832;
+      --bg: #101214;
+      --side: #15191d;
+      --panel: #1b2025;
+      --panel-soft: #22282e;
+      --line: #303941;
       --text: #edf4ef;
-      --muted: #95a39a;
-      --accent: #62d48b;
-      --accent-strong: #3cbf6d;
+      --muted: #9aa8a2;
+      --accent: #68d391;
+      --accent-strong: #39b86f;
+      --accent-warm: #e8b15a;
+      --focus: #7bb7ff;
       --danger: #ff6b6b;
+      --shadow: 0 18px 46px rgba(0, 0, 0, .28);
     }
     * {
       box-sizing: border-box;
@@ -29,13 +34,13 @@
     }
     .app {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 300px minmax(0, 1fr);
       min-height: 100vh;
     }
     aside {
       border-right: 1px solid var(--line);
-      padding: 20px;
-      background: #121815;
+      padding: 24px;
+      background: var(--side);
     }
     main {
       display: grid;
@@ -43,8 +48,8 @@
       min-width: 0;
     }
     h1 {
-      margin: 0 0 20px;
-      font-size: 22px;
+      margin: 0 0 24px;
+      font-size: 23px;
       font-weight: 650;
       letter-spacing: 0;
     }
@@ -67,11 +72,16 @@
       outline: none;
     }
     textarea {
-      min-height: 96px;
-      resize: vertical;
+      min-height: 52px;
+      max-height: 220px;
+      resize: none;
+      border: 0;
+      background: transparent;
+      padding: 13px 14px;
     }
-    input:focus, textarea:focus {
-      border-color: var(--accent);
+    input:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(123, 183, 255, .14);
     }
     button {
       padding: 11px 14px;
@@ -87,56 +97,187 @@
     }
     .messages {
       overflow: auto;
-      padding: 22px;
+      padding: 24px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .02), transparent 180px),
+        var(--bg);
     }
     .message {
       max-width: 900px;
-      margin: 0 0 14px;
+      margin: 0 0 16px;
       padding: 13px 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
     }
     .message.user {
       margin-left: auto;
-      border-color: #355542;
+      border-color: rgba(104, 211, 145, .35);
+      background: #17251d;
+    }
+    .message.pending {
+      border-color: rgba(232, 177, 90, .42);
+    }
+    .message.error {
+      border-color: rgba(255, 107, 107, .58);
     }
     .meta {
       margin-bottom: 6px;
       color: var(--muted);
       font-size: 12px;
     }
-    .composer {
+    .message-body {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .message-body:empty {
+      display: none;
+    }
+    .message-progress {
+      margin-top: 10px;
+      padding-top: 9px;
       border-top: 1px solid var(--line);
-      padding: 18px 22px;
-      background: #121815;
+      color: var(--muted);
+      font-size: 13px;
     }
-    .composer-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 150px;
-      gap: 12px;
-      align-items: end;
+    .message-progress.error {
+      color: var(--danger);
     }
-    .preview {
+    .message-images {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
       gap: 8px;
       margin-top: 10px;
+      max-width: 520px;
     }
-    .preview img {
+    .message-images img {
       width: 100%;
       aspect-ratio: 1;
       object-fit: cover;
       border: 1px solid var(--line);
       border-radius: 6px;
+      background: #0b0d0f;
+    }
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 16px 22px 18px;
+      background: rgba(21, 25, 29, .96);
+      backdrop-filter: blur(10px);
+    }
+    .input-shell {
+      display: grid;
+      grid-template-rows: auto auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .input-shell:focus-within {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(123, 183, 255, .14), var(--shadow);
+    }
+    .composer-actions {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) 118px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      background: rgba(0, 0, 0, .12);
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-soft);
+      color: var(--text);
+      font-size: 23px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+    }
+    .icon-button:hover,
+    .icon-button:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+    }
+    .preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+      gap: 8px;
+      padding: 0 10px 10px;
+    }
+    .preview[hidden] {
+      display: none;
+    }
+    .preview-item {
+      position: relative;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      overflow: hidden;
+    }
+    .preview-item img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      background: #0b0d0f;
+    }
+    .remove-image {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-color: rgba(255, 255, 255, .18);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, .64);
+      color: var(--text);
+      font-size: 18px;
+      line-height: 1;
+    }
+    .remove-image:hover,
+    .remove-image:focus-visible {
+      border-color: var(--danger);
+      outline: none;
+    }
+    .preview-name {
+      padding: 6px 7px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .status {
-      margin-top: 10px;
       min-height: 20px;
       color: var(--muted);
       font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .status.error {
       color: var(--danger);
@@ -149,8 +290,8 @@
         border-right: 0;
         border-bottom: 1px solid var(--line);
       }
-      .composer-grid {
-        grid-template-columns: 1fr;
+      .composer-actions {
+        grid-template-columns: auto minmax(0, 1fr) 96px;
       }
     }
   </style>
@@ -165,22 +306,25 @@
       <input id="targetPlayer" placeholder="默认同用户名">
       <label for="serverId">服务器</label>
       <input id="serverId" placeholder="hmcl-lan">
-      <label for="images">参考图片</label>
-      <input id="images" type="file" accept="image/*" multiple>
-      <div id="preview" class="preview"></div>
     </aside>
     <main>
-      <section id="messages" class="messages"></section>
+      <section id="messages" class="messages" aria-live="polite"></section>
       <form id="form" class="composer">
-        <div class="composer-grid">
+        <div class="input-shell">
           <textarea id="text" placeholder="说你想建什么、改什么，图片会一起发过去。"></textarea>
-          <button id="send" type="submit">发送</button>
+          <div id="preview" class="preview" hidden></div>
+          <div class="composer-actions">
+            <input id="images" class="sr-only" type="file" accept="image/*" multiple>
+            <label class="icon-button" for="images" title="选择图片" aria-label="选择图片">+</label>
+            <div id="status" class="status"></div>
+            <button id="send" type="submit">发送</button>
+          </div>
         </div>
-        <div id="status" class="status"></div>
       </form>
     </main>
   </div>
   <script>
+    const MAX_IMAGES = 4;
     const username = document.getElementById('username');
     const targetPlayer = document.getElementById('targetPlayer');
     const serverId = document.getElementById('serverId');
@@ -191,6 +335,9 @@
     const messages = document.getElementById('messages');
     const statusEl = document.getElementById('status');
     const send = document.getElementById('send');
+    let pendingImages = [];
+    let nextImageId = 1;
+    let activeJobPoll = null;
 
     username.value = localStorage.getItem('bw.username') || '';
     targetPlayer.value = localStorage.getItem('bw.targetPlayer') || '';
@@ -201,14 +348,147 @@
     });
 
     images.addEventListener('change', () => {
-      preview.replaceChildren();
-      [...images.files].forEach((file) => {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        img.onload = () => URL.revokeObjectURL(img.src);
-        preview.appendChild(img);
-      });
+      addImageFiles([...images.files]);
+      images.value = '';
     });
+
+    form.addEventListener('paste', (event) => {
+      const pastedImages = clipboardImages(event.clipboardData);
+      if (pastedImages.length > 0) {
+        addImageFiles(pastedImages);
+      }
+    });
+
+    text.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    text.addEventListener('input', resizeComposer);
+    resizeComposer();
+
+    function addImageFiles(files) {
+      const imageFiles = files.filter((file) => file && file.type.startsWith('image/'));
+      if (imageFiles.length === 0) {
+        return;
+      }
+      const available = MAX_IMAGES - pendingImages.length;
+      if (available <= 0) {
+        setStatus(`一次最多发送 ${MAX_IMAGES} 张图片。`, true);
+        return;
+      }
+      const selected = imageFiles.slice(0, available);
+      selected.forEach((file) => {
+        pendingImages.push({
+          id: nextImageId++,
+          file,
+          url: URL.createObjectURL(file)
+        });
+      });
+      renderPreview();
+      if (imageFiles.length > selected.length) {
+        setStatus(`已添加 ${selected.length} 张图片，最多保留 ${MAX_IMAGES} 张。`, true);
+      } else {
+        setStatus(`已添加 ${selected.length} 张图片。`, false);
+      }
+    }
+
+    function clipboardImages(data) {
+      if (!data) {
+        return [];
+      }
+      const byKey = new Map();
+      const addFile = (file) => {
+        if (!file || !file.type.startsWith('image/')) {
+          return;
+        }
+        const key = `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
+        byKey.set(key, file);
+      };
+      [...data.files].forEach(addFile);
+      [...data.items].forEach((item) => {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          addFile(item.getAsFile());
+        }
+      });
+      return [...byKey.values()];
+    }
+
+    function renderPreview() {
+      preview.replaceChildren();
+      preview.hidden = pendingImages.length === 0;
+      pendingImages.forEach((entry) => {
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+        const img = document.createElement('img');
+        img.src = entry.url;
+        img.alt = entry.file.name || '参考图片';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'remove-image';
+        remove.textContent = '×';
+        remove.title = '移除图片';
+        remove.setAttribute('aria-label', `移除 ${entry.file.name || '图片'}`);
+        remove.addEventListener('click', () => removeImage(entry.id));
+        const name = document.createElement('div');
+        name.className = 'preview-name';
+        name.textContent = entry.file.name || '粘贴图片';
+        item.append(img, remove, name);
+        preview.appendChild(item);
+      });
+    }
+
+    function removeImage(id) {
+      const kept = [];
+      pendingImages.forEach((entry) => {
+        if (entry.id === id) {
+          URL.revokeObjectURL(entry.url);
+        } else {
+          kept.push(entry);
+        }
+      });
+      pendingImages = kept;
+      renderPreview();
+    }
+
+    function clearComposer() {
+      text.value = '';
+      images.value = '';
+      pendingImages.forEach((entry) => URL.revokeObjectURL(entry.url));
+      pendingImages = [];
+      renderPreview();
+      resizeComposer();
+    }
+
+    function resizeComposer() {
+      text.style.height = 'auto';
+      text.style.height = `${Math.min(text.scrollHeight, 220)}px`;
+    }
+
+    function sentImageSummary(count) {
+      if (count === 0) {
+        return '';
+      }
+      return count === 1 ? '发送了一张参考图片' : `发送了 ${count} 张参考图片`;
+    }
+
+    function messageTextForDisplay(value, imageCount) {
+      const trimmed = value.trim();
+      return trimmed || sentImageSummary(imageCount);
+    }
+
+    function imageDataUrls(uploads) {
+      return uploads.map((upload) => upload.data_url).filter(Boolean);
+    }
+
+    function imageStatus(count) {
+      if (count === 0) {
+        return '';
+      }
+      return `，图片 ${count} 张`;
+    }
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -219,17 +499,24 @@
         return;
       }
       send.disabled = true;
-      setStatus('发送中...', false);
+      stopJobPolling();
+      setStatus('正在发送给 Blockwright...', false);
+      let assistantMessage = null;
+      let progressTimers = [];
       try {
-        const uploads = await Promise.all([...images.files].map(readImage));
+        const currentText = text.value;
+        const uploads = await Promise.all(pendingImages.map((entry) => readImage(entry.file)));
         const body = {
           username: name,
           target_player: targetPlayer.value.trim() || null,
           server_id: serverId.value.trim() || null,
-          text: text.value,
+          text: currentText,
           images: uploads
         };
-        addMessage('user', name, text.value || (uploads.length ? '发送了一张参考图片' : ''));
+        addMessage('user', name, messageTextForDisplay(currentText, uploads.length), imageDataUrls(uploads));
+        assistantMessage = addMessage('assistant', 'Blockwright', '正在接收消息...', []);
+        assistantMessage.classList.add('pending');
+        progressTimers = startRequestProgress(assistantMessage, uploads.length);
         const response = await fetch('/web/message', {
           method: 'POST',
           headers: {'content-type': 'application/json'},
@@ -239,32 +526,144 @@
         if (!response.ok) {
           throw new Error(payload.message || payload.error || await response.text() || '请求失败');
         }
-        addMessage('assistant', 'Blockwright', payload.reply || '');
-        setStatus(payload.queued_job_id ? `已排队：${payload.queued_job_id}` : '已回复', false);
-        text.value = '';
+        stopTimers(progressTimers);
+        assistantMessage.classList.remove('pending');
+        updateMessageBody(assistantMessage, payload.reply || '');
+        if (payload.queued_job_id) {
+          const queuedText = `任务状态：已排队 ${payload.queued_job_id}${imageStatus(uploads.length)}`;
+          setStatus(queuedText, false);
+          setMessageProgress(assistantMessage, queuedText, false);
+          startJobPolling(payload.queued_job_id, assistantMessage);
+        } else {
+          setStatus(`已回复${imageStatus(uploads.length)}`, false);
+          clearMessageProgress(assistantMessage);
+        }
+        clearComposer();
       } catch (error) {
-        setStatus(error.message || String(error), true);
+        stopTimers(progressTimers);
+        const message = error.message || String(error);
+        setStatus(message, true);
+        if (assistantMessage) {
+          assistantMessage.classList.remove('pending');
+          assistantMessage.classList.add('error');
+          updateMessageBody(assistantMessage, `处理失败：${message}`);
+          clearMessageProgress(assistantMessage);
+        }
       } finally {
         send.disabled = false;
       }
     });
 
-    function addMessage(kind, who, content) {
+    function addMessage(kind, who, content, imageUrls) {
       const item = document.createElement('article');
       item.className = `message ${kind}`;
       const meta = document.createElement('div');
       meta.className = 'meta';
       meta.textContent = who;
       const body = document.createElement('div');
+      body.className = 'message-body';
       body.textContent = content;
       item.append(meta, body);
+      if (imageUrls && imageUrls.length > 0) {
+        const gallery = document.createElement('div');
+        gallery.className = 'message-images';
+        imageUrls.forEach((url) => {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = '已发送图片';
+          gallery.appendChild(img);
+        });
+        item.appendChild(gallery);
+      }
       messages.appendChild(item);
       messages.scrollTop = messages.scrollHeight;
+      return item;
+    }
+
+    function updateMessageBody(item, content) {
+      const body = item.querySelector('.message-body');
+      if (body) {
+        body.textContent = content;
+      }
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function setMessageProgress(item, content, isError) {
+      let progress = item.querySelector('.message-progress');
+      if (!progress) {
+        progress = document.createElement('div');
+        progress.className = 'message-progress';
+        item.appendChild(progress);
+      }
+      progress.textContent = content;
+      progress.classList.toggle('error', Boolean(isError));
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function clearMessageProgress(item) {
+      item.querySelector('.message-progress')?.remove();
     }
 
     function setStatus(value, isError) {
       statusEl.textContent = value;
       statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    function startRequestProgress(item, imageCount) {
+      const imageHint = imageCount > 0 ? '，同时整理参考图片' : '';
+      const phases = [
+        {delay: 0, text: `正在接收消息${imageHint}...`},
+        {delay: 900, text: '正在识别这是建造、动作还是改造需求...'},
+        {delay: 2400, text: 'Codex 正在规划方案和方块清单...'},
+        {delay: 7000, text: '规划还在继续，可能正在结合场地或图片细节...'},
+        {delay: 15000, text: '还在等 Codex 返回结构化方案，请稍等...'}
+      ];
+      return phases.map((phase) => setTimeout(() => {
+        updateMessageBody(item, phase.text);
+        setStatus(phase.text, false);
+      }, phase.delay));
+    }
+
+    function stopTimers(timers) {
+      timers.forEach((timer) => clearTimeout(timer));
+    }
+
+    function stopJobPolling() {
+      if (activeJobPoll) {
+        clearInterval(activeJobPoll);
+        activeJobPoll = null;
+      }
+    }
+
+    function startJobPolling(jobId, item) {
+      stopJobPolling();
+      let attempts = 0;
+      const poll = async () => {
+        attempts += 1;
+        try {
+          const response = await fetch(`/web/jobs/${encodeURIComponent(jobId)}/status`);
+          if (!response.ok) {
+            throw new Error('任务状态暂时不可用');
+          }
+          const payload = await response.json();
+          const detail = payload.result_message ? `（${payload.result_message}）` : '';
+          const message = `任务状态：${payload.message}${detail}`;
+          const isError = payload.phase === 'failed';
+          setStatus(message, isError);
+          setMessageProgress(item, message, isError);
+          if (payload.phase === 'succeeded' || payload.phase === 'failed') {
+            stopJobPolling();
+          }
+        } catch (error) {
+          if (attempts >= 3) {
+            const message = error.message || String(error);
+            setStatus(message, true);
+            setMessageProgress(item, `任务状态：${message}`, true);
+          }
+        }
+      };
+      poll();
+      activeJobPoll = setInterval(poll, 2000);
     }
 
     function readImage(file) {

@@ -15,7 +15,7 @@ use tokio::{
     time::{sleep, Duration, Instant as TokioInstant},
 };
 
-use crate::config::CodexConfig;
+use crate::{config::CodexConfig, services::progress::ProgressStore};
 
 const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
 
@@ -24,6 +24,7 @@ pub struct CodexClient {
     config: CodexConfig,
     sessions: CodexSessionStore,
     runtime_home: Option<Arc<PathBuf>>,
+    progress: Option<ProgressStore>,
 }
 
 #[derive(Clone)]
@@ -70,6 +71,7 @@ impl CodexClient {
             config,
             sessions: CodexSessionStore::in_memory(),
             runtime_home: None,
+            progress: None,
         }
     }
 
@@ -86,7 +88,13 @@ impl CodexClient {
             config,
             sessions: CodexSessionStore::from_path(path),
             runtime_home: runtime_home.map(Arc::new),
+            progress: None,
         }
+    }
+
+    pub fn with_progress(mut self, progress: ProgressStore) -> Self {
+        self.progress = Some(progress);
+        self
     }
 
     pub fn enabled(&self) -> bool {
@@ -97,7 +105,7 @@ impl CodexClient {
         &self,
         prompt: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, None, None).await
+        self.ask_inner(prompt, None, None, None).await
     }
 
     pub async fn ask_with_schema(
@@ -106,7 +114,19 @@ impl CodexClient {
         schema: CodexResponseSchema,
         session_key: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, Some(schema), session_key).await
+        self.ask_inner(prompt, Some(schema), session_key, None)
+            .await
+    }
+
+    pub async fn ask_with_schema_and_progress(
+        &self,
+        prompt: &str,
+        schema: CodexResponseSchema,
+        session_key: Option<&str>,
+        progress_id: Option<&str>,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        self.ask_inner(prompt, Some(schema), session_key, progress_id)
+            .await
     }
 
     async fn ask_inner(
@@ -114,6 +134,7 @@ impl CodexClient {
         prompt: &str,
         schema: Option<CodexResponseSchema>,
         session_key: Option<&str>,
+        progress_id: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(None);
@@ -134,6 +155,7 @@ impl CodexClient {
         };
         let schema_label = schema.map(CodexResponseSchema::label).unwrap_or("none");
         let schema_path = schema.map(CodexResponseSchema::path);
+        self.record_progress(progress_id, schema_start_phase(schema_label), None);
         let (program, args) = command_parts(&self.config.command)?;
         let last_message_path = codex_last_message_path();
         tracing::info!(
@@ -152,6 +174,8 @@ impl CodexClient {
             &self.config.command,
             schema_label,
             session_key.as_deref().unwrap_or("ephemeral"),
+            self.progress.clone(),
+            progress_id.map(str::to_string),
             run_codex_exec(
                 program,
                 &args,
@@ -164,6 +188,8 @@ impl CodexClient {
                 &self.config.command,
                 schema_label,
                 session_key.as_deref().unwrap_or("ephemeral"),
+                self.progress.clone(),
+                progress_id.map(str::to_string),
             ),
         )
         .await?;
@@ -211,7 +237,15 @@ impl CodexClient {
             elapsed_ms,
             "finished codex cli request"
         );
+        self.record_progress(progress_id, schema_finish_phase(schema_label), None);
         Ok(Some(answer.to_string()))
+    }
+
+    fn record_progress(&self, progress_id: Option<&str>, phase: &str, detail: Option<String>) {
+        let (Some(progress), Some(progress_id)) = (self.progress.as_ref(), progress_id) else {
+            return;
+        };
+        progress.record(progress_id, phase, detail);
     }
 }
 
@@ -280,6 +314,8 @@ async fn run_codex_exec_with_progress(
     command: &str,
     schema_label: &str,
     session_key: &str,
+    progress: Option<ProgressStore>,
+    progress_id: Option<String>,
     exec: impl std::future::Future<Output = std::io::Result<std::process::Output>>,
 ) -> Result<std::process::Output, Box<dyn std::error::Error + Send + Sync>> {
     let timeout_duration = Duration::from_secs(timeout_seconds);
@@ -306,6 +342,13 @@ async fn run_codex_exec_with_progress(
                     remaining_seconds,
                     "codex cli request still running"
                 );
+                if let (Some(progress), Some(progress_id)) = (progress.as_ref(), progress_id.as_deref()) {
+                    progress.record(
+                        progress_id,
+                        "Codex 仍在处理，本次请求还没有返回",
+                        Some(format!("已用 {elapsed_seconds}s，剩余超时 {remaining_seconds}s")),
+                    );
+                }
                 next_progress.as_mut().reset(
                     TokioInstant::now() + Duration::from_secs(CODEX_PROGRESS_INTERVAL_SECONDS)
                 );
@@ -340,6 +383,8 @@ async fn run_codex_exec(
     command_for_log: &str,
     schema_label: &str,
     session_key: &str,
+    progress: Option<ProgressStore>,
+    progress_id: Option<String>,
 ) -> std::io::Result<Output> {
     let mut command = Command::new(program);
     if let Some(runtime_home) = runtime_home {
@@ -380,6 +425,8 @@ async fn run_codex_exec(
         command: command_for_log.to_string(),
         schema_label: schema_label.to_string(),
         session_key: session_key.to_string(),
+        progress,
+        progress_id,
     };
     let stdout_task =
         tokio::spawn(async move { collect_stdout_with_progress(stdout, stdout_context).await });
@@ -404,6 +451,8 @@ struct CodexEventLogContext {
     command: String,
     schema_label: String,
     session_key: String,
+    progress: Option<ProgressStore>,
+    progress_id: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -471,6 +520,31 @@ fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
         detail = event.detail.as_deref().unwrap_or(""),
         "codex cli progress event"
     );
+    if let (Some(progress), Some(progress_id)) =
+        (context.progress.as_ref(), context.progress_id.as_deref())
+    {
+        progress.record(progress_id, event.phase, event.detail.clone());
+    }
+}
+
+fn schema_start_phase(schema_label: &str) -> &'static str {
+    match schema_label {
+        "intent" => "Codex 正在判断这是建造、动作、改造还是普通聊天",
+        "blueprint" => "Codex 正在生成 Minecraft 蓝图和方块清单",
+        "action_plan" => "Codex 正在把需求转换成可执行动作",
+        "existing_edit_plan" => "Codex 正在根据现场扫描规划建筑改造",
+        _ => "Codex 正在处理请求",
+    }
+}
+
+fn schema_finish_phase(schema_label: &str) -> &'static str {
+    match schema_label {
+        "intent" => "Codex 已完成需求类型判断",
+        "blueprint" => "Codex 已返回蓝图规划结果",
+        "action_plan" => "Codex 已返回动作规划结果",
+        "existing_edit_plan" => "Codex 已返回建筑改造方案",
+        _ => "Codex 已完成本阶段处理",
+    }
 }
 
 fn codex_progress_event(value: &Value) -> Option<CodexProgressEvent> {

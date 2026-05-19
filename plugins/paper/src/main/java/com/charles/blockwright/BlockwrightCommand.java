@@ -44,7 +44,20 @@ public final class BlockwrightCommand implements CommandExecutor {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 JsonModels.MinecraftMessageResponse response =
-                        controllerClient.sendMinecraftMessage(player, text);
+                        controllerClient.sendMinecraftMessage(
+                                player,
+                                text,
+                                progress -> {
+                                    if (progress != null
+                                            && progress.message != null
+                                            && !progress.message.isBlank()) {
+                                        plugin.getLogger().info(String.format(
+                                                "Blockwright Codex progress [direct:%s #%d]: %s",
+                                                player.getName(),
+                                                progress.sequence,
+                                                progress.message));
+                                    }
+                                });
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     player.sendMessage(response.reply);
                     Location origin = player.getLocation();

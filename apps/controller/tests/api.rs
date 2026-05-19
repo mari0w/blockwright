@@ -151,11 +151,11 @@ case "$schema" in
   *intent.schema.json)
     if grep -q "窗户换成蓝色玻璃" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
-{"intent":"existing_build_edit","reply":"按现有建筑改造处理。","summary":"改造现有建筑"}
+{"intent":"existing_build_edit","reply":"我会基于当前建筑把窗户改成蓝色玻璃，并按你的整体要求继续优化。","summary":"改造窗户颜色"}
 JSON
     elif grep -q "摩天轮整体放大" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
-{"intent":"existing_build_edit","reply":"按现有建筑整体重做。","summary":"重做放大现有摩天轮"}
+{"intent":"existing_build_edit","reply":"我会把当前摩天轮整体放大重做成更逼真的版本。","summary":"重做放大现有摩天轮"}
 JSON
     elif grep -q "给我一把钻石剑" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
@@ -345,6 +345,145 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
 }
 
 #[tokio::test]
+async fn web_existing_edit_queues_minecraft_scan_instead_of_manual_bw_hint() {
+    let app = test_app_with_fake_codex(true, "api-web-existing-edit").await;
+
+    let message_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "把我面前这个建筑的窗户换成蓝色玻璃",
+                "images": [
+                    {
+                        "file_name": "window.png",
+                        "mime_type": "image/png",
+                        "data_url": "data:image/png;base64,iVBORw0KGgo="
+                    }
+                ]
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let body = response_json(message_response).await;
+
+    assert!(body["queued_job_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("hm-job-"));
+    assert_eq!(body["queued_summary"], "改造窗户颜色");
+    assert!(body["reply"].as_str().unwrap().contains("蓝色玻璃"));
+    assert!(!body["reply"].as_str().unwrap().contains("扫描"));
+    assert!(!body["reply"].as_str().unwrap().contains("/bw"));
+    assert!(!body["reply"].as_str().unwrap().contains("重新执行"));
+
+    let next_response = app
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let next_body = response_json(next_response).await;
+    assert_eq!(
+        next_body["job"]["actions"][0]["type"],
+        "scan_nearby_and_plan"
+    );
+    assert_eq!(
+        next_body["job"]["actions"][0]["attachments"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(next_body["job"]["actions"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("用户上传了参考图片"));
+}
+
+#[tokio::test]
+async fn web_existing_edit_followups_merge_pending_scan_job() {
+    let app = test_app_with_fake_codex(true, "api-web-existing-edit-merge").await;
+
+    let first_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "把我面前这个建筑的窗户换成蓝色玻璃",
+                "images": []
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    let first_body = response_json(first_response).await;
+    let first_job_id = first_body["queued_job_id"].as_str().unwrap().to_string();
+
+    let second_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "把我面前这个建筑的窗户换成蓝色玻璃，还要更大更复杂",
+                "images": []
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    let second_body = response_json(second_response).await;
+
+    assert_eq!(
+        second_body["queued_job_id"].as_str().unwrap(),
+        first_job_id.as_str()
+    );
+    let next_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let next_body = response_json(next_response).await;
+    let action_text = next_body["job"]["actions"][0]["text"].as_str().unwrap();
+    assert!(action_text.contains("窗户换成蓝色玻璃"));
+    assert!(action_text.contains("更大更复杂"));
+
+    let empty_response = app
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let empty_body = response_json(empty_response).await;
+    assert!(empty_body["job"].is_null());
+}
+
+#[tokio::test]
 async fn api_routes_require_shared_token() {
     let app = test_app(true).await;
 
@@ -495,6 +634,116 @@ async fn build_job_result_updates_persisted_build_record() {
         build_body["result"]["actions"][0]["verified_count"],
         expected_count
     );
+}
+
+#[tokio::test]
+async fn web_job_status_reports_queue_claim_and_result() {
+    let app = test_app_with_fake_codex(true, "api-web-job-status").await;
+    let message_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "帮我盖一个木屋",
+                "images": []
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    let message_body = response_json(message_response).await;
+    let job_id = message_body["queued_job_id"].as_str().unwrap();
+
+    let queued_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let queued_body = response_json(queued_response).await;
+    assert_eq!(queued_body["phase"], "queued");
+    assert!(queued_body["message"].as_str().unwrap().contains("队列"));
+
+    let next_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let next_body = response_json(next_response).await;
+    let expected_count = next_body["job"]["actions"][0]["blocks"]
+        .as_array()
+        .unwrap()
+        .len();
+
+    let running_response = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let running_body = response_json(running_response).await;
+    assert_eq!(running_body["phase"], "running");
+    assert!(running_body["message"].as_str().unwrap().contains("已领取"));
+
+    let result_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(json!({
+                "ok": true,
+                "message": "ok",
+                "report": {
+                    "actions": [
+                        {
+                            "action_type": "place_blocks",
+                            "blueprint_id": "oak-house-small",
+                            "expected_count": expected_count,
+                            "placed_count": expected_count,
+                            "skipped_existing_count": 0,
+                            "skipped_limit_count": 0,
+                            "verified_count": expected_count,
+                            "mismatch_count": 0,
+                            "mismatches": []
+                        }
+                    ]
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(result_response.status(), StatusCode::OK);
+
+    let succeeded_response = app
+        .oneshot(request(
+            "GET",
+            &format!("/web/jobs/{job_id}/status"),
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+    let succeeded_body = response_json(succeeded_response).await;
+    assert_eq!(succeeded_body["phase"], "succeeded");
+    assert_eq!(succeeded_body["build_status"], "succeeded");
 }
 
 #[tokio::test]
@@ -905,6 +1154,46 @@ async fn minecraft_message_returns_actions_without_queueing_a_job() {
         "minecraft:diamond_sword"
     );
     assert!(next_body["job"].is_null());
+}
+
+#[tokio::test]
+async fn minecraft_progress_endpoint_reports_codex_phase_for_request() {
+    let app = test_app_with_fake_codex(true, "api-minecraft-progress").await;
+    let message_response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/api/minecraft/message",
+            Some(json!({
+                "server_id": "local-paper",
+                "player": "Steve",
+                "text": "给我一把钻石剑",
+                "progress_id": "test-progress-1"
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(message_response.status(), StatusCode::OK);
+
+    let progress_response = app
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/progress/test-progress-1",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(progress_response.status(), StatusCode::OK);
+    let progress_body = response_json(progress_response).await;
+
+    assert!(progress_body["sequence"].as_u64().unwrap() >= 1);
+    assert_eq!(progress_body["done"], true);
+    assert!(progress_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("controller"));
 }
 
 #[tokio::test]

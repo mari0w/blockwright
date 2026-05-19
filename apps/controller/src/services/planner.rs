@@ -19,6 +19,7 @@ pub struct PlannerInput {
     pub position: Option<PlayerPosition>,
     pub nearby_scan: Option<WorldScan>,
     pub attachments: Vec<ChatAttachment>,
+    pub progress_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -105,10 +106,11 @@ impl Planner {
         );
         let prompt = build_intent_prompt(input);
         let output = match codex
-            .ask_with_schema(
+            .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::Intent,
                 input.codex_session_key.as_deref(),
+                input.progress_id.as_deref(),
             )
             .await
         {
@@ -210,13 +212,29 @@ impl Planner {
                     }],
                 }
             }
-            PlannerIntentKind::ExistingBuildEdit => PlanResult {
-                reply: "这个请求被 Codex 识别为改造现有建筑，需要 Minecraft 端带附近扫描并匹配已保存构建记录。请站到目标建筑前面重新执行同一句 `/bw ...`。".to_string(),
-                summary: "需要建筑改造入口".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: "请站到目标建筑前面重新发送，这类改造要先匹配附近已记录建筑。".to_string(),
-                }],
-            },
+            PlannerIntentKind::ExistingBuildEdit => {
+                if input.nearby_scan.is_none() {
+                    let reply = existing_edit_scan_queued_reply(Some(&intent.reply));
+                    let summary = normalized_summary(&intent.summary, "改造现有建筑");
+                    let attachments = input.attachments;
+                    let text = scan_text_with_attachment_hint(input.text, &attachments);
+                    PlanResult {
+                        reply,
+                        summary,
+                        actions: vec![GameAction::ScanNearbyAndPlan { text, attachments }],
+                    }
+                } else {
+                    PlanResult {
+                        reply: "已经拿到现场扫描，但这个入口缺少可用的建筑记录，暂时没有下发改造。"
+                            .to_string(),
+                        summary: "缺少建筑匹配记录".to_string(),
+                        actions: vec![GameAction::Chat {
+                            message: "已经收到附近扫描，但缺少已匹配建筑记录，无法直接改造。"
+                                .to_string(),
+                        }],
+                    }
+                }
+            }
             PlannerIntentKind::Chat => PlanResult {
                 reply: intent.reply.clone(),
                 summary: intent.summary,
@@ -257,10 +275,11 @@ impl Planner {
 
         let prompt = build_blueprint_prompt(input);
         let output = match codex
-            .ask_with_schema(
+            .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::Blueprint,
                 input.codex_session_key.as_deref(),
+                input.progress_id.as_deref(),
             )
             .await
         {
@@ -379,10 +398,11 @@ impl Planner {
         );
         let prompt = build_existing_edit_prompt(input, existing);
         let output = match codex
-            .ask_with_schema(
+            .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::ExistingEditPlan,
                 input.codex_session_key.as_deref(),
+                input.progress_id.as_deref(),
             )
             .await
         {
@@ -437,10 +457,11 @@ impl Planner {
         tracing::info!("starting codex action planner");
         let prompt = build_action_plan_prompt(input);
         let output = match codex
-            .ask_with_schema(
+            .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::ActionPlan,
                 input.codex_session_key.as_deref(),
+                input.progress_id.as_deref(),
             )
             .await
         {
@@ -506,6 +527,54 @@ fn rephrase_hints_for_build() -> &'static str {
 
 fn rephrase_hints_for_common_actions() -> &'static str {
     "建议改成明确动作，例如“给我一把钻石剑”“把时间调到白天”“把天气改成晴天”。"
+}
+
+pub(crate) fn existing_edit_scan_queued_reply(reply: Option<&str>) -> String {
+    let fallback = "收到，我会按你这次的要求基于当前目标建筑继续改造。";
+    let Some(reply) = reply.map(str::trim).filter(|reply| !reply.is_empty()) else {
+        return fallback.to_string();
+    };
+
+    if is_mechanical_existing_edit_reply(reply) {
+        fallback.to_string()
+    } else {
+        reply.to_string()
+    }
+}
+
+fn is_mechanical_existing_edit_reply(reply: &str) -> bool {
+    [
+        "扫描",
+        "Minecraft 端",
+        "/bw",
+        "重新执行",
+        "请站",
+        "站到",
+        "先确认",
+        "请确认",
+        "哪个部位",
+        "请指定",
+        "请补充",
+    ]
+    .iter()
+    .any(|needle| reply.contains(needle))
+}
+
+fn normalized_summary(summary: &str, fallback: &str) -> String {
+    let summary = summary.trim();
+    if summary.is_empty() {
+        fallback.to_string()
+    } else {
+        summary.to_string()
+    }
+}
+
+fn scan_text_with_attachment_hint(text: String, attachments: &[ChatAttachment]) -> String {
+    if attachments.is_empty() || text.contains("用户上传了参考图片") {
+        return text;
+    }
+
+    format!("{text}\n\n用户上传了参考图片，现场扫描后继续结合这次的文字和图片需求处理。")
 }
 
 struct BlueprintBounds {
@@ -1363,7 +1432,9 @@ fn build_intent_prompt(input: &PlannerInput) -> String {
 - intent=chat：普通聊天、说明、无法判断、拒绝执行或缺少关键信息。
 - 如果在 blueprint 和 action 之间犹豫，只要结果会放置方块或生成实物，就选 blueprint。
 - 如果在 blueprint 和 existing_build_edit 之间犹豫：新做一个选 blueprint；改已有目标选 existing_build_edit。
-- reply 是给玩家看的简短中文说明；summary 是日志和任务列表用的中文短摘要。
+- 玩家已经说清楚“改造/优化/放大/重做/按图调整/继续优化”等方向时，不要追问必须改哪个小部位；existing_build_edit 可以是整栋重做、整体放大或自由优化。
+- controller 会自动处理现场扫描、最近建筑匹配和后续执行；reply 不要让玩家重新执行 `/bw`，不要要求玩家手动扫描、保存、登记、确认建筑或指定小部位。
+- reply 是给玩家看的简短中文说明，要自然说明你理解的设计方向；summary 是日志和任务列表用的中文短摘要。
 
 玩家名：
 {player}
@@ -1398,7 +1469,7 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 - 方块材质必须使用 Minecraft 命名空间 ID，例如 minecraft:oak_planks。
 - 需要表达方块状态时可以写在 material 里，例如 minecraft:oak_leaves[persistent=true]、minecraft:oak_door[half=lower,facing=south]。
 - 先生成蓝图，再由执行端按同一份 blocks 放置；不要输出命令步骤、背包操作或玩家右键操作。
-- 第一阶段蓝图规模控制在 500 个方块以内，优先用常见原版方块。
+- 常规蓝图优先控制在 300-1200 个方块；玩家明确要求“大、复杂、逼真、按图复刻、继续优化”时可以到 2000 个方块，不要因为超过 500 个方块就降级成很小的模型。
 - materials 必须和 blocks 统计一致。
 - 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
 - 蓝图最低的普通地板/地基层默认从相对 y=0 开始；不要把世界绝对高度写进 blocks，也不要无故使用负 y。
@@ -1438,6 +1509,8 @@ fn build_blueprint_prompt(input: &PlannerInput) -> String {
 fn build_existing_edit_prompt(input: &PlannerInput, existing: &BuildRecord) -> String {
     let site_context = build_site_context(input);
     let existing_context = build_existing_record_context(existing);
+    let attachments =
+        serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
     format!(
         r#"你是 Blockwright 的 Minecraft 现有建筑自由改造规划器。玩家已经站在目标建筑前，controller 已经按附近扫描和空间位置匹配到了当前要改的整栋建筑。请直接输出可执行改造计划 JSON。
 
@@ -1452,7 +1525,7 @@ fn build_existing_edit_prompt(input: &PlannerInput, existing: &BuildRecord) -> S
 - 整体放大、重做、变逼真、换主题、移动、升降、旋转、整体结构变化，使用 mode=replace。replace 时 actions 只输出新的最终建筑；controller 会先清掉旧建筑。
 - 如果是“移动/升降/换位置”这类整体调整，mode=replace，并把新 actions 的 origin 改到目标位置，不要把 origin 仍然放在旧位置。
 - 如果是“放大/重做/逼真/升级/更真实/更大气”，mode=replace，输出完整的新最终结构，不要只输出几个装饰方块。
-- 第一阶段单次 actions 总方块量控制在 700 个以内，优先用常见原版方块。
+- 常规改造优先控制在 300-1200 个方块；玩家明确要求整体放大、重做、逼真、复杂、按图复刻时可以到 2000 个方块，不要只输出几个象征性装饰方块。
 - 对摩天轮、旋转木马、桥、塔、雕塑等模型，要有可辨认的整体轮廓、支撑结构、中心轴、座舱/装饰和地基。
 - reply 用中文说明会怎么改，summary 用中文短摘要。
 
@@ -1464,10 +1537,14 @@ fn build_existing_edit_prompt(input: &PlannerInput, existing: &BuildRecord) -> S
 
 场地摘要：
 {site_context}
+
+附件元数据：
+{attachments}
 "#,
         text = input.text.trim(),
         existing_context = existing_context,
-        site_context = site_context
+        site_context = site_context,
+        attachments = attachments
     )
 }
 
@@ -1486,7 +1563,7 @@ fn build_existing_record_context(existing: &BuildRecord) -> String {
             )
         })
         .unwrap_or_else(|| "bounds=未知".to_string());
-    let actions_json = build_existing_actions_context(existing, 700);
+    let actions_json = build_existing_actions_context(existing, 2000);
     format!(
         "id={}，summary={}，action_count={}，recorded_blocks={}，{}，actions={}",
         existing.id, existing.summary, action_count, total_blocks, bounds, actions_json
@@ -1904,6 +1981,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -1942,6 +2020,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -1979,6 +2058,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2013,6 +2093,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2038,6 +2119,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2076,6 +2158,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2121,6 +2204,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2159,6 +2243,7 @@ esac
                     position: None,
                     nearby_scan: Some(scan_with_blocks(Vec::new())),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &test_build_record(),
             )
@@ -2217,6 +2302,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2267,6 +2353,7 @@ esac
                         scan_block(20, 64, 30, "minecraft:short_grass"),
                     ])),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2324,6 +2411,7 @@ esac
                         scan_block(20, 64, 30, "minecraft:oak_log"),
                     ])),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2390,6 +2478,7 @@ esac
                         scan_block(21, 63, 30, "minecraft:grass_block[snowy=false]"),
                     ])),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2467,6 +2556,7 @@ esac
                         "minecraft:water[level=0]",
                     )])),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2550,6 +2640,7 @@ esac
                     position: Some(player_position.clone()),
                     nearby_scan: Some(scan_with_blocks(blocks)),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2643,6 +2734,7 @@ esac
                         blocks: flat_ground_blocks(56, 72, -2, 16),
                     }),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2697,6 +2789,7 @@ esac
                     }),
                     nearby_scan: Some(scan_with_blocks(blocks)),
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2726,6 +2819,7 @@ esac
                     position: None,
                     nearby_scan: None,
                     attachments: Vec::new(),
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2767,6 +2861,7 @@ esac
                         file_name: Some("house.png".to_string()),
                         mime_type: Some("image/png".to_string()),
                     }],
+                    progress_id: None,
                 },
                 &store,
             )
@@ -2784,6 +2879,7 @@ esac
             position: None,
             nearby_scan: None,
             attachments: Vec::new(),
+            progress_id: None,
         });
 
         assert!(prompt.contains("只输出一个 JSON 对象"));
@@ -2809,6 +2905,7 @@ esac
             position: None,
             nearby_scan: None,
             attachments: Vec::new(),
+            progress_id: None,
         });
 
         assert!(prompt.contains("意图分类器"));
@@ -2827,6 +2924,7 @@ esac
             position: None,
             nearby_scan: None,
             attachments: Vec::new(),
+            progress_id: None,
         });
 
         assert!(prompt.contains("不能只因为文本包含“钻石”"));

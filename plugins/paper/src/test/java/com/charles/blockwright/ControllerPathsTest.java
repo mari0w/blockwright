@@ -16,6 +16,9 @@ final class ControllerPathsTest {
     void buildsControllerApiPathsWithEncodedIds() {
         assertEquals("/api/minecraft/message", ControllerPaths.minecraftMessagePath());
         assertEquals(
+                "/api/minecraft/progress/req-1%2Fbad",
+                ControllerPaths.minecraftProgressPath("req-1/bad"));
+        assertEquals(
                 "/api/minecraft/jobs/next?server_id=local-paper",
                 ControllerPaths.nextJobPath("local-paper"));
         assertEquals(

@@ -9,9 +9,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::types::{GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan},
+    domain::types::{
+        ChatAttachment, GameAction, GameJob, JobResultRequest, PlayerPosition, WorldScan,
+    },
     services::build_store::BuildMatch,
-    services::planner::{PlannerInput, PlannerIntentKind},
+    services::planner::{
+        existing_edit_scan_queued_reply, PlannerInput, PlannerIntent, PlannerIntentKind,
+    },
     state::AppState,
 };
 
@@ -23,6 +27,10 @@ pub struct MinecraftMessageRequest {
     pub position: Option<PlayerPosition>,
     #[serde(default)]
     pub nearby_scan: Option<WorldScan>,
+    #[serde(default)]
+    pub attachments: Vec<ChatAttachment>,
+    #[serde(default)]
+    pub progress_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +59,7 @@ pub struct JobResultResponse {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/minecraft/message", post(handle_message))
+        .route("/minecraft/progress/{progress_id}", get(progress))
         .route("/minecraft/jobs/next", get(next_job))
         .route("/minecraft/jobs/{job_id}/result", post(job_result))
 }
@@ -66,6 +75,13 @@ async fn handle_message(
         has_nearby_scan = request.nearby_scan.is_some(),
         "received minecraft message"
     );
+    if let Some(progress_id) = request.progress_id.as_deref() {
+        state.progress.start(
+            progress_id,
+            "controller 已收到 Minecraft 请求，准备交给 Codex",
+            None,
+        );
+    }
 
     let planner_input = PlannerInput {
         text: request.text.clone(),
@@ -73,7 +89,8 @@ async fn handle_message(
         codex_session_key: Some(format!("minecraft:{}", request.player)),
         position: request.position.clone(),
         nearby_scan: request.nearby_scan.clone(),
-        attachments: Vec::new(),
+        attachments: request.attachments.clone(),
+        progress_id: request.progress_id.clone(),
     };
     let intent = state.planner.classify_intent(&planner_input).await;
 
@@ -81,8 +98,19 @@ async fn handle_message(
         intent.as_ref().map(|item| item.intent),
         Some(PlannerIntentKind::ExistingBuildEdit)
     ) {
-        if let Some(response) = handle_existing_build_modification(&state, &request).await {
-            return response.map(Json);
+        if let Some(response) =
+            handle_existing_build_modification(&state, &request, intent.as_ref()).await
+        {
+            return response.map(|body| {
+                if let Some(progress_id) = request.progress_id.as_deref() {
+                    state.progress.finish(
+                        progress_id,
+                        "controller 已生成回复，准备返回 Minecraft",
+                        None,
+                    );
+                }
+                Json(body)
+            });
         }
     }
 
@@ -122,11 +150,30 @@ async fn handle_message(
         "planned minecraft message"
     );
 
+    if let Some(progress_id) = request.progress_id.as_deref() {
+        state.progress.finish(
+            progress_id,
+            "controller 已生成回复，准备返回 Minecraft",
+            None,
+        );
+    }
+
     Ok(Json(MinecraftMessageResponse {
         reply: plan.reply,
         actions: plan.actions,
         job_id,
     }))
+}
+
+async fn progress(
+    State(state): State<AppState>,
+    Path(progress_id): Path<String>,
+) -> Result<Json<crate::services::progress::ProgressSnapshot>, StatusCode> {
+    state
+        .progress
+        .get(&progress_id)
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn next_job(
@@ -160,6 +207,10 @@ async fn job_result(
     if updated.is_none() {
         tracing::debug!(job_id = %job_id, "minecraft job result has no matching build record");
     }
+    state
+        .jobs
+        .mark_result(&job_id, request.ok, request.message.clone())
+        .await;
 
     Ok(Json(JobResultResponse { ok: true }))
 }
@@ -173,13 +224,14 @@ fn has_build_action(actions: &[GameAction]) -> bool {
 async fn handle_existing_build_modification(
     state: &AppState,
     request: &MinecraftMessageRequest,
+    intent: Option<&PlannerIntent>,
 ) -> Option<Result<MinecraftMessageResponse, (StatusCode, String)>> {
     let Some(scan) = request.nearby_scan.as_ref() else {
         return Some(Ok(MinecraftMessageResponse {
-            reply: "这次没有收到附近建筑扫描，已让 HMCL/Fabric 现场扫描你当前位置并自动继续处理。"
-                .to_string(),
+            reply: existing_edit_scan_queued_reply(intent.map(|item| item.reply.as_str())),
             actions: vec![GameAction::ScanNearbyAndPlan {
                 text: request.text.clone(),
+                attachments: request.attachments.clone(),
             }],
             job_id: None,
         }));
@@ -262,7 +314,8 @@ async fn plan_existing_build_edit(
         codex_session_key: Some(format!("minecraft:{}", request.player)),
         position: request.position.clone(),
         nearby_scan: request.nearby_scan.clone(),
-        attachments: Vec::new(),
+        attachments: request.attachments.clone(),
+        progress_id: request.progress_id.clone(),
     };
 
     let Some(plan) = state
@@ -361,13 +414,13 @@ fn is_ambiguous_match(
     let Some(second) = second else {
         return false;
     };
-    if has_player_direction
-        && best.in_front
-        && (!second.in_front
-            || best.lateral_distance + 2.0 < second.lateral_distance
-            || best.distance + 4.0 < second.distance)
-    {
-        return false;
+    if has_player_direction {
+        if best.in_front {
+            return false;
+        }
+        if best.distance + 3.0 < second.distance {
+            return false;
+        }
     }
 
     second.total_matched_blocks + 2 >= best.total_matched_blocks && second.score >= best.score * 0.8

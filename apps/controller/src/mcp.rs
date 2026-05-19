@@ -243,6 +243,7 @@ async fn assistant_message(state: &AppState, arguments: Value) -> Result<Value, 
                 position,
                 nearby_scan,
                 attachments,
+                progress_id: None,
             },
             &state.blueprints,
         )

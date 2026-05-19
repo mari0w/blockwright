@@ -68,6 +68,7 @@ pub(crate) async fn queue_chat_message(
                 position: message.position,
                 nearby_scan: None,
                 attachments: message.attachments,
+                progress_id: None,
             },
             &state.blueprints,
         )
@@ -76,11 +77,32 @@ pub(crate) async fn queue_chat_message(
     let server_id = message
         .server_id
         .unwrap_or_else(|| state.config.minecraft.default_server_id.clone());
+    let has_build = has_build_action(&plan.actions);
     let queued_job = if plan.actions.is_empty() {
         None
+    } else if !has_build && has_scan_action(&plan.actions) {
+        if let Some(job) = state
+            .jobs
+            .merge_pending_scan_job(
+                &server_id,
+                target_player.as_deref(),
+                plan.summary.clone(),
+                &plan.actions,
+            )
+            .await
+        {
+            Some(job)
+        } else {
+            Some(
+                state
+                    .jobs
+                    .enqueue(server_id, target_player, plan.summary.clone(), plan.actions)
+                    .await,
+            )
+        }
     } else {
         let job_id = state.jobs.reserve_job_id();
-        if has_build_action(&plan.actions) {
+        if has_build {
             if let Err(error) = state
                 .builds
                 .register_planned(
@@ -132,4 +154,13 @@ fn has_build_action(actions: &[crate::domain::types::GameAction]) -> bool {
     actions
         .iter()
         .any(|action| matches!(action, crate::domain::types::GameAction::PlaceBlocks { .. }))
+}
+
+fn has_scan_action(actions: &[crate::domain::types::GameAction]) -> bool {
+    actions.iter().any(|action| {
+        matches!(
+            action,
+            crate::domain::types::GameAction::ScanNearbyAndPlan { .. }
+        )
+    })
 }

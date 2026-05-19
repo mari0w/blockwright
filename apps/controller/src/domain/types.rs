@@ -129,6 +129,8 @@ pub enum GameAction {
     },
     ScanNearbyAndPlan {
         text: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<ChatAttachment>,
     },
 }
 

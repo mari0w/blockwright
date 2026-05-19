@@ -5,7 +5,7 @@ use crate::{
     integrations::{codex::CodexClient, codex_home::prepare_project_codex_home},
     services::{
         blueprint_store::BlueprintStore, build_store::BuildStore, job_queue::JobQueue,
-        planner::Planner,
+        planner::Planner, progress::ProgressStore,
     },
 };
 
@@ -15,6 +15,7 @@ pub struct AppState {
     pub blueprints: BlueprintStore,
     pub builds: BuildStore,
     pub jobs: JobQueue,
+    pub progress: ProgressStore,
     pub planner: Planner,
     pub codex: CodexClient,
     pub chat: ChatRuntimeConfig,
@@ -34,11 +35,13 @@ impl AppState {
         } else {
             None
         };
+        let progress = ProgressStore::default();
         let codex = CodexClient::with_session_path_and_home(
             config.codex.clone(),
             config.storage.data_dir.join("codex_sessions.json"),
             codex_home,
-        );
+        )
+        .with_progress(progress.clone());
 
         Ok(Self {
             codex: codex.clone(),
@@ -46,6 +49,7 @@ impl AppState {
             blueprints,
             builds,
             jobs: JobQueue::default(),
+            progress,
             planner: Planner::new(codex),
             chat,
         })
