@@ -114,6 +114,8 @@ struct BuildRecordContext {
     target_player: Option<String>,
     summary: String,
     status: String,
+    nearest_action_origin: Option<BlockOrigin>,
+    distance_to_target_blocks: Option<f64>,
     actions: Vec<BuildActionContext>,
 }
 
@@ -131,8 +133,22 @@ struct PlanProtocolContext {
     output_contract: &'static str,
     controller_role: &'static str,
     safety_boundary: &'static str,
+    targeting_policy: &'static str,
     available_skills: [&'static str; 6],
     available_actions: [&'static str; 5],
+}
+
+#[derive(Clone)]
+struct TargetPoint {
+    world: Option<String>,
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+struct BuildContextCandidate {
+    context: BuildRecordContext,
+    recency_index: usize,
 }
 
 #[derive(Clone, Default)]
@@ -1278,11 +1294,12 @@ async fn build_context_bundle(
         position: input.position.clone(),
         site: build_site_context(input),
         available_blueprints: blueprint_contexts(blueprints).await,
-        recent_builds: build_contexts(builds, input.player.as_deref()).await,
+        recent_builds: build_contexts(builds, input.player.as_deref(), target_point(input)).await,
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
             controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。",
             safety_boundary: "执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
+            targeting_policy: "建筑或改造需求先看离玩家位置最近的候选；没有玩家位置时看扫描中心最近候选。最近候选不确定、多个候选都合理或目标部位不明确时，只回复确认问题，不输出 Minecraft 动作。",
             available_skills: [
                 "blockwright-build-planning",
                 "blockwright-site-selection",
@@ -1324,39 +1341,124 @@ async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext
 async fn build_contexts(
     builds: Option<&BuildStore>,
     player: Option<&str>,
+    target: Option<TargetPoint>,
 ) -> Vec<BuildRecordContext> {
     let Some(builds) = builds else {
         return Vec::new();
     };
     let mut records = builds.list().await;
     records.reverse();
-    records
+    let mut candidates = records
         .into_iter()
+        .enumerate()
         .filter(|record| {
+            let record = &record.1;
             player.is_none()
                 || record.target_player.as_deref().is_none()
                 || record.target_player.as_deref() == player
         })
-        .take(CONTEXT_BUILD_LIMIT)
-        .map(|record| BuildRecordContext {
-            id: record.id,
-            server_id: record.server_id,
-            target_player: record.target_player,
-            summary: record.summary,
-            status: format!("{:?}", record.status).to_lowercase(),
-            actions: record
-                .expected_actions
-                .into_iter()
-                .map(|action| BuildActionContext {
-                    blueprint_id: action.blueprint_id,
-                    origin: action.origin,
-                    expected_count: action.expected_count,
-                    materials: action.materials,
-                    blocks: action.blocks,
-                })
-                .collect(),
+        .map(|(recency_index, record)| {
+            let (nearest_action_origin, distance_to_target_blocks) =
+                nearest_action_origin(&record.expected_actions, target.as_ref());
+            BuildContextCandidate {
+                context: BuildRecordContext {
+                    id: record.id,
+                    server_id: record.server_id,
+                    target_player: record.target_player,
+                    summary: record.summary,
+                    status: format!("{:?}", record.status).to_lowercase(),
+                    nearest_action_origin,
+                    distance_to_target_blocks: distance_to_target_blocks.map(round_distance),
+                    actions: record
+                        .expected_actions
+                        .into_iter()
+                        .map(|action| BuildActionContext {
+                            blueprint_id: action.blueprint_id,
+                            origin: action.origin,
+                            expected_count: action.expected_count,
+                            materials: action.materials,
+                            blocks: action.blocks,
+                        })
+                        .collect(),
+                },
+                recency_index,
+            }
         })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        match (
+            left.context.distance_to_target_blocks,
+            right.context.distance_to_target_blocks,
+        ) {
+            (Some(left_distance), Some(right_distance)) => left_distance
+                .total_cmp(&right_distance)
+                .then_with(|| left.recency_index.cmp(&right.recency_index)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left.recency_index.cmp(&right.recency_index),
+        }
+    });
+    candidates
+        .into_iter()
+        .take(CONTEXT_BUILD_LIMIT)
+        .map(|candidate| candidate.context)
         .collect()
+}
+
+fn target_point(input: &PlannerInput) -> Option<TargetPoint> {
+    if let Some(position) = input.position.as_ref() {
+        return Some(TargetPoint {
+            world: Some(position.world.clone()),
+            x: position.x,
+            y: position.y,
+            z: position.z,
+        });
+    }
+    input.nearby_scan.as_ref().map(|scan| TargetPoint {
+        world: Some(scan.world.clone()),
+        x: scan.center_x as f64,
+        y: scan.center_y as f64,
+        z: scan.center_z as f64,
+    })
+}
+
+fn nearest_action_origin(
+    actions: &[crate::domain::types::ExpectedBuildAction],
+    target: Option<&TargetPoint>,
+) -> (Option<BlockOrigin>, Option<f64>) {
+    let Some(target) = target else {
+        return (None, None);
+    };
+    actions
+        .iter()
+        .filter_map(|action| {
+            if let (Some(action_world), Some(target_world)) =
+                (action.origin.world.as_deref(), target.world.as_deref())
+            {
+                if action_world != target_world {
+                    return None;
+                }
+            }
+            Some((
+                action.origin.clone(),
+                distance_between_origin_and_target(&action.origin, target),
+            ))
+        })
+        .min_by(|left, right| left.1.total_cmp(&right.1))
+        .map_or((None, None), |(origin, distance)| {
+            (Some(origin), Some(distance))
+        })
+}
+
+fn distance_between_origin_and_target(origin: &BlockOrigin, target: &TargetPoint) -> f64 {
+    let dx = origin.x as f64 - target.x;
+    let dy = origin.y as f64 - target.y;
+    let dz = origin.z as f64 - target.z;
+    ((dx * dx) + (dy * dy) + (dz * dz)).sqrt()
+}
+
+fn round_distance(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
 }
 
 fn render_plan_prompt(context: &PlanContextBundle) -> String {
@@ -2722,6 +2824,7 @@ esac
         assert!(prompt.contains("可用 skills 自主决定"));
         assert!(prompt.contains("available_blueprints"));
         assert!(prompt.contains("recent_builds"));
+        assert!(prompt.contains("建筑或改造需求先看离玩家位置最近的候选"));
         assert!(prompt.contains("blockwright-site-selection"));
         assert!(prompt.contains("scan_nearby_and_plan"));
         assert!(prompt.contains("相对坐标"));
@@ -2741,7 +2844,7 @@ esac
         let builds = BuildStore::new(temp_dir("context-build-records"))
             .await
             .unwrap();
-        let planned_action = GameAction::PlaceBlocks {
+        let near_action = GameAction::PlaceBlocks {
             blueprint_id: Some("stored-cabin".to_string()),
             origin: BlockOrigin {
                 world: Some("minecraft:overworld".to_string()),
@@ -2757,13 +2860,39 @@ esac
             }],
             clear_existing: false,
         };
+        let far_action = GameAction::PlaceBlocks {
+            blueprint_id: Some("stored-cabin".to_string()),
+            origin: BlockOrigin {
+                world: Some("minecraft:overworld".to_string()),
+                x: 100,
+                y: 64,
+                z: 40,
+            },
+            blocks: vec![BlueprintBlock {
+                x: 0,
+                y: 0,
+                z: 0,
+                material: "minecraft:oak_planks".to_string(),
+            }],
+            clear_existing: false,
+        };
         builds
             .register_planned(
-                "job-context-1".to_string(),
+                "job-a-near".to_string(),
                 "local".to_string(),
                 Some("Steve".to_string()),
-                "测试建筑记录".to_string(),
-                &[planned_action],
+                "近处建筑记录".to_string(),
+                &[near_action],
+            )
+            .await
+            .unwrap();
+        builds
+            .register_planned(
+                "job-z-far".to_string(),
+                "local".to_string(),
+                Some("Steve".to_string()),
+                "远处建筑记录".to_string(),
+                &[far_action],
             )
             .await
             .unwrap();
@@ -2771,7 +2900,14 @@ esac
             text: "把刚才的小屋窗户改大一点".to_string(),
             player: Some("Steve".to_string()),
             codex_session_key: None,
-            position: None,
+            position: Some(PlayerPosition {
+                world: "minecraft:overworld".to_string(),
+                x: 31.0,
+                y: 64.0,
+                z: 40.0,
+                yaw: None,
+                pitch: None,
+            }),
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
@@ -2782,8 +2918,20 @@ esac
         assert_eq!(context.available_blueprints.len(), 1);
         assert_eq!(context.available_blueprints[0].id, "stored-cabin");
         assert_eq!(context.available_blueprints[0].blocks.len(), 1);
-        assert_eq!(context.recent_builds.len(), 1);
-        assert_eq!(context.recent_builds[0].id, "job-context-1");
+        assert_eq!(context.recent_builds.len(), 2);
+        assert_eq!(context.recent_builds[0].id, "job-a-near");
+        assert_eq!(context.recent_builds[1].id, "job-z-far");
+        assert_eq!(
+            context.recent_builds[0].distance_to_target_blocks,
+            Some(1.0)
+        );
+        assert_eq!(
+            context.recent_builds[0]
+                .nearest_action_origin
+                .as_ref()
+                .map(|origin| origin.x),
+            Some(30)
+        );
         assert_eq!(context.recent_builds[0].actions[0].blocks.len(), 1);
         assert_eq!(
             context.recent_builds[0].actions[0].origin.world.as_deref(),

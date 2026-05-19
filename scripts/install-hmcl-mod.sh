@@ -14,7 +14,7 @@ fi
 
 GAME_DIR="${1/#\~/$HOME}"
 MODS_DIR="$GAME_DIR/mods"
-JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-0.1.2.jar"
+JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-0.1.3.jar"
 
 echo "正在重新编译 Blockwright Fabric 模组..."
 ./scripts/build-hmcl-mod.sh
@@ -29,7 +29,7 @@ find "$MODS_DIR" -maxdepth 1 -type f -name 'blockwright-fabric-*.jar' -delete
 install -m 0644 "$JAR_PATH" "$MODS_DIR/"
 
 echo "已安装 Blockwright Fabric 模组到："
-echo "$MODS_DIR/blockwright-fabric-0.1.2.jar"
+echo "$MODS_DIR/blockwright-fabric-0.1.3.jar"
 
 if ! find "$MODS_DIR" -maxdepth 1 -type f -iname 'fabric-api*.jar' | grep -q .; then
   echo
