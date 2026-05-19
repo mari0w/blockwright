@@ -64,7 +64,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
     }
 
     private static int configHint(ServerCommandSource source) {
-        source.sendFeedback(() -> Text.literal("请在游戏客户端执行 /bwconfig 打开 Blockwright 内置配置界面。"), false);
+        source.sendFeedback(() -> Text.literal("Blockwright 配置已迁移到 Web 端，请打开 controller 的 /web 页面配置。"), false);
         return 1;
     }
 

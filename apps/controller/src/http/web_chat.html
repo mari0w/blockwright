@@ -371,6 +371,77 @@
     .status.error {
       color: var(--danger);
     }
+    .secondary-button {
+      border-color: var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+    }
+    aside > .secondary-button {
+      margin-top: 14px;
+    }
+    .secondary-button:hover,
+    .secondary-button:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+    }
+    .config-dialog {
+      width: min(560px, calc(100vw - 28px));
+      max-height: calc(100dvh - 28px);
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--side);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+    .config-dialog::backdrop {
+      background: rgba(0, 0, 0, .52);
+    }
+    .config-form {
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+    }
+    .config-form h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+    .config-form label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .config-checkbox {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      color: var(--text);
+    }
+    .config-checkbox input {
+      width: auto;
+      margin: 0;
+    }
+    .config-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .config-actions button {
+      width: auto;
+      min-width: 96px;
+    }
+    .config-status {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .config-status.error {
+      color: var(--danger);
+    }
     #send[hidden] {
       display: none;
     }
@@ -393,15 +464,12 @@
       }
       .settings-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
       }
       .setup-field {
         min-width: 0;
         margin: 0;
-      }
-      .setup-field.server-field {
-        grid-column: 1 / -1;
       }
       .setup-field span {
         margin-bottom: 4px;
@@ -488,11 +556,8 @@
           <span>Minecraft 用户名</span>
           <input id="username" autocomplete="username" placeholder="Charles">
         </label>
-        <label class="setup-field server-field" for="serverId">
-          <span>服务器</span>
-          <input id="serverId" placeholder="hmcl-lan">
-        </label>
       </div>
+      <button id="configOpen" class="secondary-button" type="button">Web 配置</button>
     </aside>
     <main>
       <section id="messages" class="messages" aria-live="polite"></section>
@@ -540,10 +605,60 @@
       </form>
     </main>
   </div>
+  <dialog id="configDialog" class="config-dialog">
+    <form id="configForm" class="config-form">
+      <h2>Web 配置</h2>
+      <label for="controllerToken">
+        <span>Controller Token</span>
+        <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
+      </label>
+      <label class="config-checkbox" for="matrixEnabled">
+        <input id="matrixEnabled" type="checkbox" checked>
+        <span>启用 Element/Matrix</span>
+      </label>
+      <label for="matrixHomeserver">
+        <span>Matrix 主服务器 URL</span>
+        <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
+      </label>
+      <label for="matrixAccessToken">
+        <span>Matrix Access Token</span>
+        <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token">
+      </label>
+      <label for="matrixAllowedSender">
+        <span>允许发指令的 Matrix 用户</span>
+        <input id="matrixAllowedSender" placeholder="@user:matrix.org">
+      </label>
+      <label class="config-checkbox" for="matrixAllowOwn">
+        <input id="matrixAllowOwn" type="checkbox" checked>
+        <span>个人 token 允许处理自己发出的消息</span>
+      </label>
+      <label class="config-checkbox" for="matrixAutoJoin">
+        <input id="matrixAutoJoin" type="checkbox" checked>
+        <span>自动加入邀请房间</span>
+      </label>
+      <div id="configStatus" class="config-status"></div>
+      <div class="config-actions">
+        <button id="configSave" type="submit">保存配置</button>
+        <button id="configClose" class="secondary-button" type="button">关闭</button>
+      </div>
+    </form>
+  </dialog>
   <script>
     const MAX_IMAGES = 4;
     const username = document.getElementById('username');
-    const serverId = document.getElementById('serverId');
+    const configOpen = document.getElementById('configOpen');
+    const configDialog = document.getElementById('configDialog');
+    const configForm = document.getElementById('configForm');
+    const configClose = document.getElementById('configClose');
+    const configStatus = document.getElementById('configStatus');
+    const configSave = document.getElementById('configSave');
+    const controllerToken = document.getElementById('controllerToken');
+    const matrixEnabled = document.getElementById('matrixEnabled');
+    const matrixHomeserver = document.getElementById('matrixHomeserver');
+    const matrixAccessToken = document.getElementById('matrixAccessToken');
+    const matrixAllowedSender = document.getElementById('matrixAllowedSender');
+    const matrixAllowOwn = document.getElementById('matrixAllowOwn');
+    const matrixAutoJoin = document.getElementById('matrixAutoJoin');
     const cameraImage = document.getElementById('cameraImage');
     const libraryImages = document.getElementById('libraryImages');
     const preview = document.getElementById('preview');
@@ -571,10 +686,29 @@
     let voiceInterimText = '';
 
     username.value = localStorage.getItem('bw.username') || '';
-    serverId.value = localStorage.getItem('bw.serverId') || 'hmcl-lan';
+    controllerToken.value = localStorage.getItem('bw.controllerToken') || 'local-dev-token';
+    matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
+    matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
+    matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') !== '0';
+    matrixAllowOwn.checked = localStorage.getItem('bw.matrixAllowOwn') !== '0';
+    matrixAutoJoin.checked = localStorage.getItem('bw.matrixAutoJoin') !== '0';
 
-    [username, serverId].forEach((input) => {
+    [username].forEach((input) => {
       input.addEventListener('input', () => localStorage.setItem(`bw.${input.id}`, input.value));
+    });
+    [
+      [controllerToken, 'bw.controllerToken'],
+      [matrixHomeserver, 'bw.matrixHomeserver'],
+      [matrixAllowedSender, 'bw.matrixAllowedSender']
+    ].forEach(([input, key]) => {
+      input.addEventListener('input', () => localStorage.setItem(key, input.value));
+    });
+    [
+      [matrixEnabled, 'bw.matrixEnabled'],
+      [matrixAllowOwn, 'bw.matrixAllowOwn'],
+      [matrixAutoJoin, 'bw.matrixAutoJoin']
+    ].forEach(([input, key]) => {
+      input.addEventListener('change', () => localStorage.setItem(key, input.checked ? '1' : '0'));
     });
     setVoicePanel(!voiceUnavailable && localStorage.getItem('bw.voiceEnabled') === '1');
 
@@ -599,6 +733,18 @@
         addImageFiles(pastedImages);
       }
     });
+
+    configOpen.addEventListener('click', () => {
+      clearConfigStatus();
+      if (typeof configDialog.showModal === 'function') {
+        configDialog.showModal();
+      } else {
+        configDialog.setAttribute('open', '');
+      }
+    });
+
+    configClose.addEventListener('click', closeConfigDialog);
+    configForm.addEventListener('submit', saveWebConfig);
 
     text.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -739,6 +885,69 @@
         }
       });
       return [...byKey.values()];
+    }
+
+    async function saveWebConfig(event) {
+      event.preventDefault();
+      const token = controllerToken.value.trim();
+      const homeserver = matrixHomeserver.value.trim();
+      const allowedSender = matrixAllowedSender.value.trim();
+      if (!token) {
+        setConfigStatus('Controller Token 不能为空。', true);
+        controllerToken.focus();
+        return;
+      }
+      if (!homeserver || !allowedSender) {
+        setConfigStatus('Matrix 主服务器 URL 和允许发指令的用户不能为空。', true);
+        return;
+      }
+
+      configSave.disabled = true;
+      setConfigStatus('正在保存配置...', false);
+      try {
+        const response = await fetch('/api/chat/matrix/local-config', {
+          method: 'PUT',
+          headers: {
+            'content-type': 'application/json',
+            'x-blockwright-token': token
+          },
+          body: JSON.stringify({
+            enabled: matrixEnabled.checked,
+            homeserver_url: homeserver,
+            access_token: matrixAccessToken.value.trim(),
+            allowed_sender: allowedSender,
+            allow_own_user_messages: matrixAllowOwn.checked,
+            auto_join_invites: matrixAutoJoin.checked,
+            default_target_player: username.value.trim() || null
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || await response.text() || '保存失败');
+        }
+        setConfigStatus(payload.message || '配置已保存。', false);
+      } catch (error) {
+        setConfigStatus(error.message || '保存失败。', true);
+      } finally {
+        configSave.disabled = false;
+      }
+    }
+
+    function closeConfigDialog() {
+      if (typeof configDialog.close === 'function') {
+        configDialog.close();
+      } else {
+        configDialog.removeAttribute('open');
+      }
+    }
+
+    function setConfigStatus(message, isError) {
+      configStatus.textContent = message;
+      configStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    function clearConfigStatus() {
+      setConfigStatus('', false);
     }
 
     function renderPreview() {
@@ -1051,7 +1260,6 @@
         const body = {
           username: name,
           target_player: name,
-          server_id: serverId.value.trim() || null,
           text: currentText,
           images: uploads
         };

@@ -363,10 +363,16 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("capture=\"environment\""));
     assert!(page_body.contains("id=\"libraryImages\""));
     assert!(page_body.contains("Minecraft 用户名"));
+    assert!(page_body.contains("Web 配置"));
+    assert!(page_body.contains("/api/chat/matrix/local-config"));
     assert!(page_body.contains("text.hidden = active"));
     assert!(page_body.contains("send.hidden = active"));
     assert!(page_body.contains("切换到文字输入"));
     assert!(!page_body.contains("Minecraft 玩家"));
+    assert!(!page_body.contains("id=\"serverId\""));
+    assert!(!page_body.contains("服务器</span>"));
+    assert!(!page_body.contains("server_id:"));
+    assert!(!page_body.contains("default_server_id"));
     assert!(!page_body.contains("voiceTarget"));
     assert!(!page_body.contains("识别语言"));
     assert!(!page_body.contains("翻译为"));
@@ -379,7 +385,6 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
                 "text": "参考图片盖一个小木屋",
                 "images": [
                     {

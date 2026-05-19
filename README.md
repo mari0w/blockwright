@@ -116,10 +116,10 @@ make HMCL_DIR=<HMCL当前游戏目录>
 /bw 帮我盖一个木屋
 /bw 把我面前这个房子的窗户换成蓝色玻璃
 /bw reload
-/bwconfig
+/bw config
 ```
 
-`/bwconfig` 会打开 Blockwright 配置界面，可以配置 controller 地址、共享 token、服务器 ID、Matrix/Element homeserver、access token 和允许发指令的 Matrix 用户；保存时会写入本机 `config/blockwright.json`，并调用 controller 保存 `config/chat.local.yaml` 和 `.env`。Matrix access token 只会写入本地未追踪 `.env`，不会写进仓库里的 YAML 示例。
+配置入口统一放在 controller 的 Web 端，打开 `/web` 后点“Web 配置”保存 Element/Matrix 接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
 
 第一次调用 Codex CLI 或本地模型规划建筑时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 
@@ -230,7 +230,7 @@ tools:
 
 当前 Matrix 适配读取普通 `m.room.message` 文本事件，不处理端到端加密房间；请给 bot 使用未开启 E2EE 的专用房间。
 
-如果使用 Fabric，可以直接在游戏内执行 `/bwconfig` 配置 Element/Matrix；保存按钮会调用 controller 的本地配置接口，不需要手工编辑 `chat.local.yaml`。
+Element/Matrix 等聊天入口统一在 controller 的 `/web` 页面里点“Web 配置”保存；真实 token 仍只写入本地未追踪配置，不写进仓库示例。
 
 ## MCP 助手入口
 

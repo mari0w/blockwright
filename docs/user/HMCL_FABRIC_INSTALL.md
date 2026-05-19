@@ -164,6 +164,8 @@ data/builds/
 
 正常本机使用不用改。只有 controller 地址或 token 改了才需要改。
 
+日常配置入口统一放在 controller 的 `/web` 页面，点“Web 配置”保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
+
 `requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型规划建筑后，复杂建筑可能明显超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
