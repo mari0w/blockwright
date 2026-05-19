@@ -2,7 +2,49 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
     "attachment": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source", "file_name", "mime_type"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["image", "file", "audio", "video", "unknown"]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "url"],
+              "properties": {
+                "type": { "type": "string", "const": "url" },
+                "url": { "type": "string", "minLength": 1 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "download_code", "picture_download_code"],
+              "properties": {
+                "type": { "type": "string", "const": "ding_talk_download_code" },
+                "download_code": { "type": "string", "minLength": 1 },
+                "picture_download_code": { "type": ["string", "null"] }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "path"],
+              "properties": {
+                "type": { "type": "string", "const": "local_path" },
+                "path": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        },
+        "file_name": { "type": ["string", "null"] },
+        "mime_type": { "type": ["string", "null"] }
+      }
     },
     "block": {
       "type": "object",
@@ -86,7 +128,7 @@
       "additionalProperties": false,
       "required": ["type", "player", "item", "count"],
       "properties": {
-        "type": { "const": "give_item" },
+        "type": { "type": "string", "const": "give_item" },
         "player": { "type": ["string", "null"] },
         "item": {
           "type": "string",
@@ -100,7 +142,7 @@
       "additionalProperties": false,
       "required": ["type", "blueprint_id", "origin", "blocks", "clear_existing"],
       "properties": {
-        "type": { "const": "place_blocks" },
+        "type": { "type": "string", "const": "place_blocks" },
         "blueprint_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 96 },
         "origin": { "$ref": "#/$defs/origin" },
         "blocks": {
@@ -117,7 +159,7 @@
       "additionalProperties": false,
       "required": ["type", "command"],
       "properties": {
-        "type": { "const": "run_command" },
+        "type": { "type": "string", "const": "run_command" },
         "command": { "type": "string", "minLength": 1, "maxLength": 160 }
       }
     },
@@ -126,7 +168,7 @@
       "additionalProperties": false,
       "required": ["type", "message"],
       "properties": {
-        "type": { "const": "chat" },
+        "type": { "type": "string", "const": "chat" },
         "message": { "type": "string", "minLength": 1, "maxLength": 300 }
       }
     },
@@ -135,7 +177,7 @@
       "additionalProperties": false,
       "required": ["type", "text", "attachments"],
       "properties": {
-        "type": { "const": "scan_nearby_and_plan" },
+        "type": { "type": "string", "const": "scan_nearby_and_plan" },
         "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
         "attachments": {
           "type": "array",
@@ -145,7 +187,7 @@
       }
     },
     "action": {
-      "oneOf": [
+      "anyOf": [
         { "$ref": "#/$defs/giveItemAction" },
         { "$ref": "#/$defs/placeBlocksAction" },
         { "$ref": "#/$defs/runCommandAction" },

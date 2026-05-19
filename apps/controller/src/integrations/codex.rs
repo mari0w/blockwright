@@ -9,15 +9,16 @@ use std::{
 
 use serde_json::Value;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     process::Command,
-    sync::{Mutex, OwnedMutexGuard},
+    sync::{mpsc, Mutex, OwnedMutexGuard},
     time::{sleep, Duration, Instant as TokioInstant},
 };
 
 use crate::{config::CodexConfig, services::progress::ProgressStore};
 
 const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
+const CODEX_MAX_REQUEST_ATTEMPTS: u32 = 2;
 
 #[derive(Clone)]
 pub struct CodexClient {
@@ -46,6 +47,7 @@ impl CodexResponseSchema {
         }
     }
 
+    #[cfg(test)]
     fn path(self) -> PathBuf {
         let file_name = match self {
             CodexResponseSchema::Plan => "plan.schema.json",
@@ -145,10 +147,8 @@ impl CodexClient {
             None
         };
         let schema_label = schema.map(CodexResponseSchema::label).unwrap_or("none");
-        let schema_path = schema.map(CodexResponseSchema::path);
         self.record_progress(progress_id, schema_start_phase(schema_label), None);
         let (program, args) = command_parts(&self.config.command)?;
-        let last_message_path = codex_last_message_path();
         tracing::info!(
             command = %self.config.command,
             schema = schema_label,
@@ -157,49 +157,105 @@ impl CodexClient {
             timeout_seconds = self.config.timeout_seconds,
             "starting codex cli request"
         );
+        tracing::info!(
+            runtime_home = self
+                .runtime_home
+                .as_deref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "default".to_string()),
+            proxy_env = %codex_proxy_env_summary(),
+            "codex cli environment diagnostics"
+        );
 
         let started_at = std::time::Instant::now();
-        let output = run_codex_exec_with_progress(
-            started_at,
-            self.config.timeout_seconds,
-            &self.config.command,
-            schema_label,
-            session_key.as_deref().unwrap_or("ephemeral"),
-            self.progress.clone(),
-            progress_id.map(str::to_string),
-            run_codex_exec(
-                program,
-                &args,
-                prompt,
-                &last_message_path,
-                schema_path.as_deref(),
-                resume_thread_id.as_deref(),
-                session_key.is_some(),
-                self.runtime_home.as_deref().map(PathBuf::as_path),
+        let mut attempt = 1;
+        let (output, last_message_path) = loop {
+            let last_message_path = codex_last_message_path();
+            let attempt_started_at = std::time::Instant::now();
+            // Codex CLI 0.130.0 在 gpt-5.5 + --output-schema 下会稳定 stream disconnected。
+            // controller 保留 schema label 作为本地解析语义，但不把 schema 交给 CLI。
+            let structured_output = false;
+            tracing::info!(
+                command = %self.config.command,
+                schema = schema_label,
+                session_key = session_key.as_deref().unwrap_or("ephemeral"),
+                attempt,
+                structured_output,
+                "starting codex cli request attempt"
+            );
+            let result = run_codex_exec_with_progress(
+                attempt_started_at,
+                self.config.timeout_seconds,
                 &self.config.command,
                 schema_label,
                 session_key.as_deref().unwrap_or("ephemeral"),
                 self.progress.clone(),
                 progress_id.map(str::to_string),
-            ),
-        )
-        .await?;
-        let elapsed_ms = started_at.elapsed().as_millis();
+                run_codex_exec(
+                    program,
+                    &args,
+                    prompt,
+                    &last_message_path,
+                    None,
+                    resume_thread_id.as_deref(),
+                    session_key.is_some(),
+                    self.runtime_home.as_deref().map(PathBuf::as_path),
+                    &self.config.command,
+                    schema_label,
+                    session_key.as_deref().unwrap_or("ephemeral"),
+                    self.progress.clone(),
+                    progress_id.map(str::to_string),
+                    structured_output,
+                ),
+            )
+            .await;
 
-        if !output.status.success() {
-            let _ = tokio::fs::remove_file(&last_message_path).await;
-            let failure = codex_failure_message(output.status, &output.stderr);
-            tracing::warn!(
-                command = %self.config.command,
-                schema = schema_label,
-                session_key = session_key.as_deref().unwrap_or("ephemeral"),
-                elapsed_ms,
-                status = %output.status,
-                error = %failure,
-                "codex cli request failed"
-            );
-            return Err(failure.into());
-        }
+            let elapsed_ms = attempt_started_at.elapsed().as_millis();
+            match result {
+                Ok(output) if output.status.success() => break (output, last_message_path),
+                Ok(output) => {
+                    let _ = tokio::fs::remove_file(&last_message_path).await;
+                    let failure =
+                        codex_failure_message(output.status, &output.stderr, &output.stdout);
+                    tracing::warn!(
+                        command = %self.config.command,
+                        schema = schema_label,
+                        session_key = session_key.as_deref().unwrap_or("ephemeral"),
+                        attempt,
+                        elapsed_ms,
+                        status = %output.status,
+                        error = %failure,
+                        "codex cli request failed"
+                    );
+                    if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
+                    {
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(failure.into());
+                }
+                Err(error) => {
+                    let _ = tokio::fs::remove_file(&last_message_path).await;
+                    let failure = error.to_string();
+                    tracing::warn!(
+                        command = %self.config.command,
+                        schema = schema_label,
+                        session_key = session_key.as_deref().unwrap_or("ephemeral"),
+                        attempt,
+                        elapsed_ms,
+                        error = %failure,
+                        "codex cli request failed before process exit"
+                    );
+                    if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
+                    {
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        };
+        let elapsed_ms = started_at.elapsed().as_millis();
 
         let last_message = tokio::fs::read_to_string(&last_message_path)
             .await
@@ -378,6 +434,7 @@ async fn run_codex_exec(
     session_key: &str,
     progress: Option<ProgressStore>,
     progress_id: Option<String>,
+    structured_output: bool,
 ) -> std::io::Result<Output> {
     let mut command = Command::new(program);
     if let Some(runtime_home) = runtime_home {
@@ -414,18 +471,45 @@ async fn run_codex_exec(
     let stderr = child.stderr.take().ok_or_else(|| {
         io::Error::new(io::ErrorKind::Other, "failed to capture codex stderr pipe")
     })?;
+    let (terminal_error_tx, mut terminal_error_rx) = mpsc::unbounded_channel();
     let stdout_context = CodexEventLogContext {
         command: command_for_log.to_string(),
         schema_label: schema_label.to_string(),
         session_key: session_key.to_string(),
         progress,
         progress_id,
+        terminal_error_tx: Some(terminal_error_tx),
+        early_terminal_reconnect: structured_output,
+    };
+    let stderr_context = CodexEventLogContext {
+        command: command_for_log.to_string(),
+        schema_label: schema_label.to_string(),
+        session_key: session_key.to_string(),
+        progress: stdout_context.progress.clone(),
+        progress_id: stdout_context.progress_id.clone(),
+        terminal_error_tx: None,
+        early_terminal_reconnect: false,
     };
     let stdout_task =
         tokio::spawn(async move { collect_stdout_with_progress(stdout, stdout_context).await });
-    let stderr_task = tokio::spawn(async move { collect_reader(stderr).await });
+    let stderr_task =
+        tokio::spawn(async move { collect_stderr_with_diagnostics(stderr, stderr_context).await });
 
-    let status = child.wait().await?;
+    let status = loop {
+        tokio::select! {
+            status = child.wait() => break status?,
+            terminal_error = terminal_error_rx.recv() => {
+                let Some(terminal_error) = terminal_error else {
+                    continue;
+                };
+                let _ = child.start_kill();
+                let _ = child.wait().await;
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                return Err(io::Error::new(io::ErrorKind::Other, terminal_error));
+            }
+        }
+    };
     let stdout = stdout_task
         .await
         .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))??;
@@ -446,6 +530,8 @@ struct CodexEventLogContext {
     session_key: String,
     progress: Option<ProgressStore>,
     progress_id: Option<String>,
+    terminal_error_tx: Option<mpsc::UnboundedSender<String>>,
+    early_terminal_reconnect: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -479,14 +565,50 @@ where
     Ok(output)
 }
 
-async fn collect_reader<R>(reader: R) -> io::Result<Vec<u8>>
+async fn collect_stderr_with_diagnostics<R>(
+    reader: R,
+    context: CodexEventLogContext,
+) -> io::Result<Vec<u8>>
 where
     R: AsyncRead + Unpin,
 {
     let mut reader = BufReader::new(reader);
     let mut output = Vec::new();
-    reader.read_to_end(&mut output).await?;
+    let mut line = Vec::new();
+
+    loop {
+        line.clear();
+        let read = reader.read_until(b'\n', &mut line).await?;
+        if read == 0 {
+            break;
+        }
+        output.extend_from_slice(&line);
+        log_codex_stderr_diagnostic(&line, &context);
+    }
+
     Ok(output)
+}
+
+fn log_codex_stderr_diagnostic(line: &[u8], context: &CodexEventLogContext) {
+    let Ok(line) = std::str::from_utf8(line) else {
+        return;
+    };
+    let Some(detail) = codex_stderr_diagnostic(line) else {
+        return;
+    };
+
+    tracing::warn!(
+        command = %context.command,
+        schema = %context.schema_label,
+        session_key = %context.session_key,
+        detail = %detail,
+        "codex cli stderr network diagnostic"
+    );
+    if let (Some(progress), Some(progress_id)) =
+        (context.progress.as_ref(), context.progress_id.as_deref())
+    {
+        progress.record(progress_id, "Codex CLI 网络诊断", Some(detail));
+    }
 }
 
 fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
@@ -517,6 +639,12 @@ fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
         (context.progress.as_ref(), context.progress_id.as_deref())
     {
         progress.record(progress_id, event.phase, event.detail.clone());
+    }
+    if let (Some(sender), Some(error)) = (
+        context.terminal_error_tx.as_ref(),
+        codex_terminal_error(&value, context.early_terminal_reconnect),
+    ) {
+        let _ = sender.send(error);
     }
 }
 
@@ -581,6 +709,13 @@ fn codex_progress_phase(event_type: &str) -> Option<&'static str> {
 }
 
 fn codex_progress_detail(value: &Value) -> Option<String> {
+    if matches!(
+        value.get("type").and_then(Value::as_str),
+        Some("error" | "turn.failed")
+    ) {
+        return extract_codex_error_from_value(value);
+    }
+
     let raw = value
         .get("tool_name")
         .or_else(|| value.get("tool"))
@@ -591,6 +726,82 @@ fn codex_progress_detail(value: &Value) -> Option<String> {
     Some(safe_progress_detail(raw))
 }
 
+fn codex_terminal_error(value: &Value, early_reconnect: bool) -> Option<String> {
+    let event_type = value.get("type").and_then(Value::as_str)?;
+    if !matches!(event_type, "error" | "turn.failed") {
+        return None;
+    }
+
+    let detail = extract_codex_error_from_value(value)?;
+    if detail.contains("Reconnecting...") && !detail.contains("5/5") {
+        if early_reconnect
+            && detail.contains("stream disconnected before completion")
+            && (detail.contains("2/5") || detail.contains("3/5") || detail.contains("4/5"))
+        {
+            return Some(format!(
+                "codex cli reported early retryable structured-output error: {detail}"
+            ));
+        }
+        return None;
+    }
+
+    Some(format!("codex cli reported terminal error: {detail}"))
+}
+
+fn codex_failure_is_retriable(message: &str) -> bool {
+    message.contains("stream disconnected before completion")
+        || message.contains("timeout waiting for child process to exit")
+        || message.contains("Reconnecting... 5/5")
+}
+
+fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
+    let line = raw.trim();
+    if line.is_empty() {
+        return None;
+    }
+
+    let lower = line.to_ascii_lowercase();
+    let category = if lower.contains("failed to connect to websocket")
+        || lower.contains("responses_websocket")
+    {
+        "websocket_connect"
+    } else if lower.contains("falling back to http") {
+        "http_fallback"
+    } else if lower.contains("stream disconnected") {
+        "stream_disconnected"
+    } else if lower.contains("error sending request for url")
+        || lower.contains("http/request failed")
+    {
+        "http_request"
+    } else if lower.contains("dns error") || lower.contains("failed to lookup") {
+        "dns"
+    } else if lower.contains("couldn't connect to server")
+        || lower.contains("failed to connect to")
+        || lower.contains("connection refused")
+    {
+        "connect"
+    } else if lower.contains("operation not permitted") {
+        "permission"
+    } else if lower.contains("proxy")
+        || lower.contains("socks")
+        || lower.contains("port 1080")
+        || lower.contains("port 1087")
+    {
+        "proxy"
+    } else if lower.contains("tls") || lower.contains("certificate") {
+        "tls"
+    } else if lower.contains("timeout") {
+        "timeout"
+    } else {
+        return None;
+    };
+
+    Some(format!(
+        "{category}: {}",
+        safe_network_diagnostic_detail(line)
+    ))
+}
+
 fn safe_progress_detail(raw: &str) -> String {
     let mut detail = raw.split_whitespace().next().unwrap_or(raw).to_string();
     detail.retain(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':' | '/'));
@@ -598,6 +809,114 @@ fn safe_progress_detail(raw: &str) -> String {
         detail.truncate(80);
     }
     detail
+}
+
+fn compact_log_detail(raw: &str) -> Option<String> {
+    let detail = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if detail.is_empty() {
+        return None;
+    }
+
+    let limit = 300;
+    if detail.chars().count() <= limit {
+        return Some(detail);
+    }
+
+    let mut compact = detail.chars().take(limit).collect::<String>();
+    compact.push_str("...");
+    Some(compact)
+}
+
+fn safe_network_diagnostic_detail(raw: &str) -> String {
+    let detail = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let detail = redact_url_credentials(&detail);
+    let detail = redact_header_like_secret(&detail);
+    let limit = 500;
+    if detail.chars().count() <= limit {
+        return detail;
+    }
+
+    let mut compact = detail.chars().take(limit).collect::<String>();
+    compact.push_str("...");
+    compact
+}
+
+fn redact_url_credentials(raw: &str) -> String {
+    raw.split_whitespace()
+        .map(|part| {
+            let Some(scheme_pos) = part.find("://") else {
+                return part.to_string();
+            };
+            let authority_start = scheme_pos + 3;
+            let Some(at_relative) = part[authority_start..].find('@') else {
+                return part.to_string();
+            };
+            let at_index = authority_start + at_relative;
+            format!("{}***{}", &part[..authority_start], &part[at_index..])
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn redact_header_like_secret(raw: &str) -> String {
+    raw.split_whitespace()
+        .map(|part| {
+            let lower = part.to_ascii_lowercase();
+            if lower.starts_with("authorization:")
+                || lower.starts_with("bearer")
+                || lower.starts_with("token=")
+                || lower.starts_with("access_token=")
+            {
+                "[redacted]".to_string()
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn codex_proxy_env_summary() -> String {
+    let entries = [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
+    ]
+    .into_iter()
+    .filter_map(|name| {
+        let value = std::env::var(name).ok()?;
+        if value.trim().is_empty() {
+            return None;
+        }
+        Some(format!("{name}={}", sanitize_proxy_env_value(name, &value)))
+    })
+    .collect::<Vec<_>>();
+
+    if entries.is_empty() {
+        "none".to_string()
+    } else {
+        entries.join(",")
+    }
+}
+
+fn sanitize_proxy_env_value(name: &str, value: &str) -> String {
+    let value = value.trim();
+    if name.eq_ignore_ascii_case("no_proxy") {
+        return value.chars().take(160).collect();
+    }
+
+    let redacted = redact_url_credentials(value);
+    if redacted.chars().count() <= 160 {
+        return redacted;
+    }
+    let mut compact = redacted.chars().take(160).collect::<String>();
+    compact.push_str("...");
+    compact
 }
 
 fn extract_thread_id_from_json_stdout(stdout: &[u8]) -> Option<String> {
@@ -633,16 +952,28 @@ fn codex_last_message_path() -> PathBuf {
     ))
 }
 
-fn codex_failure_message(status: ExitStatus, stderr: &[u8]) -> String {
-    if stderr.is_empty() {
-        return format!(
-            "codex command exited with {status}; no stderr returned. Check Codex login status, model access, network connectivity, and CLI version."
-        );
+fn codex_failure_message(status: ExitStatus, stderr: &[u8], stdout: &[u8]) -> String {
+    if !stderr.is_empty() {
+        let stderr_text = String::from_utf8_lossy(stderr);
+        if let Some(api_error) = extract_codex_api_error(&stderr_text) {
+            return format!("codex command exited with {status}: {api_error}");
+        }
+        if let Some(diagnostic) = extract_last_codex_stderr_diagnostic(&stderr_text) {
+            return format!("codex command exited with {status}: {diagnostic}");
+        }
     }
 
-    let stderr_text = String::from_utf8_lossy(stderr);
-    if let Some(api_error) = extract_codex_api_error(&stderr_text) {
-        return format!("codex command exited with {status}: {api_error}");
+    if !stdout.is_empty() {
+        let stdout_text = String::from_utf8_lossy(stdout);
+        if let Some(api_error) = extract_codex_api_error(&stdout_text) {
+            return format!("codex command exited with {status}: {api_error}");
+        }
+    }
+
+    if stderr.is_empty() {
+        return format!(
+            "codex command exited with {status}; no stderr returned and no structured stdout error found. Check Codex login status, model access, network connectivity, and CLI version."
+        );
     }
 
     format!(
@@ -651,28 +982,61 @@ fn codex_failure_message(status: ExitStatus, stderr: &[u8]) -> String {
     )
 }
 
-fn extract_codex_api_error(stderr: &str) -> Option<String> {
-    for line in stderr.lines().rev() {
-        let Some(json) = line.trim().strip_prefix("ERROR:") else {
+fn extract_last_codex_stderr_diagnostic(output: &str) -> Option<String> {
+    output.lines().rev().find_map(codex_stderr_diagnostic)
+}
+
+fn extract_codex_api_error(output: &str) -> Option<String> {
+    for line in output.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(json) = line.strip_prefix("ERROR:") {
+            let value = serde_json::from_str::<Value>(json.trim()).ok()?;
+            return extract_codex_error_from_value(&value);
+        }
+
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        let json = json.trim();
-        let value = serde_json::from_str::<Value>(json).ok()?;
-        let message = value.pointer("/error/message")?.as_str()?;
-        let status = value
-            .get("status")
-            .and_then(Value::as_i64)
-            .map(|status| format!("status={status} "))
-            .unwrap_or_default();
-        let error_type = value
-            .pointer("/error/type")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown_error");
-
-        return Some(format!("{status}type={error_type}: {message}"));
+        if !matches!(
+            value.get("type").and_then(Value::as_str),
+            Some("error" | "turn.failed")
+        ) {
+            continue;
+        }
+        if let Some(message) = extract_codex_error_from_value(&value) {
+            return Some(message);
+        }
     }
 
     None
+}
+
+fn extract_codex_error_from_value(value: &Value) -> Option<String> {
+    let message = value
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .or_else(|| value.get("error").and_then(Value::as_str))
+        .or_else(|| value.get("message").and_then(Value::as_str))
+        .or_else(|| value.get("detail").and_then(Value::as_str))?;
+    let message = compact_log_detail(message)?;
+    let status = value
+        .get("status")
+        .or_else(|| value.pointer("/error/status"))
+        .and_then(Value::as_i64)
+        .map(|status| format!("status={status} "))
+        .unwrap_or_default();
+    let error_type = value
+        .pointer("/error/type")
+        .or_else(|| value.get("error_type"))
+        .or_else(|| value.get("code"))
+        .and_then(Value::as_str)
+        .unwrap_or("unknown_error");
+
+    Some(format!("{status}type={error_type}: {message}"))
 }
 
 #[cfg(test)]
@@ -779,6 +1143,70 @@ BLOCKWRIGHT_JSON
         assert_eq!(lines.len(), 2);
         assert!(!lines[0].contains("resume thread-a"));
         assert!(lines[1].contains("resume thread-a"));
+    }
+
+    #[tokio::test]
+    async fn schema_requests_do_not_pass_output_schema_to_cli() {
+        let dir = temp_dir("schema-request-without-output-schema");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-no-output-schema.sh");
+        let args_log = dir.join("args.log");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{}'
+last_message=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    --output-schema)
+      echo "unexpected --output-schema" >&2
+      exit 7
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+printf '{{"type":"thread.started","thread_id":"thread-schema-retry"}}\n'
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::new(CodexConfig {
+            enabled: true,
+            command: script_path.to_string_lossy().to_string(),
+            timeout_seconds: 5,
+        });
+
+        let output = client
+            .ask_with_schema("hello", CodexResponseSchema::Plan, None)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(output.contains("\"summary\":\"测试\""));
+        let args = fs::read_to_string(args_log).unwrap();
+        let lines = args.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 1);
+        assert!(!lines[0].contains("--output-schema"));
     }
 
     #[tokio::test]
@@ -891,6 +1319,17 @@ BLOCKWRIGHT_JSON
     }
 
     #[test]
+    fn plan_response_schema_uses_strict_closed_objects() {
+        let schema =
+            fs::read_to_string(CodexResponseSchema::Plan.path()).expect("schema should read");
+        let schema: Value = serde_json::from_str(&schema).expect("schema should be valid json");
+
+        assert_schema_objects_are_strict(&schema, "$");
+        assert_schema_omits_unsupported_keywords(&schema, "$");
+        assert_schema_property_nodes_are_typed(&schema, "$");
+    }
+
+    #[test]
     fn extracts_thread_id_from_json_stdout() {
         let stdout = br#"{"type":"turn.started"}
 {"type":"thread.started","thread_id":"thread-123"}
@@ -940,12 +1379,94 @@ BLOCKWRIGHT_JSON
     }
 
     #[test]
+    fn summarizes_error_progress_with_safe_detail() {
+        let event = serde_json::json!({
+            "type": "error",
+            "status": 400,
+            "error": {
+                "type": "invalid_request_error",
+                "message": "The 'gpt-5.5' model requires a newer version of Codex."
+            }
+        });
+
+        let progress = codex_progress_event(&event).unwrap();
+
+        assert_eq!(progress.phase, "Codex 处理失败，准备返回错误");
+        assert_eq!(
+            progress.detail.as_deref(),
+            Some(
+                "status=400 type=invalid_request_error: The 'gpt-5.5' model requires a newer version of Codex."
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_error_waits_until_final_reconnect_and_marks_retriable() {
+        let reconnecting = serde_json::json!({
+            "type": "error",
+            "error": "Reconnecting... 4/5 (stream disconnected before completion: request failed)"
+        });
+        let failed = serde_json::json!({
+            "type": "error",
+            "error": "Reconnecting... 5/5 (stream disconnected before completion: request failed)"
+        });
+
+        assert!(codex_terminal_error(&reconnecting, false).is_none());
+        let terminal = codex_terminal_error(&failed, false).unwrap();
+        assert!(terminal.contains("Reconnecting... 5/5"));
+        assert!(codex_failure_is_retriable(&terminal));
+    }
+
+    #[test]
+    fn structured_output_reconnect_can_trigger_early_retry() {
+        let reconnecting = serde_json::json!({
+            "type": "error",
+            "error": "Reconnecting... 2/5 (stream disconnected before completion: request failed)"
+        });
+
+        assert!(codex_terminal_error(&reconnecting, false).is_none());
+        let terminal = codex_terminal_error(&reconnecting, true).unwrap();
+        assert!(terminal.contains("early retryable structured-output error"));
+        assert!(codex_failure_is_retriable(&terminal));
+    }
+
+    #[test]
+    fn stderr_diagnostic_summarizes_proxy_failures_without_credentials() {
+        let line = "fatal: unable to access 'https://github.com/openai/plugins.git/': Failed to connect to 127.0.0.1 port 1087 after 0 ms: Couldn't connect to server via http://user:secret@127.0.0.1:1087";
+
+        let diagnostic = codex_stderr_diagnostic(line).unwrap();
+
+        assert!(diagnostic.contains("connect"));
+        assert!(diagnostic.contains("127.0.0.1"));
+        assert!(diagnostic.contains("1087"));
+        assert!(!diagnostic.contains("secret"));
+    }
+
+    #[test]
+    fn failure_message_extracts_network_diagnostic_without_prompt() {
+        let stderr = "user\n给我一组红色的砖\nWARN codex_core::session::turn: stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)";
+
+        let message = codex_failure_message(ExitStatus::from_raw(1), stderr.as_bytes(), b"");
+
+        assert!(message.contains("stream_disconnected"));
+        assert!(message.contains("chatgpt.com/backend-api/codex/responses"));
+        assert!(!message.contains("给我一组红色的砖"));
+    }
+
+    #[test]
+    fn proxy_env_value_redacts_credentials() {
+        let value = sanitize_proxy_env_value("HTTPS_PROXY", "http://user:secret@127.0.0.1:1087");
+
+        assert_eq!(value, "http://***@127.0.0.1:1087");
+    }
+
+    #[test]
     fn failure_message_extracts_api_error_without_prompt() {
         let stderr = r#"user
 给我钻石斧头
 ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.5' model requires a newer version of Codex."}}"#;
 
-        let message = codex_failure_message(ExitStatus::from_raw(1), stderr.as_bytes());
+        let message = codex_failure_message(ExitStatus::from_raw(1), stderr.as_bytes(), b"");
 
         assert!(message.contains("status=400"));
         assert!(message.contains("gpt-5.5"));
@@ -953,10 +1474,23 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
     }
 
     #[test]
+    fn failure_message_extracts_api_error_from_json_stdout() {
+        let stdout = br#"{"type":"thread.started","thread_id":"thread-123"}
+{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.5' model requires a newer version of Codex."}}
+{"type":"turn.failed"}"#;
+
+        let message = codex_failure_message(ExitStatus::from_raw(1), b"", stdout);
+
+        assert!(message.contains("status=400"));
+        assert!(message.contains("gpt-5.5"));
+        assert!(!message.contains("thread-123"));
+    }
+
+    #[test]
     fn failure_message_omits_unstructured_stderr() {
         let stderr = "user\n给我钻石斧头\n<html>blocked</html>";
 
-        let message = codex_failure_message(ExitStatus::from_raw(1), stderr.as_bytes());
+        let message = codex_failure_message(ExitStatus::from_raw(1), stderr.as_bytes(), b"");
 
         assert!(message.contains("stderr omitted"));
         assert!(!message.contains("给我钻石斧头"));
@@ -965,10 +1499,122 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
 
     #[test]
     fn failure_message_reports_empty_stderr_hint() {
-        let message = codex_failure_message(ExitStatus::from_raw(1), b"");
+        let message = codex_failure_message(ExitStatus::from_raw(1), b"", b"");
 
         assert!(message.contains("no stderr returned"));
         assert!(message.contains("Codex login status"));
         assert!(!message.contains("stderr omitted"));
+    }
+
+    fn assert_schema_objects_are_strict(value: &Value, path: &str) {
+        if schema_node_is_object(value) {
+            assert_eq!(
+                value.get("additionalProperties").and_then(Value::as_bool),
+                Some(false),
+                "{path} must set additionalProperties=false"
+            );
+
+            if let Some(properties) = value.get("properties").and_then(Value::as_object) {
+                let required = value
+                    .get("required")
+                    .and_then(Value::as_array)
+                    .expect("object schemas with properties must list required fields")
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<std::collections::BTreeSet<_>>();
+                for property in properties.keys() {
+                    assert!(
+                        required.contains(property.as_str()),
+                        "{path}.properties.{property} must be listed in required"
+                    );
+                }
+            }
+        }
+
+        match value {
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    assert_schema_objects_are_strict(item, &format!("{path}[{index}]"));
+                }
+            }
+            Value::Object(fields) => {
+                for (key, child) in fields {
+                    assert_schema_objects_are_strict(child, &format!("{path}.{key}"));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn schema_node_is_object(value: &Value) -> bool {
+        match value.get("type") {
+            Some(Value::String(kind)) => kind == "object",
+            Some(Value::Array(kinds)) => kinds.iter().any(|kind| kind.as_str() == Some("object")),
+            _ => false,
+        }
+    }
+
+    fn assert_schema_omits_unsupported_keywords(value: &Value, path: &str) {
+        match value {
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    assert_schema_omits_unsupported_keywords(item, &format!("{path}[{index}]"));
+                }
+            }
+            Value::Object(fields) => {
+                for keyword in [
+                    "oneOf",
+                    "allOf",
+                    "not",
+                    "dependentRequired",
+                    "dependentSchemas",
+                    "if",
+                    "then",
+                    "else",
+                ] {
+                    assert!(
+                        !fields.contains_key(keyword),
+                        "{path} contains unsupported schema keyword {keyword}"
+                    );
+                }
+                for (key, child) in fields {
+                    assert_schema_omits_unsupported_keywords(child, &format!("{path}.{key}"));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn assert_schema_property_nodes_are_typed(value: &Value, path: &str) {
+        match value {
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    assert_schema_property_nodes_are_typed(item, &format!("{path}[{index}]"));
+                }
+            }
+            Value::Object(fields) => {
+                if let Some(properties) = fields.get("properties").and_then(Value::as_object) {
+                    for (name, property_schema) in properties {
+                        let property_path = format!("{path}.properties.{name}");
+                        assert!(
+                            property_schema.get("type").is_some()
+                                || property_schema.get("$ref").is_some()
+                                || property_schema.get("anyOf").is_some(),
+                            "{property_path} must include type, $ref, or anyOf"
+                        );
+                    }
+                }
+                if fields.contains_key("const") {
+                    assert!(
+                        fields.contains_key("type"),
+                        "{path} uses const and must include an explicit type"
+                    );
+                }
+                for (key, child) in fields {
+                    assert_schema_property_nodes_are_typed(child, &format!("{path}.{key}"));
+                }
+            }
+            _ => {}
+        }
     }
 }

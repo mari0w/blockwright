@@ -147,6 +147,9 @@ cat > "$prompt_file"
 if [[ -z "$last_message" ]]; then
   exit 2
 fi
+if ! grep -q "Blockwright 网页语音输入的翻译器" "$prompt_file" && [[ -z "$schema" ]]; then
+  schema="plan.schema.json"
+fi
 case "$schema" in
   *plan.schema.json)
     if grep -q "给我一把钻石剑" "$prompt_file"; then
@@ -386,6 +389,9 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains(">相册</span>"));
     assert!(page_body.contains("id=\"voiceToggleKeyboard\""));
     assert!(page_body.contains(".icon-button svg[hidden]"));
+    assert!(page_body.contains("rows=\"1\" wrap=\"off\""));
+    assert!(page_body.contains("overflow-x: auto;"));
+    assert!(page_body.contains("function keepComposerSingleLine"));
     assert!(page_body.contains("toggle-icon-hidden"));
     assert!(page_body.contains("Minecraft 用户名"));
     assert!(page_body.contains("id=\"usernameGate\""));

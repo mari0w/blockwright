@@ -13,6 +13,8 @@ const PLAYER_SAFETY_RADIUS: i32 = 1;
 const PLAYER_SAFETY_HEIGHT_BLOCKS: i32 = 3;
 const CONTEXT_BLUEPRINT_LIMIT: usize = 24;
 const CONTEXT_BUILD_LIMIT: usize = 12;
+const CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT: usize = 32;
+const CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT: usize = 32;
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
@@ -104,7 +106,9 @@ struct BlueprintContext {
     tags: Vec<String>,
     block_count: usize,
     materials: Vec<MaterialCount>,
-    blocks: Vec<BlueprintBlock>,
+    block_sample_limit: usize,
+    block_sample_truncated: bool,
+    block_sample: Vec<BlueprintBlock>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,7 +129,9 @@ struct BuildActionContext {
     origin: BlockOrigin,
     expected_count: u32,
     materials: Vec<MaterialCount>,
-    blocks: Vec<BlueprintBlock>,
+    block_sample_limit: usize,
+    block_sample_truncated: bool,
+    block_sample: Vec<BlueprintBlock>,
 }
 
 #[derive(Debug, Serialize)]
@@ -149,6 +155,12 @@ struct TargetPoint {
 struct BuildContextCandidate {
     context: BuildRecordContext,
     recency_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ContextHistoryPolicy {
+    include_blueprints: bool,
+    include_builds: bool,
 }
 
 #[derive(Clone, Default)]
@@ -222,6 +234,12 @@ impl Planner {
 
         let context = build_context_bundle(input, blueprints, builds).await;
         let prompt = render_plan_prompt(&context);
+        tracing::info!(
+            prompt_bytes = prompt.len(),
+            available_blueprint_count = context.available_blueprints.len(),
+            recent_build_count = context.recent_builds.len(),
+            "codex unified planner prompt prepared"
+        );
         let output = match codex
             .ask_with_schema_and_progress(
                 &prompt,
@@ -235,7 +253,12 @@ impl Planner {
             Ok(_) => return None,
             Err(error) => {
                 tracing::warn!(error = %error, "codex unified planning failed");
-                return None;
+                return Some(PlanResult {
+                    reply: "AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。请管理员检查 Codex 登录状态、模型权限、网络连接或 CLI 版本。"
+                        .to_string(),
+                    summary: "AI 助手调用失败".to_string(),
+                    actions: Vec::new(),
+                });
             }
         };
         tracing::info!(
@@ -1287,14 +1310,23 @@ async fn build_context_bundle(
     blueprints: &BlueprintStore,
     builds: Option<&BuildStore>,
 ) -> PlanContextBundle {
+    let history_policy = context_history_policy(input);
     PlanContextBundle {
         player: input.player.clone(),
         user_text: input.text.trim().to_string(),
         attachments: input.attachments.clone(),
         position: input.position.clone(),
         site: build_site_context(input),
-        available_blueprints: blueprint_contexts(blueprints).await,
-        recent_builds: build_contexts(builds, input.player.as_deref(), target_point(input)).await,
+        available_blueprints: if history_policy.include_blueprints {
+            blueprint_contexts(blueprints).await
+        } else {
+            Vec::new()
+        },
+        recent_builds: if history_policy.include_builds {
+            build_contexts(builds, input.player.as_deref(), target_point(input)).await
+        } else {
+            Vec::new()
+        },
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
             controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。优先使用已有上下文与 skills，只有在确实缺数据且 MCP 工具能直接补齐时才发起 MCP。",
@@ -1325,15 +1357,20 @@ async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext
         .await
         .into_iter()
         .take(CONTEXT_BLUEPRINT_LIMIT)
-        .map(|blueprint| BlueprintContext {
-            id: blueprint.id,
-            name: blueprint.name,
-            description: blueprint.description,
-            size: blueprint.size,
-            tags: blueprint.tags,
-            block_count: blueprint.blocks.len(),
-            materials: blueprint.materials,
-            blocks: blueprint.blocks,
+        .map(|blueprint| {
+            let block_count = blueprint.blocks.len();
+            BlueprintContext {
+                id: blueprint.id,
+                name: blueprint.name,
+                description: blueprint.description,
+                size: blueprint.size,
+                tags: blueprint.tags,
+                block_count,
+                materials: blueprint.materials,
+                block_sample_limit: CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT,
+                block_sample_truncated: block_count > CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT,
+                block_sample: block_sample(&blueprint.blocks, CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT),
+            }
         })
         .collect()
 }
@@ -1372,12 +1409,21 @@ async fn build_contexts(
                     actions: record
                         .expected_actions
                         .into_iter()
-                        .map(|action| BuildActionContext {
-                            blueprint_id: action.blueprint_id,
-                            origin: action.origin,
-                            expected_count: action.expected_count,
-                            materials: action.materials,
-                            blocks: action.blocks,
+                        .map(|action| {
+                            let block_count = action.blocks.len();
+                            BuildActionContext {
+                                blueprint_id: action.blueprint_id,
+                                origin: action.origin,
+                                expected_count: action.expected_count,
+                                materials: action.materials,
+                                block_sample_limit: CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+                                block_sample_truncated: block_count
+                                    > CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+                                block_sample: block_sample(
+                                    &action.blocks,
+                                    CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+                                ),
+                            }
                         })
                         .collect(),
                 },
@@ -1403,6 +1449,81 @@ async fn build_contexts(
         .take(CONTEXT_BUILD_LIMIT)
         .map(|candidate| candidate.context)
         .collect()
+}
+
+fn block_sample(blocks: &[BlueprintBlock], limit: usize) -> Vec<BlueprintBlock> {
+    blocks.iter().take(limit).cloned().collect()
+}
+
+fn context_history_policy(input: &PlannerInput) -> ContextHistoryPolicy {
+    let text = input.text.trim();
+    let needs_existing_build_context = looks_like_existing_build_request(text);
+    let needs_builds = input.nearby_scan.is_some() || needs_existing_build_context;
+    ContextHistoryPolicy {
+        include_blueprints: needs_existing_build_context
+            || looks_like_blueprint_reuse_request(text),
+        include_builds: needs_builds,
+    }
+}
+
+fn looks_like_existing_build_request(text: &str) -> bool {
+    text_contains_any(
+        text,
+        &[
+            "刚才",
+            "上次",
+            "之前",
+            "前面",
+            "已有",
+            "现有",
+            "这个",
+            "那个",
+            "这座",
+            "那座",
+            "这栋",
+            "那栋",
+            "改",
+            "修改",
+            "扩建",
+            "加建",
+            "拆",
+            "拆掉",
+            "替换",
+            "换成",
+            "美化",
+            "升级",
+            "修一下",
+            "窗户",
+            "屋顶",
+            "门口",
+        ],
+    )
+}
+
+fn looks_like_blueprint_reuse_request(text: &str) -> bool {
+    text_contains_any(
+        text,
+        &[
+            "蓝图",
+            "模板",
+            "复用",
+            "照着之前",
+            "照之前",
+            "参考之前",
+            "按之前",
+            "之前那个",
+            "上次那个",
+            "保存的",
+            "已有蓝图",
+        ],
+    )
+}
+
+fn text_contains_any(text: &str, needles: &[&str]) -> bool {
+    let lower = text.to_ascii_lowercase();
+    needles
+        .iter()
+        .any(|needle| lower.contains(&needle.to_ascii_lowercase()))
 }
 
 fn target_point(input: &PlannerInput) -> Option<TargetPoint> {
@@ -1468,13 +1589,14 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 
 工作原则：先消费 context_bundle 里的基础数据源（位置、扫描、历史构建、蓝图、附件），再组合可用 skills 形成闭环方案；缺数据时主动用 scan_nearby_and_plan 或确认问题补齐。
 - 能直接从 context_bundle 得到的数据，不要再走 MCP 工具重复获取；只有缺关键信息且 MCP 能低成本补齐时才调用。
+- available_blueprints 和 recent_builds 只会在本轮确实可能复用蓝图、匹配或改造既有建筑时预加载；为空不代表没有历史，只代表本轮不需要把历史硬塞进上下文。
 - 适合稳定流程复用的步骤交给 skills，适合一次性读写或查询的动作交给工具；不要把简单查询强行包装成复杂 workflow。
 
 controller 的角色只是提供基础数据源、保存蓝图、校验协议和执行安全边界；不要把它当成会替你做规划判断的规则引擎。建筑规范、场地策略、图片复刻、改造和安全命令规则都优先按可用 skills 执行。
 
 让流程丝滑：
 - 同一轮尽量给出可执行下一步；能落地就输出动作，不能落地就只问最关键的一个澄清问题。
-- 优先复用 available_blueprints 和 recent_builds 的方块清单，避免无谓重画。
+- 优先复用 available_blueprints 和 recent_builds 的摘要、材料和方块样本，避免无谓重画；如果改造旧建筑需要完整细节而样本不够，先输出 scan_nearby_and_plan 获取现场。
 - 需要改造既有建筑时，必须先基于 nearby_scan + recent_builds 做匹配；匹配不唯一就追问，不要直接施工。
 - 玩家提到“按图生成”时，优先走 image-to-blueprint 能力；玩家提到“修改/扩建/换材质”时，优先走 existing-build-edit 能力。
 
@@ -1738,7 +1860,6 @@ mod tests {
                 r#"#!/usr/bin/env bash
 set -euo pipefail
 last_message=""
-schema=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-last-message)
@@ -1746,8 +1867,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --output-schema)
-      schema="$2"
-      shift 2
+      echo "unexpected --output-schema" >&2
+      exit 3
       ;;
     *)
       shift
@@ -1758,14 +1879,7 @@ cat >/dev/null
 if [[ -z "$last_message" ]]; then
   exit 2
 fi
-case "$schema" in
-  *plan.schema.json)
-    cat "{plan_path}" > "$last_message"
-    ;;
-  *)
-    exit 3
-    ;;
-esac
+cat "{plan_path}" > "$last_message"
 "#,
                 plan_path = plan_path.to_string_lossy()
             ),
@@ -1788,6 +1902,31 @@ esac
 
     fn planner_with_fake_action(name: &str, action_message: &str) -> Planner {
         planner_with_fake_plan(name, action_message)
+    }
+
+    fn planner_with_failing_codex(name: &str) -> Planner {
+        let dir = temp_dir(name);
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("failing-codex.sh");
+        fs::write(
+            &script_path,
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+cat >/dev/null
+printf '{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"model unavailable"}}\n'
+exit 1
+"#,
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        Planner::new(CodexClient::new(CodexConfig {
+            enabled: true,
+            command: script_path.to_string_lossy().to_string(),
+            timeout_seconds: 5,
+        }))
     }
 
     fn blueprint_plan_message(blueprint_message: &str) -> String {
@@ -1830,6 +1969,17 @@ esac
             }],
             tags: tags.into_iter().map(|value| value.to_string()).collect(),
         }
+    }
+
+    fn test_blocks(count: usize, material: &str) -> Vec<BlueprintBlock> {
+        (0..count)
+            .map(|index| BlueprintBlock {
+                x: index as i32,
+                y: 0,
+                z: 0,
+                material: material.to_string(),
+            })
+            .collect()
     }
 
     fn scan_with_blocks(blocks: Vec<WorldScanBlock>) -> WorldScan {
@@ -2006,6 +2156,32 @@ esac
         assert_eq!(result.summary, "继续确认需求");
         assert!(result.actions.is_empty());
         assert!(result.reply.contains("可靠的下一步"));
+    }
+
+    #[tokio::test]
+    async fn codex_process_failure_replies_with_admin_hint() {
+        let store = empty_store("codex-process-failure").await;
+        let planner = planner_with_failing_codex("codex-process-failure");
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "给我一组红色的砖".to_string(),
+                    player: Some("Alex".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "AI 助手调用失败");
+        assert!(result.actions.is_empty());
+        assert!(result.reply.contains("没有发送到 Minecraft"));
+        assert!(result.reply.contains("Codex 登录状态"));
     }
 
     #[tokio::test]
@@ -2847,6 +3023,52 @@ esac
     }
 
     #[tokio::test]
+    async fn simple_action_context_omits_blueprints_and_build_history() {
+        let blueprints = empty_store("simple-action-history-omitted").await;
+        blueprints
+            .save(test_blueprint("stored-cabin", vec!["house"]))
+            .await
+            .unwrap();
+        let builds = BuildStore::new(temp_dir("simple-action-build-history"))
+            .await
+            .unwrap();
+        builds
+            .register_planned(
+                "job-red-wall".to_string(),
+                "local".to_string(),
+                Some("Steve".to_string()),
+                "历史红墙".to_string(),
+                &[GameAction::PlaceBlocks {
+                    blueprint_id: Some("stored-cabin".to_string()),
+                    origin: BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x: 10,
+                        y: 64,
+                        z: 10,
+                    },
+                    blocks: test_blocks(8, "minecraft:red_concrete"),
+                    clear_existing: false,
+                }],
+            )
+            .await
+            .unwrap();
+        let input = PlannerInput {
+            text: "给我一组红色的砖".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
+
+        assert!(context.available_blueprints.is_empty());
+        assert!(context.recent_builds.is_empty());
+    }
+
+    #[tokio::test]
     async fn context_bundle_exposes_blueprint_and_build_blocks_as_data_sources() {
         let blueprints = empty_store("context-data-sources").await;
         blueprints
@@ -2929,7 +3151,7 @@ esac
 
         assert_eq!(context.available_blueprints.len(), 1);
         assert_eq!(context.available_blueprints[0].id, "stored-cabin");
-        assert_eq!(context.available_blueprints[0].blocks.len(), 1);
+        assert_eq!(context.available_blueprints[0].block_sample.len(), 1);
         assert_eq!(context.recent_builds.len(), 2);
         assert_eq!(context.recent_builds[0].id, "job-a-near");
         assert_eq!(context.recent_builds[1].id, "job-z-far");
@@ -2944,7 +3166,7 @@ esac
                 .map(|origin| origin.x),
             Some(30)
         );
-        assert_eq!(context.recent_builds[0].actions[0].blocks.len(), 1);
+        assert_eq!(context.recent_builds[0].actions[0].block_sample.len(), 1);
         assert_eq!(
             context.recent_builds[0].actions[0].origin.world.as_deref(),
             Some("minecraft:overworld")
@@ -2952,6 +3174,89 @@ esac
         assert_eq!(context.recent_builds[0].actions[0].origin.x, 30);
         assert_eq!(context.recent_builds[0].actions[0].origin.y, 64);
         assert_eq!(context.recent_builds[0].actions[0].origin.z, 40);
+    }
+
+    #[tokio::test]
+    async fn context_bundle_bounds_large_blueprint_and_build_block_samples() {
+        let blueprints = empty_store("bounded-context-blueprints").await;
+        let blueprint_block_count = CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT + 9;
+        let mut blueprint = test_blueprint("large-stored-wall", vec!["wall"]);
+        blueprint.blocks = test_blocks(blueprint_block_count, "minecraft:red_concrete");
+        blueprint.materials = vec![MaterialCount {
+            material: "minecraft:red_concrete".to_string(),
+            count: blueprint_block_count as u32,
+        }];
+        blueprints.save(blueprint).await.unwrap();
+
+        let builds = BuildStore::new(temp_dir("bounded-context-builds"))
+            .await
+            .unwrap();
+        let build_block_count = CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT + 11;
+        let build_blocks = test_blocks(build_block_count, "minecraft:red_wool");
+        builds
+            .register_planned(
+                "job-large-red-wall".to_string(),
+                "local".to_string(),
+                Some("Steve".to_string()),
+                "大面积红色墙体".to_string(),
+                &[GameAction::PlaceBlocks {
+                    blueprint_id: Some("large-stored-wall".to_string()),
+                    origin: BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x: 10,
+                        y: 64,
+                        z: 10,
+                    },
+                    blocks: build_blocks,
+                    clear_existing: false,
+                }],
+            )
+            .await
+            .unwrap();
+
+        let input = PlannerInput {
+            text: "复用之前的大面积红色墙体蓝图，把刚才的墙体改一下".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
+
+        let blueprint_context = &context.available_blueprints[0];
+        assert_eq!(blueprint_context.block_count, blueprint_block_count);
+        assert_eq!(
+            blueprint_context.block_sample_limit,
+            CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT
+        );
+        assert!(blueprint_context.block_sample_truncated);
+        assert_eq!(
+            blueprint_context.block_sample.len(),
+            CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT
+        );
+        assert_eq!(
+            blueprint_context.block_sample[0].material,
+            "minecraft:red_concrete"
+        );
+
+        let action_context = &context.recent_builds[0].actions[0];
+        assert_eq!(action_context.expected_count, build_block_count as u32);
+        assert_eq!(
+            action_context.block_sample_limit,
+            CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT
+        );
+        assert!(action_context.block_sample_truncated);
+        assert_eq!(
+            action_context.block_sample.len(),
+            CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT
+        );
+        assert_eq!(
+            action_context.block_sample[0].material,
+            "minecraft:red_wool"
+        );
     }
 
     #[tokio::test]
