@@ -155,6 +155,7 @@ case "$schema" in
   "reply": "可以，已经准备给你一把钻石剑。",
   "summary": "发放钻石剑",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type": "give_item", "player": "Steve", "item": "minecraft:diamond_sword", "count": 1}
   ]
@@ -162,7 +163,7 @@ case "$schema" in
 JSON
     elif grep -q "先聊一下" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
-{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？我确认后再开始动工。","summary":"讨论建造方案","blueprint":null,"actions":[]}
+{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？我确认后再开始动工。","summary":"讨论建造方案","blueprint":null,"site_plan":null,"actions":[]}
 JSON
     elif grep -q "窗户换成蓝色玻璃" "$prompt_file" && grep -q "未收到附近场地扫描" "$prompt_file"; then
       if grep -q "window.png" "$prompt_file"; then
@@ -171,6 +172,7 @@ JSON
   "reply": "我会基于当前建筑把窗户改成蓝色玻璃，并按你的整体要求继续优化。",
   "summary": "改造窗户颜色",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {
       "type": "scan_nearby_and_plan",
@@ -190,11 +192,11 @@ JSON
       else
         if grep -q "更大更复杂" "$prompt_file"; then
           cat > "$last_message" <<'JSON'
-{"reply":"我会基于当前建筑把窗户改成蓝色玻璃，并继续做得更大更复杂。","summary":"改造窗户颜色","blueprint":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我面前这个建筑的窗户换成蓝色玻璃，还要更大更复杂","attachments":[]}]}
+{"reply":"我会基于当前建筑把窗户改成蓝色玻璃，并继续做得更大更复杂。","summary":"改造窗户颜色","blueprint":null,"site_plan":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我面前这个建筑的窗户换成蓝色玻璃，还要更大更复杂","attachments":[]}]}
 JSON
         else
           cat > "$last_message" <<'JSON'
-{"reply":"我会基于当前建筑把窗户改成蓝色玻璃。","summary":"改造窗户颜色","blueprint":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我脚下这个建筑的窗户换成蓝色玻璃","attachments":[]}]}
+{"reply":"我会基于当前建筑把窗户改成蓝色玻璃。","summary":"改造窗户颜色","blueprint":null,"site_plan":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我脚下这个建筑的窗户换成蓝色玻璃","attachments":[]}]}
 JSON
         fi
       fi
@@ -204,6 +206,7 @@ JSON
   "reply": "已按当前建筑自由调整窗户颜色。",
   "summary": "调整现有建筑窗户",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {
       "type": "place_blocks",
@@ -226,6 +229,7 @@ JSON
   "reply": "已按当前匹配到的摩天轮整体重做，会先清理旧结构，再放置新的逼真摩天轮。",
   "summary": "整体重做逼真摩天轮",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {
       "type": "place_blocks",
@@ -275,6 +279,7 @@ JSON
     ],
     "tags": ["house"]
   },
+  "site_plan": null,
   "actions": []
 }
 JSON

@@ -13,13 +13,14 @@ Use this skill for image-based building requests.
 2. Map image materials to common vanilla Minecraft blocks.
 3. Simplify fine visual details into block-level structure.
 4. Generate a blueprint with relative coordinates.
-5. Keep the build small enough for local-world execution unless the player asks for a large project.
+5. Choose the scale based on the image, user text, and site data. Keep it small enough for local-world execution by default, but use up to 5000 blocks when the player asks for a large or detailed recreation.
 6. Ensure `materials` matches `blocks`.
 7. Preserve Minecraft playability when the image looks like a usable building: entrance, interior headroom, bed or core furniture, lighting, windows, and a reachable path.
 8. Use explicit block states for special blocks. Leaves should use `persistent=true`; doors and beds should include their upper/lower or head/foot states.
 9. Convert the image into an origin-safe blueprint: the lowest normal floor/foundation should start at relative `y=0`, so Blockwright can place it on a real ground surface.
 10. If the image shows a floating or cliffside structure, include a believable support/access path instead of leaving the room unreachable.
 11. When the provided site is irregular, adapt the image-inspired build to the player-facing terrain with a deck, terrace, piles, stairs, or base rather than refusing the request.
+12. If site data is present, output `site_plan` to capture the intended placement, support, clearing, and terrain integration for the image-inspired build.
 
 ## Limits
 

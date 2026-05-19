@@ -19,6 +19,7 @@ Use this skill for every Blockwright action that creates or changes blocks.
 8. If verification reports missing, mismatched blocks, or mismatched required block states, the build record must be treated as failed or needing repair.
 9. The selected origin is the first air layer above the site surface. A normal blueprint should therefore have its lowest build layer at relative `y=0`.
 10. Verification should catch both wrong block IDs and wrong required block states.
+11. If a `site_plan` is present, its helper blocks are explicit planned actions too. They should be consistent with the saved blueprint's intended placement and should not create a second hidden build representation.
 
 ## Model Behavior
 

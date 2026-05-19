@@ -235,7 +235,7 @@ async fn assistant_message(state: &AppState, arguments: Value) -> Result<Value, 
 
     let plan = state
         .planner
-        .plan(
+        .plan_with_context_stores(
             PlannerInput {
                 text,
                 player: target_player.clone(),
@@ -246,6 +246,7 @@ async fn assistant_message(state: &AppState, arguments: Value) -> Result<Value, 
                 progress_id: None,
             },
             &state.blueprints,
+            Some(&state.builds),
         )
         .await;
 

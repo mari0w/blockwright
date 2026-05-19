@@ -87,7 +87,10 @@ async fn handle_message(
         attachments: request.attachments.clone(),
         progress_id: request.progress_id.clone(),
     };
-    let plan = state.planner.plan(planner_input, &state.blueprints).await;
+    let plan = state
+        .planner
+        .plan_with_context_stores(planner_input, &state.blueprints, Some(&state.builds))
+        .await;
 
     let job_id = if has_build_action(&plan.actions) {
         let job_id = state.jobs.reserve_job_id();

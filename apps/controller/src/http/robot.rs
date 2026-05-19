@@ -60,7 +60,7 @@ pub(crate) async fn queue_chat_message(
     let target_player = message.target_player.clone();
     let plan = state
         .planner
-        .plan(
+        .plan_with_context_stores(
             PlannerInput {
                 text: message.text,
                 player: target_player.clone(),
@@ -74,6 +74,7 @@ pub(crate) async fn queue_chat_message(
                 progress_id: None,
             },
             &state.blueprints,
+            Some(&state.builds),
         )
         .await;
 

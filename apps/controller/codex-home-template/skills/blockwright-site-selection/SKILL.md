@@ -10,7 +10,7 @@ Use this skill whenever a build or edit depends on the current Minecraft terrain
 ## Rules
 
 1. Treat scan data as the current known world state.
-2. Treat the scan center as the player's intended target. Prefer building at that target or a very small adjustment around it instead of relocating to an unrelated empty area.
+2. Treat the scan center as the player's intended target unless the wider `context_bundle` gives a better reason. Prefer building at that target or a nearby intentional composition instead of relocating to an unrelated empty area.
 3. If the requested area has soft blockers such as grass, flowers, snow, mushrooms, or vines, allow clearing them.
 4. If every suitable location has hard blockers, assume Blockwright may clear the target volume and continue.
 5. Do not refuse the build just because blocks exist in the target area.
@@ -19,24 +19,29 @@ Use this skill whenever a build or edit depends on the current Minecraft terrain
 8. Prefer flat or near-flat footprints. A large build should not rest on one block while the rest hangs in air.
 9. Avoid using water, lava, fire, leaves, vines, flowers, tall grass, snow layers, cactus, bamboo, crops, chests, beds, doors, or other fragile/interactive blocks as the supporting surface.
 10. If the target surface is not suitable, integrate it into the design: add a deck, stone-brick base, wooden piles, terrace, retaining wall, stairs, bridge, or similar tasteful preparation instead of bluntly rejecting or moving far away.
-11. Keep the entrance reachable from the player's side when the scan/player direction makes that clear.
-12. For bridges, docks, treehouses, and other special builds, the structure may span air or water, but the player-facing access point still needs a grounded or otherwise reachable start.
-13. Unsuitable terrain is not a reason to reject the request. First adapt the intended target; only relocate within a small nearby range when the target is blocked in a way that would clearly damage or contradict the request.
+11. Express your placement decision in `site_plan`: `origin` is the desired world origin, `pre_clear_blocks` are relative air blocks for intentional clearing, `pre_foundation_blocks` are relative support/base blocks, and `rationale` explains the design choice.
+12. Keep the entrance reachable from the player's side when the scan/player direction makes that clear.
+13. For bridges, docks, treehouses, and other special builds, the structure may span air or water, but the player-facing access point still needs a grounded or otherwise reachable start.
+14. Unsuitable terrain is not a reason to reject the request. First adapt the intended target; only relocate nearby when the target is blocked in a way that would clearly damage or contradict the request.
+15. For building or edit requests that reference an existing object, inspect the nearest candidate to the player first. Use farther candidates only when the nearest one clearly does not match the requested type or context.
+16. If multiple nearby candidates could reasonably match, or the nearest candidate is uncertain, do not place blocks. Ask a concise confirmation question in `reply` with `blueprint=null`, `site_plan=null`, and `actions=[]`.
 
 ## Player Intent
 
 When the player says to build something, prioritize completing the build. Ask a clarifying question only when the requested target is ambiguous enough that a wrong build would be likely.
 
+For vague target wording, ambiguity is decided around the nearest candidate first. Do not silently choose a farther build because it is easier to match or has cleaner data.
+
 ## Practical Placement Preference
 
-Score candidate sites in this order:
+When comparing candidate sites, consider:
 
-1. Lowest hard-block collision count.
-2. Lowest total clearing amount.
-3. Closest point to the scan center/player target.
-4. Flattest existing ground.
-5. Known safe support under the footprint.
-6. Lowest amount of site preparation.
+1. Whether the location serves the player's intent and visual composition.
+2. Whether access and entrance direction make sense.
+3. Hard-block collision count and clearing amount.
+4. Distance from the scan center/player target.
+5. Ground support, slope, water, and other terrain integration opportunities.
+6. Amount and aesthetics of site preparation.
 
 If no candidate is perfect, choose the least disruptive workable site around the intended target and make it usable. Prefer a small, good-looking terrain adjustment over telling the player the build cannot be placed.
 

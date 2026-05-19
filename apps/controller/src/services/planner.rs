@@ -1,15 +1,18 @@
 use crate::{
     domain::types::{
-        BlockOrigin, Blueprint, ChatAttachment, GameAction, PlayerPosition, WorldScan,
+        BlockOrigin, Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, GameAction,
+        MaterialCount, PlayerPosition, WorldScan, WorldScanBlock,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
-    services::blueprint_store::BlueprintStore,
+    services::{blueprint_store::BlueprintStore, build_store::BuildStore},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 const PLAYER_SAFETY_RADIUS: i32 = 1;
 const PLAYER_SAFETY_HEIGHT_BLOCKS: i32 = 3;
+const CONTEXT_BLUEPRINT_LIMIT: usize = 24;
+const CONTEXT_BUILD_LIMIT: usize = 12;
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
@@ -33,10 +36,103 @@ pub struct PlanResult {
 struct CodexPlan {
     reply: String,
     summary: String,
-    #[serde(default)]
     blueprint: Option<Blueprint>,
-    #[serde(default)]
+    site_plan: Option<CodexSitePlan>,
     actions: Vec<GameAction>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+struct CodexSitePlan {
+    origin: Option<BlockOrigin>,
+    clear_existing: Option<bool>,
+    pre_clear_blocks: Vec<BlueprintBlock>,
+    pre_foundation_blocks: Vec<BlueprintBlock>,
+    rationale: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PlanContextBundle {
+    player: Option<String>,
+    user_text: String,
+    attachments: Vec<ChatAttachment>,
+    position: Option<PlayerPosition>,
+    site: SiteContextBundle,
+    available_blueprints: Vec<BlueprintContext>,
+    recent_builds: Vec<BuildRecordContext>,
+    protocol: PlanProtocolContext,
+}
+
+#[derive(Debug, Serialize)]
+struct SiteContextBundle {
+    summary: String,
+    nearby_scan: Option<WorldScan>,
+    scan_analysis: Option<ScanAnalysis>,
+}
+
+#[derive(Debug, Serialize)]
+struct ScanAnalysis {
+    bounds: ScanBounds,
+    top_materials: Vec<MaterialCount>,
+    columns: Vec<ScanColumn>,
+}
+
+#[derive(Debug, Serialize)]
+struct ScanBounds {
+    min_x: i32,
+    max_x: i32,
+    min_y: i32,
+    max_y: i32,
+    min_z: i32,
+    max_z: i32,
+}
+
+#[derive(Debug, Serialize)]
+struct ScanColumn {
+    x: i32,
+    z: i32,
+    highest_support_y: Option<i32>,
+    support_material: Option<String>,
+    non_air_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct BlueprintContext {
+    id: String,
+    name: String,
+    description: String,
+    size: BlueprintSize,
+    tags: Vec<String>,
+    block_count: usize,
+    materials: Vec<MaterialCount>,
+    blocks: Vec<BlueprintBlock>,
+}
+
+#[derive(Debug, Serialize)]
+struct BuildRecordContext {
+    id: String,
+    server_id: String,
+    target_player: Option<String>,
+    summary: String,
+    status: String,
+    actions: Vec<BuildActionContext>,
+}
+
+#[derive(Debug, Serialize)]
+struct BuildActionContext {
+    blueprint_id: Option<String>,
+    origin: BlockOrigin,
+    expected_count: u32,
+    materials: Vec<MaterialCount>,
+    blocks: Vec<BlueprintBlock>,
+}
+
+#[derive(Debug, Serialize)]
+struct PlanProtocolContext {
+    output_contract: &'static str,
+    controller_role: &'static str,
+    safety_boundary: &'static str,
+    available_skills: [&'static str; 6],
+    available_actions: [&'static str; 5],
 }
 
 #[derive(Clone, Default)]
@@ -50,6 +146,15 @@ impl Planner {
     }
 
     pub async fn plan(&self, input: PlannerInput, blueprints: &BlueprintStore) -> PlanResult {
+        self.plan_with_context_stores(input, blueprints, None).await
+    }
+
+    pub async fn plan_with_context_stores(
+        &self,
+        input: PlannerInput,
+        blueprints: &BlueprintStore,
+        builds: Option<&BuildStore>,
+    ) -> PlanResult {
         if !self.codex_enabled() {
             return PlanResult {
                 reply: "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。".to_string(),
@@ -58,7 +163,7 @@ impl Planner {
             };
         }
 
-        if let Some(result) = self.try_codex_plan(&input, blueprints).await {
+        if let Some(result) = self.try_codex_plan(&input, blueprints, builds).await {
             return result;
         }
 
@@ -81,6 +186,7 @@ impl Planner {
         &self,
         input: &PlannerInput,
         blueprints: &BlueprintStore,
+        builds: Option<&BuildStore>,
     ) -> Option<PlanResult> {
         let codex = self.codex.as_ref()?;
         if !codex.enabled() {
@@ -98,7 +204,8 @@ impl Planner {
             "starting codex unified planner"
         );
 
-        let prompt = build_plan_prompt(input);
+        let context = build_context_bundle(input, blueprints, builds).await;
+        let prompt = render_plan_prompt(&context);
         let output = match codex
             .ask_with_schema_and_progress(
                 &prompt,
@@ -132,7 +239,7 @@ impl Planner {
 
         if let Some(blueprint) = plan.blueprint {
             let (blueprint_actions, placement_note) = self
-                .actions_for_blueprint(input, blueprints, blueprint)
+                .actions_for_blueprint(input, blueprints, blueprint, plan.site_plan.as_ref())
                 .await?;
             reply = append_placement_note(reply, &placement_note);
             actions.extend(blueprint_actions);
@@ -158,6 +265,7 @@ impl Planner {
         input: &PlannerInput,
         blueprints: &BlueprintStore,
         blueprint: Blueprint,
+        site_plan: Option<&CodexSitePlan>,
     ) -> Option<(Vec<GameAction>, String)> {
         tracing::info!(
             blueprint_id = %blueprint.id,
@@ -171,7 +279,7 @@ impl Planner {
             pre_foundation_blocks,
             pre_clear_blocks,
             note,
-        } = assess_placement(input, &blueprint);
+        } = placement_decision(input, &blueprint, site_plan);
         tracing::info!(
             blueprint_id = %blueprint.id,
             world = ?origin.world,
@@ -181,6 +289,7 @@ impl Planner {
             clear_existing,
             pre_foundation_count = pre_foundation_blocks.len(),
             pre_clear_count = pre_clear_blocks.len(),
+            model_site_plan = site_plan.is_some(),
             "codex blueprint placement assessed"
         );
         let placement = (
@@ -283,6 +392,76 @@ enum PlacementDecision {
         pre_clear_blocks: Vec<crate::domain::types::BlueprintBlock>,
         note: String,
     },
+}
+
+fn placement_decision(
+    input: &PlannerInput,
+    blueprint: &Blueprint,
+    site_plan: Option<&CodexSitePlan>,
+) -> PlacementDecision {
+    let Some(site_plan) = site_plan else {
+        return assess_placement(input, blueprint);
+    };
+    if site_plan.origin.is_none()
+        && site_plan.clear_existing.is_none()
+        && site_plan.pre_clear_blocks.is_empty()
+        && site_plan.pre_foundation_blocks.is_empty()
+        && site_plan
+            .rationale
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+    {
+        return assess_placement(input, blueprint);
+    }
+    placement_from_model_site_plan(input, blueprint, site_plan)
+}
+
+fn placement_from_model_site_plan(
+    input: &PlannerInput,
+    blueprint: &Blueprint,
+    site_plan: &CodexSitePlan,
+) -> PlacementDecision {
+    let bounds = blueprint_bounds(&blueprint.blocks);
+    let mut origin = site_plan
+        .origin
+        .clone()
+        .unwrap_or_else(|| placement_origin(input, bounds.as_ref()));
+    let mut note_parts = Vec::new();
+    if let Some(rationale) = site_plan
+        .rationale
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        note_parts.push(format!("已按模型 site_plan：{rationale}，"));
+    } else {
+        note_parts.push("已按模型 site_plan 选择落点和场地处理，".to_string());
+    }
+
+    if player_safety_overlap_count(input, &origin, bounds.as_ref()) > 0 {
+        origin = safe_origin_for_player(input, bounds.as_ref()).unwrap_or(origin);
+        note_parts.push("原落点靠近玩家身体，已按安全边界调整，".to_string());
+    }
+
+    let pre_foundation_blocks =
+        filter_blocks_outside_player_safety(input, &origin, &site_plan.pre_foundation_blocks);
+    let pre_clear_blocks =
+        filter_blocks_outside_player_safety(input, &origin, &site_plan.pre_clear_blocks);
+    if pre_foundation_blocks.len() != site_plan.pre_foundation_blocks.len()
+        || pre_clear_blocks.len() != site_plan.pre_clear_blocks.len()
+    {
+        note_parts.push("已移除玩家安全区内的场地辅助方块，".to_string());
+    }
+
+    PlacementDecision::Ready {
+        origin,
+        clear_existing: site_plan.clear_existing.unwrap_or(false),
+        pre_foundation_blocks,
+        pre_clear_blocks,
+        note: note_parts.join(""),
+    }
 }
 
 fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDecision {
@@ -878,6 +1057,63 @@ fn player_safety_overlap_count_for_position(
         * (overlap_max_z - overlap_min_z + 1)) as usize
 }
 
+fn filter_blocks_outside_player_safety(
+    input: &PlannerInput,
+    origin: &BlockOrigin,
+    blocks: &[BlueprintBlock],
+) -> Vec<BlueprintBlock> {
+    let Some(position) = input.position.as_ref() else {
+        return blocks.to_vec();
+    };
+    if let Some(world) = origin.world.as_deref() {
+        if world != position.world {
+            return blocks.to_vec();
+        }
+    }
+    blocks
+        .iter()
+        .filter(|block| {
+            !is_world_block_inside_player_safety(
+                origin.x + block.x,
+                origin.y + block.y,
+                origin.z + block.z,
+                position,
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+fn is_world_block_inside_player_safety(
+    target_x: i32,
+    target_y: i32,
+    target_z: i32,
+    position: &PlayerPosition,
+) -> bool {
+    is_within_player_safety_zone(
+        target_x,
+        target_y,
+        target_z,
+        position.x.floor() as i32,
+        position.y.floor() as i32,
+        position.z.floor() as i32,
+    )
+}
+
+fn is_within_player_safety_zone(
+    target_x: i32,
+    target_y: i32,
+    target_z: i32,
+    player_x: i32,
+    player_y: i32,
+    player_z: i32,
+) -> bool {
+    (target_x - player_x).abs() <= PLAYER_SAFETY_RADIUS
+        && target_y >= player_y
+        && target_y < player_y + PLAYER_SAFETY_HEIGHT_BLOCKS
+        && (target_z - player_z).abs() <= PLAYER_SAFETY_RADIUS
+}
+
 fn forward_preference_score(
     input: &PlannerInput,
     scan: &WorldScan,
@@ -1009,6 +1245,14 @@ fn origin_in_front_of_player(
     origin
 }
 
+fn safe_origin_for_player(
+    input: &PlannerInput,
+    bounds: Option<&BlueprintBounds>,
+) -> Option<BlockOrigin> {
+    let position = input.position.as_ref()?;
+    Some(origin_in_front_of_player(position, bounds))
+}
+
 fn player_forward_step(position: &PlayerPosition) -> (i32, i32) {
     if let Some(yaw) = position.yaw {
         let radians = yaw.to_radians();
@@ -1022,47 +1266,143 @@ fn player_forward_step(position: &PlayerPosition) -> (i32, i32) {
     (1, 1)
 }
 
-fn build_plan_prompt(input: &PlannerInput) -> String {
-    let attachments =
-        serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
-    let site_context = build_site_context(input);
+async fn build_context_bundle(
+    input: &PlannerInput,
+    blueprints: &BlueprintStore,
+    builds: Option<&BuildStore>,
+) -> PlanContextBundle {
+    PlanContextBundle {
+        player: input.player.clone(),
+        user_text: input.text.trim().to_string(),
+        attachments: input.attachments.clone(),
+        position: input.position.clone(),
+        site: build_site_context(input),
+        available_blueprints: blueprint_contexts(blueprints).await,
+        recent_builds: build_contexts(builds, input.player.as_deref()).await,
+        protocol: PlanProtocolContext {
+            output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
+            controller_role: "controller 提供 context_bundle、保存蓝图、登记构建记录、校验协议和执行安全边界；具体工作流和方案由模型结合 skills 自主决定。",
+            safety_boundary: "执行端仍会拦截危险命令、玩家安全区内放置、超出上限的方块和放置后校验不一致。",
+            available_skills: [
+                "blockwright-build-planning",
+                "blockwright-site-selection",
+                "blockwright-blueprint-verification",
+                "blockwright-existing-build-edit",
+                "blockwright-image-to-blueprint",
+                "blockwright-command-actions",
+            ],
+            available_actions: [
+                "give_item",
+                "place_blocks",
+                "run_command",
+                "chat",
+                "scan_nearby_and_plan",
+            ],
+        },
+    }
+}
+
+async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext> {
+    blueprints
+        .list()
+        .await
+        .into_iter()
+        .take(CONTEXT_BLUEPRINT_LIMIT)
+        .map(|blueprint| BlueprintContext {
+            id: blueprint.id,
+            name: blueprint.name,
+            description: blueprint.description,
+            size: blueprint.size,
+            tags: blueprint.tags,
+            block_count: blueprint.blocks.len(),
+            materials: blueprint.materials,
+            blocks: blueprint.blocks,
+        })
+        .collect()
+}
+
+async fn build_contexts(
+    builds: Option<&BuildStore>,
+    player: Option<&str>,
+) -> Vec<BuildRecordContext> {
+    let Some(builds) = builds else {
+        return Vec::new();
+    };
+    let mut records = builds.list().await;
+    records.reverse();
+    records
+        .into_iter()
+        .filter(|record| {
+            player.is_none()
+                || record.target_player.as_deref().is_none()
+                || record.target_player.as_deref() == player
+        })
+        .take(CONTEXT_BUILD_LIMIT)
+        .map(|record| BuildRecordContext {
+            id: record.id,
+            server_id: record.server_id,
+            target_player: record.target_player,
+            summary: record.summary,
+            status: format!("{:?}", record.status).to_lowercase(),
+            actions: record
+                .expected_actions
+                .into_iter()
+                .map(|action| BuildActionContext {
+                    blueprint_id: action.blueprint_id,
+                    origin: action.origin,
+                    expected_count: action.expected_count,
+                    materials: action.materials,
+                    blocks: action.blocks,
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn render_plan_prompt(context: &PlanContextBundle) -> String {
+    let context_json = serde_json::to_string_pretty(context).unwrap_or_else(|_| "{}".to_string());
     format!(
-        r#"你是 Blockwright 的 Minecraft AI 助手。流程由你和可用 skills 决定，外层服务只负责协议校验和安全边界，不做关键词识别，也不替你选择工作流。
+        r#"你是 Blockwright 的 Minecraft AI 助手。你负责理解玩家意图、选择工作流、设计蓝图或动作，并根据可用 skills 自主决定怎么完成。
 
-输出协议：
-- 只返回一个 JSON 对象，字段为 reply、summary、blueprint、actions。
-- reply 给普通玩家看，必须自然、简短、好懂；不要暴露 JSON、schema、队列、内部服务名、planner、Codex 错误等技术细节。
-- summary 是中文短摘要。
-- 只聊天、追问、解释方案时：blueprint=null，actions=[]。
-- 新建建筑、模型或场景时：调用并遵循 blockwright-build-planning skill，把结果放到 blueprint，actions=[]；Blockwright 会保存蓝图、选择落点并生成 Minecraft 放置动作。
-- 需要先让 Minecraft 扫描现场时：blueprint=null，actions 输出 scan_nearby_and_plan，并把用户文字和附件带回去。
-- 已经有足够世界坐标、方块清单或现场扫描时，可以直接在 actions 输出 place_blocks、give_item、run_command 或 chat。
-- 建筑改造、整体重做、按图片调整、补细节等调用并遵循 blockwright-existing-build-edit skill；新建建筑调用 blockwright-build-planning skill。如果你无法确定目标或做法，就先在 reply 里追问，不要硬下动作。
-- Minecraft 方块 material 使用命名空间 ID，可携带方块状态；蓝图 blocks 用相对坐标。
-- run_command 不带开头的 `/`，只做小范围、明确、安全的操作。
+controller 的角色只是提供基础数据源、保存蓝图、校验协议和执行安全边界；不要把它当成会替你做规划判断的规则引擎。建筑规范、场地策略、图片复刻、改造和安全命令规则都优先按可用 skills 执行。
 
-玩家名：
-{player}
+输出协议很薄：
+- 只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。
+- reply 给玩家看，保持自然、简洁，不暴露 JSON、schema、planner、Codex、队列等内部细节。
+- 如果只是聊天、解释或需要追问，blueprint=null，site_plan=null，actions=[]。
+- 如果输出 blueprint，尽量同时输出 site_plan 来表达你选择的落点、清理、地基或场地融合意图；如果暂时缺少坐标，可以让 site_plan.origin=null。
+- 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan。
+- Minecraft 方块 material 使用命名空间 ID，可带方块状态；蓝图 blocks 使用相对坐标。
 
-用户文字：
-{text}
+context_bundle 是本轮可用的数据源：
+{context_json}
 
-场地摘要：
-{site_context}
-
-附件元数据：
-{attachments}
 "#,
-        player = input.player.as_deref().unwrap_or("unknown"),
-        text = input.text.trim(),
-        site_context = site_context,
-        attachments = attachments
+        context_json = context_json
     )
 }
 
-fn build_site_context(input: &PlannerInput) -> String {
+fn build_site_context(input: &PlannerInput) -> SiteContextBundle {
     let Some(scan) = input.nearby_scan.as_ref() else {
-        return "未收到附近场地扫描；只能按玩家位置估算地面和落点。".to_string();
+        return SiteContextBundle {
+            summary: "未收到附近场地扫描；如需要现场信息，可以请求 scan_nearby_and_plan。"
+                .to_string(),
+            nearby_scan: None,
+            scan_analysis: None,
+        };
+    };
+    let top_materials = scan_top_materials(&scan.blocks, 16);
+    let analysis = ScanAnalysis {
+        bounds: scan_bounds(&scan.blocks).unwrap_or(ScanBounds {
+            min_x: scan.center_x,
+            max_x: scan.center_x,
+            min_y: scan.center_y,
+            max_y: scan.center_y,
+            min_z: scan.center_z,
+            max_z: scan.center_z,
+        }),
+        top_materials,
+        columns: scan_columns(input, scan),
     };
     let max_ground_y = input
         .position
@@ -1075,41 +1415,144 @@ fn build_site_context(input: &PlannerInput) -> String {
         .filter(|block| block.y <= max_ground_y)
         .map(|block| block.y)
         .max();
-    let mut material_counts = HashMap::<String, u32>::new();
-    for block in &scan.blocks {
-        *material_counts.entry(block.material.clone()).or_default() += 1;
-    }
-    let mut materials = material_counts.into_iter().collect::<Vec<_>>();
-    materials.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
-    let material_summary = materials
-        .into_iter()
-        .take(6)
-        .map(|(material, count)| format!("{material} x{count}"))
+    let material_summary = analysis
+        .top_materials
+        .iter()
+        .take(8)
+        .map(|item| format!("{} x{}", item.material, item.count))
         .collect::<Vec<_>>()
         .join("、");
 
-    format!(
-        "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。落点原则：扫描中心是玩家面前目标点，优先在这里或小范围内创建；地形不理想时做美观的场地融合、支撑、台阶或平台，入口要保留可达路径。",
-        scan.world,
-        scan.center_x,
-        scan.center_y,
-        scan.center_z,
-        scan.radius,
-        scan.blocks.len(),
-        ground_y
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| "未知".to_string()),
-        if material_summary.is_empty() {
-            "无".to_string()
-        } else {
-            material_summary
-        }
-    )
+    SiteContextBundle {
+        summary: format!(
+            "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。nearby_scan 保留了本轮扫描原始方块，scan_analysis 提供列级摘要，可由模型自主判断落点和场地处理。",
+            scan.world,
+            scan.center_x,
+            scan.center_y,
+            scan.center_z,
+            scan.radius,
+            scan.blocks.len(),
+            ground_y
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "未知".to_string()),
+            if material_summary.is_empty() {
+                "无".to_string()
+            } else {
+                material_summary
+            }
+        ),
+        nearby_scan: Some(scan.clone()),
+        scan_analysis: Some(analysis),
+    }
+}
+
+fn scan_bounds(blocks: &[WorldScanBlock]) -> Option<ScanBounds> {
+    let first = blocks.first()?;
+    let mut bounds = ScanBounds {
+        min_x: first.x,
+        max_x: first.x,
+        min_y: first.y,
+        max_y: first.y,
+        min_z: first.z,
+        max_z: first.z,
+    };
+    for block in blocks.iter().skip(1) {
+        bounds.min_x = bounds.min_x.min(block.x);
+        bounds.max_x = bounds.max_x.max(block.x);
+        bounds.min_y = bounds.min_y.min(block.y);
+        bounds.max_y = bounds.max_y.max(block.y);
+        bounds.min_z = bounds.min_z.min(block.z);
+        bounds.max_z = bounds.max_z.max(block.z);
+    }
+    Some(bounds)
+}
+
+fn scan_top_materials(blocks: &[WorldScanBlock], limit: usize) -> Vec<MaterialCount> {
+    let mut material_counts = HashMap::<String, u32>::new();
+    for block in blocks {
+        *material_counts.entry(block.material.clone()).or_default() += 1;
+    }
+    let mut materials = material_counts
+        .into_iter()
+        .map(|(material, count)| MaterialCount { material, count })
+        .collect::<Vec<_>>();
+    materials.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.material.cmp(&right.material))
+    });
+    materials.truncate(limit);
+    materials
+}
+
+fn scan_columns(input: &PlannerInput, scan: &WorldScan) -> Vec<ScanColumn> {
+    let max_ground_y = input
+        .position
+        .as_ref()
+        .map(|position| position.y.floor() as i32 - 1)
+        .unwrap_or(scan.center_y - 1);
+    let mut columns = HashMap::<(i32, i32), Vec<&WorldScanBlock>>::new();
+    for block in &scan.blocks {
+        columns.entry((block.x, block.z)).or_default().push(block);
+    }
+    let mut columns = columns
+        .into_iter()
+        .map(|((x, z), blocks)| {
+            let support = blocks
+                .iter()
+                .filter(|block| block.y <= max_ground_y)
+                .filter(|block| is_build_support_material(block.material.as_str()))
+                .max_by_key(|block| block.y);
+            ScanColumn {
+                x,
+                z,
+                highest_support_y: support.map(|block| block.y),
+                support_material: support.map(|block| block.material.clone()),
+                non_air_count: blocks.len(),
+            }
+        })
+        .collect::<Vec<_>>();
+    columns.sort_by(|left, right| left.x.cmp(&right.x).then_with(|| left.z.cmp(&right.z)));
+    columns
 }
 
 fn parse_plan_response(output: &str) -> Option<CodexPlan> {
     let json = extract_json_object(output.trim())?;
-    serde_json::from_str(json).ok()
+    let value = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    if !has_required_plan_protocol_fields(&value) {
+        return None;
+    }
+    serde_json::from_value(value).ok()
+}
+
+fn has_required_plan_protocol_fields(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    for field in ["reply", "summary", "blueprint", "site_plan", "actions"] {
+        if !object.contains_key(field) {
+            return false;
+        }
+    }
+    let Some(site_plan) = object.get("site_plan") else {
+        return false;
+    };
+    if site_plan.is_null() {
+        return true;
+    }
+    let Some(site_plan) = site_plan.as_object() else {
+        return false;
+    };
+    [
+        "origin",
+        "clear_existing",
+        "pre_clear_blocks",
+        "pre_foundation_blocks",
+        "rationale",
+    ]
+    .into_iter()
+    .all(|field| site_plan.contains_key(field))
 }
 
 fn append_placement_note(reply: String, placement_note: &str) -> String {
@@ -1245,6 +1688,7 @@ esac
             "reply": format!("我已经按你的要求规划好{}。", blueprint.name),
             "summary": format!("建造蓝图 {}", blueprint.id),
             "blueprint": blueprint_json,
+            "site_plan": null,
             "actions": []
         })
         .to_string()
@@ -1312,6 +1756,8 @@ esac
             r#"{
   "reply": "可以，已经准备给你一把钻石剑。",
   "summary": "发放钻石剑",
+  "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"give_item","player":"Steve","item":"minecraft:diamond_sword","count":1}
   ]
@@ -1351,6 +1797,8 @@ esac
             r#"{
   "reply": "可以，已经准备给你 64 个钻石。",
   "summary": "发放钻石",
+  "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"give_item","player":"Alex","item":"minecraft:diamond","count":64}
   ]
@@ -1389,6 +1837,8 @@ esac
             r#"{
   "reply": "可以，已经准备给你一把钻石镐。",
   "summary": "发放钻石镐",
+  "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"give_item","player":"Alex","item":"minecraft:diamond_pickaxe","count":1}
   ]
@@ -1474,7 +1924,7 @@ esac
         let store = empty_store("codex-chat-only").await;
         let planner = planner_with_fake_plan(
             "codex-chat-only",
-            r#"{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？","summary":"讨论建造方案","blueprint":null,"actions":[]}"#,
+            r#"{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？","summary":"讨论建造方案","blueprint":null,"site_plan":null,"actions":[]}"#,
         );
 
         let result = planner
@@ -1596,6 +2046,7 @@ esac
   "reply": "已按当前建筑自由改造。",
   "summary": "自由改造现有建筑",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {
       "type": "place_blocks",
@@ -2249,9 +2700,10 @@ esac
         assert_eq!(result.summary, "建造蓝图 image-inspired-house");
     }
 
-    #[test]
-    fn plan_prompt_keeps_workflow_in_codex_and_skills() {
-        let prompt = build_plan_prompt(&PlannerInput {
+    #[tokio::test]
+    async fn plan_prompt_uses_context_bundle_and_keeps_workflow_in_codex() {
+        let store = empty_store("prompt-context").await;
+        let input = PlannerInput {
             text: "照图片盖一个小塔".to_string(),
             player: None,
             codex_session_key: None,
@@ -2259,20 +2711,178 @@ esac
             nearby_scan: None,
             attachments: Vec::new(),
             progress_id: None,
-        });
+        };
+        let context = build_context_bundle(&input, &store, None).await;
+        let prompt = render_plan_prompt(&context);
 
-        assert!(prompt.contains("blockwright-build-planning skill"));
+        assert!(prompt.contains("context_bundle"));
+        assert!(prompt.contains("controller 的角色只是提供基础数据源"));
         assert!(prompt.contains("只返回一个 JSON 对象"));
-        assert!(prompt.contains("不做关键词识别"));
-        assert!(prompt.contains("流程由你和可用 skills 决定"));
-        assert!(prompt.contains("blockwright-existing-build-edit skill"));
-        assert!(prompt.contains("blueprint=null，actions=[]"));
+        assert!(prompt.contains("site_plan"));
+        assert!(prompt.contains("可用 skills 自主决定"));
+        assert!(prompt.contains("available_blueprints"));
+        assert!(prompt.contains("recent_builds"));
+        assert!(prompt.contains("blockwright-site-selection"));
         assert!(prompt.contains("scan_nearby_and_plan"));
-        assert!(prompt.contains("place_blocks"));
         assert!(prompt.contains("相对坐标"));
         assert!(prompt.contains("命名空间 ID"));
         assert!(prompt.contains("give_item"));
         assert!(prompt.contains("run_command"));
+        assert!(!prompt.contains("新建建筑、模型或场景时：调用并遵循"));
+    }
+
+    #[tokio::test]
+    async fn context_bundle_exposes_blueprint_and_build_blocks_as_data_sources() {
+        let blueprints = empty_store("context-data-sources").await;
+        blueprints
+            .save(test_blueprint("stored-cabin", vec!["house"]))
+            .await
+            .unwrap();
+        let builds = BuildStore::new(temp_dir("context-build-records"))
+            .await
+            .unwrap();
+        let planned_action = GameAction::PlaceBlocks {
+            blueprint_id: Some("stored-cabin".to_string()),
+            origin: BlockOrigin {
+                world: Some("minecraft:overworld".to_string()),
+                x: 30,
+                y: 64,
+                z: 40,
+            },
+            blocks: vec![BlueprintBlock {
+                x: 0,
+                y: 0,
+                z: 0,
+                material: "minecraft:oak_planks".to_string(),
+            }],
+            clear_existing: false,
+        };
+        builds
+            .register_planned(
+                "job-context-1".to_string(),
+                "local".to_string(),
+                Some("Steve".to_string()),
+                "测试建筑记录".to_string(),
+                &[planned_action],
+            )
+            .await
+            .unwrap();
+        let input = PlannerInput {
+            text: "把刚才的小屋窗户改大一点".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
+
+        assert_eq!(context.available_blueprints.len(), 1);
+        assert_eq!(context.available_blueprints[0].id, "stored-cabin");
+        assert_eq!(context.available_blueprints[0].blocks.len(), 1);
+        assert_eq!(context.recent_builds.len(), 1);
+        assert_eq!(context.recent_builds[0].id, "job-context-1");
+        assert_eq!(context.recent_builds[0].actions[0].blocks.len(), 1);
+        assert_eq!(
+            context.recent_builds[0].actions[0].origin.world.as_deref(),
+            Some("minecraft:overworld")
+        );
+        assert_eq!(context.recent_builds[0].actions[0].origin.x, 30);
+        assert_eq!(context.recent_builds[0].actions[0].origin.y, 64);
+        assert_eq!(context.recent_builds[0].actions[0].origin.z, 40);
+    }
+
+    #[tokio::test]
+    async fn codex_site_plan_controls_origin_clearing_and_foundation() {
+        let store = empty_store("codex-site-plan").await;
+        let planner = planner_with_fake_plan(
+            "codex-site-plan",
+            r#"{
+  "reply": "我按湖边做一个带基座的小平台。",
+  "summary": "建造蓝图 model-site-platform",
+  "blueprint": {
+    "id": "model-site-platform",
+    "name": "模型选址平台",
+    "description": "测试模型输出 site_plan 控制落点和场地辅助块。",
+    "size": {"width": 1, "height": 1, "depth": 1},
+    "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+    "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+    "tags": ["platform"]
+  },
+  "site_plan": {
+    "origin": {"world": "minecraft:overworld", "x": 100, "y": 70, "z": 200},
+    "clear_existing": true,
+    "pre_clear_blocks": [{"x": 1, "y": 0, "z": 0, "material": "minecraft:air"}],
+    "pre_foundation_blocks": [{"x": 0, "y": -1, "z": 0, "material": "minecraft:stone_bricks"}],
+    "rationale": "贴着湖边但入口朝玩家"
+  },
+  "actions": []
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "在湖边做一个平台".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: Some(scan_with_blocks(vec![scan_block(
+                        20,
+                        63,
+                        30,
+                        "minecraft:grass_block",
+                    )])),
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 model-site-platform");
+        assert!(result.reply.contains("贴着湖边但入口朝玩家"));
+        assert_eq!(result.actions.len(), 3);
+        assert!(matches!(
+            &result.actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin {
+                    world: Some(world),
+                    x: 100,
+                    y: 70,
+                    z: 200,
+                },
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "model-site-platform:site-foundation"
+                && world == "minecraft:overworld"
+                && blocks.len() == 1
+                && blocks[0].material == "minecraft:stone_bricks"
+        ));
+        assert!(matches!(
+            &result.actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin { x: 100, y: 70, z: 200, .. },
+                blocks,
+                clear_existing: true,
+            } if blueprint_id == "model-site-platform:site-clear"
+                && blocks.len() == 1
+                && blocks[0].material == "minecraft:air"
+        ));
+        assert!(matches!(
+            &result.actions[2],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(blueprint_id),
+                origin: BlockOrigin { x: 100, y: 70, z: 200, .. },
+                clear_existing: true,
+                ..
+            } if blueprint_id == "model-site-platform"
+        ));
+        assert!(store.get("model-site-platform").await.is_some());
     }
 
     #[test]
@@ -2281,6 +2891,7 @@ esac
   "reply": "可以，已经准备给你一把钻石镐。",
   "summary": "发放钻石镐",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}
   ]
@@ -2301,11 +2912,25 @@ esac
     }
 
     #[test]
+    fn rejects_codex_plan_missing_required_protocol_fields() {
+        let output = r#"{
+  "reply": "可以，已经准备给你一把钻石镐。",
+  "summary": "发放钻石镐",
+  "actions": [
+    {"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}
+  ]
+}"#;
+
+        assert!(parse_plan_response(output).is_none());
+    }
+
+    #[test]
     fn parses_codex_plan_for_minecraft_command() {
         let output = r#"{
   "reply": "可以，已经切到白天。",
   "summary": "设置为白天",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"run_command","command":"time set day"}
   ]
@@ -2326,6 +2951,7 @@ esac
   "reply": "我先看一下你面前的场地，再继续处理。",
   "summary": "扫描现场",
   "blueprint": null,
+  "site_plan": null,
   "actions": [
     {"type":"scan_nearby_and_plan","text":"把我面前这个建筑的窗户换成蓝色玻璃","attachments":[]}
   ]
@@ -2356,6 +2982,7 @@ esac
     "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:stone"}],
     "tags": ["tower"]
   },
+  "site_plan": null,
   "actions": []
 }
 ```"#;

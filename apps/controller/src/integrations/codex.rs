@@ -745,7 +745,7 @@ fi
 thread_id="${{resume_thread:-thread-a}}"
 printf '{{"type":"thread.started","thread_id":"%s"}}\n' "$thread_id"
 cat > "$last_message" <<'BLOCKWRIGHT_JSON'
-{{"reply":"好","summary":"测试","actions":[{{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"好"}}]}}
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
 BLOCKWRIGHT_JSON
 "#,
                 args_log.display()
@@ -809,7 +809,7 @@ done
 cat >/dev/null
 printf '{{"type":"thread.started","thread_id":"thread-home"}}\n'
 cat > "$last_message" <<'BLOCKWRIGHT_JSON'
-{{"reply":"好","summary":"测试","actions":[{{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"好"}}]}}
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
 BLOCKWRIGHT_JSON
 "#,
                 env_log.display()
@@ -860,6 +860,34 @@ BLOCKWRIGHT_JSON
     #[test]
     fn response_schema_files_are_packaged_with_controller_source() {
         assert!(CodexResponseSchema::Plan.path().exists());
+    }
+
+    #[test]
+    fn plan_response_schema_exposes_site_plan_and_expanded_blueprint_limits() {
+        let schema =
+            fs::read_to_string(CodexResponseSchema::Plan.path()).expect("schema should read");
+        let schema: Value = serde_json::from_str(&schema).expect("schema should be valid json");
+        let required = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .expect("top-level required fields should be listed");
+
+        assert!(required
+            .iter()
+            .any(|value| value.as_str() == Some("site_plan")));
+        assert!(schema.pointer("/$defs/sitePlan").is_some());
+        assert_eq!(
+            schema
+                .pointer("/$defs/blueprint/properties/blocks/maxItems")
+                .and_then(Value::as_u64),
+            Some(5000)
+        );
+        assert_eq!(
+            schema
+                .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
+                .and_then(Value::as_u64),
+            Some(5000)
+        );
     }
 
     #[test]
