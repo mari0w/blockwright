@@ -33,16 +33,16 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 - Avoid gravity, fluid, fire, redstone, and other special-physics blocks unless the required state and safe placement are clear.
 - Plan the entrance so it can connect naturally to the player-facing side of the site. Avoid putting the only door against a wall, cliff, water, or a one-block pit.
 - Prefer a compact, supported footprint. If the target terrain is a pit, slope, water edge, or odd surface, make the build feel intentionally integrated with a terrace, deck, bridge, stairs, wooden piles, stone-brick base, or retaining wall.
-- Do not create terrain-clearing helper blocks inside the blueprint. The controller handles clearing and placement; the blueprint should describe the final structure.
-- Do not reject a build because the current terrain may be imperfect. Assume the controller will prefer the player's facing target and can prepare the site with tasteful clearing/foundation when needed.
+- Do not create terrain-clearing helper blocks inside the blueprint. Blockwright handles clearing and placement; the blueprint should describe the final structure.
+- Do not reject a build because the current terrain may be imperfect. Assume Blockwright will prefer the player's facing target and can prepare the site with tasteful clearing/foundation when needed.
 
 ## Output Requirements
 
 - Return only the JSON object required by Blockwright.
 - Do not explain outside JSON.
 - Do not ask the player to install a mod, create a new world, or run a separate server.
-- Assume the controller will place the blueprint into the current local/LAN world.
-- Assume the controller chooses the player-facing target from scan data, with only small adjustments when needed. Your blueprint should be origin-safe: when placed at that target, it should stand naturally and be usable immediately.
+- Assume Blockwright will place the blueprint into the current local/LAN world.
+- Assume Blockwright chooses the player-facing target from scan data, with only small adjustments when needed. Your blueprint should be origin-safe: when placed at that target, it should stand naturally and be usable immediately.
 
 ## Follow-up Adjustments
 

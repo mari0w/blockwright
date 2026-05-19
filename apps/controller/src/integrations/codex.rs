@@ -36,28 +36,19 @@ struct CodexSessionStore {
 
 #[derive(Debug, Clone, Copy)]
 pub enum CodexResponseSchema {
-    Intent,
-    ActionPlan,
-    Blueprint,
-    ExistingEditPlan,
+    Plan,
 }
 
 impl CodexResponseSchema {
     fn label(self) -> &'static str {
         match self {
-            CodexResponseSchema::Intent => "intent",
-            CodexResponseSchema::ActionPlan => "action_plan",
-            CodexResponseSchema::Blueprint => "blueprint",
-            CodexResponseSchema::ExistingEditPlan => "existing_edit_plan",
+            CodexResponseSchema::Plan => "plan",
         }
     }
 
     fn path(self) -> PathBuf {
         let file_name = match self {
-            CodexResponseSchema::Intent => "intent.schema.json",
-            CodexResponseSchema::ActionPlan => "action-plan.schema.json",
-            CodexResponseSchema::Blueprint => "blueprint.schema.json",
-            CodexResponseSchema::ExistingEditPlan => "existing-edit-plan.schema.json",
+            CodexResponseSchema::Plan => "plan.schema.json",
         };
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("schemas")
@@ -529,20 +520,14 @@ fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
 
 fn schema_start_phase(schema_label: &str) -> &'static str {
     match schema_label {
-        "intent" => "Codex 正在判断这是建造、动作、改造还是普通聊天",
-        "blueprint" => "Codex 正在生成 Minecraft 蓝图和方块清单",
-        "action_plan" => "Codex 正在把需求转换成可执行动作",
-        "existing_edit_plan" => "Codex 正在根据现场扫描规划建筑改造",
+        "plan" => "Codex 正在理解需求并决定下一步",
         _ => "Codex 正在处理请求",
     }
 }
 
 fn schema_finish_phase(schema_label: &str) -> &'static str {
     match schema_label {
-        "intent" => "Codex 已完成需求类型判断",
-        "blueprint" => "Codex 已返回蓝图规划结果",
-        "action_plan" => "Codex 已返回动作规划结果",
-        "existing_edit_plan" => "Codex 已返回建筑改造方案",
+        "plan" => "Codex 已给出回复和下一步动作",
         _ => "Codex 已完成本阶段处理",
     }
 }
@@ -565,7 +550,7 @@ fn codex_progress_phase(event_type: &str) -> Option<&'static str> {
     match event_type {
         "thread.started" => Some("会话已准备好，开始承接本次请求"),
         "turn.started" => Some("开始分析玩家需求并准备生成结构化结果"),
-        "turn.completed" => Some("本轮 Codex 处理完成，等待 controller 读取最终结果"),
+        "turn.completed" => Some("本轮 Codex 处理完成，准备整理最终结果"),
         "agent_message.started" => Some("开始生成最终结构化回复"),
         "agent_message.completed" => Some("最终结构化回复已经生成"),
         "error" | "turn.failed" => Some("Codex 处理失败，准备返回错误"),
@@ -773,19 +758,11 @@ BLOCKWRIGHT_JSON
         );
 
         client
-            .ask_with_schema(
-                "one",
-                CodexResponseSchema::ActionPlan,
-                Some("Minecraft:Steve"),
-            )
+            .ask_with_schema("one", CodexResponseSchema::Plan, Some("Minecraft:Steve"))
             .await
             .unwrap();
         client
-            .ask_with_schema(
-                "two",
-                CodexResponseSchema::ActionPlan,
-                Some("minecraft:steve"),
-            )
+            .ask_with_schema("two", CodexResponseSchema::Plan, Some("minecraft:steve"))
             .await
             .unwrap();
 
@@ -846,11 +823,7 @@ BLOCKWRIGHT_JSON
         );
 
         client
-            .ask_with_schema(
-                "hello",
-                CodexResponseSchema::ActionPlan,
-                Some("minecraft:steve"),
-            )
+            .ask_with_schema("hello", CodexResponseSchema::Plan, Some("minecraft:steve"))
             .await
             .unwrap();
 
@@ -878,10 +851,7 @@ BLOCKWRIGHT_JSON
 
     #[test]
     fn response_schema_files_are_packaged_with_controller_source() {
-        assert!(CodexResponseSchema::Intent.path().exists());
-        assert!(CodexResponseSchema::ActionPlan.path().exists());
-        assert!(CodexResponseSchema::Blueprint.path().exists());
-        assert!(CodexResponseSchema::ExistingEditPlan.path().exists());
+        assert!(CodexResponseSchema::Plan.path().exists());
     }
 
     #[test]

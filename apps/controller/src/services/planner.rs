@@ -1,6 +1,6 @@
 use crate::{
     domain::types::{
-        BlockOrigin, Blueprint, BuildRecord, ChatAttachment, GameAction, PlayerPosition, WorldScan,
+        BlockOrigin, Blueprint, ChatAttachment, GameAction, PlayerPosition, WorldScan,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
     services::blueprint_store::BlueprintStore,
@@ -30,52 +30,13 @@ pub struct PlanResult {
 }
 
 #[derive(Debug, Deserialize)]
-struct CodexActionPlan {
+struct CodexPlan {
     reply: String,
     summary: String,
+    #[serde(default)]
+    blueprint: Option<Blueprint>,
+    #[serde(default)]
     actions: Vec<GameAction>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CodexExistingEditPlan {
-    reply: String,
-    summary: String,
-    mode: ExistingEditMode,
-    actions: Vec<GameAction>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum ExistingEditMode {
-    Patch,
-    Replace,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlannerIntentKind {
-    Blueprint,
-    Action,
-    ExistingBuildEdit,
-    Chat,
-}
-
-impl PlannerIntentKind {
-    fn as_str(self) -> &'static str {
-        match self {
-            PlannerIntentKind::Blueprint => "blueprint",
-            PlannerIntentKind::Action => "action",
-            PlannerIntentKind::ExistingBuildEdit => "existing_build_edit",
-            PlannerIntentKind::Chat => "chat",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PlannerIntent {
-    pub intent: PlannerIntentKind,
-    pub reply: String,
-    pub summary: String,
 }
 
 #[derive(Clone, Default)]
@@ -89,159 +50,23 @@ impl Planner {
     }
 
     pub async fn plan(&self, input: PlannerInput, blueprints: &BlueprintStore) -> PlanResult {
-        let intent = self.classify_intent(&input).await;
-        self.plan_with_intent(input, blueprints, intent).await
-    }
-
-    pub async fn classify_intent(&self, input: &PlannerInput) -> Option<PlannerIntent> {
-        let codex = self.codex.as_ref()?;
-        if !codex.enabled() {
-            return None;
-        }
-
-        tracing::info!(
-            has_nearby_scan = input.nearby_scan.is_some(),
-            attachment_count = input.attachments.len(),
-            "starting codex intent classifier"
-        );
-        let prompt = build_intent_prompt(input);
-        let output = match codex
-            .ask_with_schema_and_progress(
-                &prompt,
-                CodexResponseSchema::Intent,
-                input.codex_session_key.as_deref(),
-                input.progress_id.as_deref(),
-            )
-            .await
-        {
-            Ok(Some(output)) if !output.trim().is_empty() => output,
-            Ok(_) => return None,
-            Err(error) => {
-                tracing::warn!(error = %error, "codex intent classification failed");
-                return None;
-            }
-        };
-        tracing::info!(
-            response_bytes = output.len(),
-            "codex intent response received; parsing intent json"
-        );
-
-        let intent = match parse_intent_response(&output) {
-            Some(intent) => intent,
-            None => {
-                tracing::warn!("codex intent classification returned invalid json");
-                return None;
-            }
-        };
-        tracing::info!(
-            intent = intent.intent.as_str(),
-            summary = %intent.summary,
-            "codex intent classified"
-        );
-        Some(intent)
-    }
-
-    pub async fn plan_with_intent(
-        &self,
-        input: PlannerInput,
-        blueprints: &BlueprintStore,
-        intent: Option<PlannerIntent>,
-    ) -> PlanResult {
         if !self.codex_enabled() {
             return PlanResult {
-                reply: "当前没有启用 Codex，已关闭本地关键词意图匹配，无法判断建筑或动作需求。请先启用 Codex。".to_string(),
-                summary: "Codex 未启用".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: "没有启用 Codex，无法理解这类自然语言需求。".to_string(),
-                }],
+                reply: "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。".to_string(),
+                summary: "AI 助手未启用".to_string(),
+                actions: Vec::new(),
             };
         }
 
-        let Some(intent) = intent else {
-            return PlanResult {
-                reply: format!(
-                    "Codex 没有返回有效意图分类，所以我没有下发任何动作。{}",
-                    short_rephrase_hint()
-                ),
-                summary: "大模型意图识别失败".to_string(),
-                actions: vec![GameAction::Chat {
-                    message: format!(
-                        "这次没有执行：Codex 未返回有效意图分类。{}",
-                        short_rephrase_hint()
-                    ),
-                }],
-            };
-        };
+        if let Some(result) = self.try_codex_plan(&input, blueprints).await {
+            return result;
+        }
 
-        match intent.intent {
-            PlannerIntentKind::Blueprint => {
-                if let Some(result) = self.try_codex_blueprint(&input, blueprints).await {
-                    return result;
-                }
-
-                PlanResult {
-                    reply: format!(
-                        "大模型没有生成有效蓝图，所以我没有下发建筑动作。{}",
-                        rephrase_hints_for_build()
-                    ),
-                    summary: "大模型建筑规划失败".to_string(),
-                    actions: vec![GameAction::Chat {
-                        message: format!(
-                            "建筑没有执行：大模型未返回有效蓝图。{}",
-                            short_rephrase_hint()
-                        ),
-                    }],
-                }
-            }
-            PlannerIntentKind::Action => {
-                if let Some(result) = self.try_codex_action_plan(&input).await {
-                    return result;
-                }
-
-                PlanResult {
-                    reply: format!(
-                        "Codex 没有返回可执行动作，所以我没有用本地关键词规则冒充理解。{}",
-                        rephrase_hints_for_common_actions()
-                    ),
-                    summary: "大模型动作理解失败".to_string(),
-                    actions: vec![GameAction::Chat {
-                        message: format!(
-                            "这次没有执行：Codex 未返回有效动作。{}",
-                            short_rephrase_hint()
-                        ),
-                    }],
-                }
-            }
-            PlannerIntentKind::ExistingBuildEdit => {
-                if input.nearby_scan.is_none() {
-                    let reply = existing_edit_scan_queued_reply(Some(&intent.reply));
-                    let summary = normalized_summary(&intent.summary, "改造现有建筑");
-                    let attachments = input.attachments;
-                    let text = scan_text_with_attachment_hint(input.text, &attachments);
-                    PlanResult {
-                        reply,
-                        summary,
-                        actions: vec![GameAction::ScanNearbyAndPlan { text, attachments }],
-                    }
-                } else {
-                    PlanResult {
-                        reply: "已经拿到现场扫描，但这个入口缺少可用的建筑记录，暂时没有下发改造。"
-                            .to_string(),
-                        summary: "缺少建筑匹配记录".to_string(),
-                        actions: vec![GameAction::Chat {
-                            message: "已经收到附近扫描，但缺少已匹配建筑记录，无法直接改造。"
-                                .to_string(),
-                        }],
-                    }
-                }
-            }
-            PlannerIntentKind::Chat => PlanResult {
-                reply: intent.reply.clone(),
-                summary: intent.summary,
-                actions: vec![GameAction::Chat {
-                    message: intent.reply,
-                }],
-            },
+        PlanResult {
+            reply: "我这次没有整理出可靠的下一步。你可以直接说想聊方案、要我先看附近场地，或者告诉我准备建什么、改什么。"
+                .to_string(),
+            summary: "继续确认需求".to_string(),
+            actions: Vec::new(),
         }
     }
 
@@ -252,7 +77,7 @@ impl Planner {
             .unwrap_or(false)
     }
 
-    async fn try_codex_blueprint(
+    async fn try_codex_plan(
         &self,
         input: &PlannerInput,
         blueprints: &BlueprintStore,
@@ -270,14 +95,14 @@ impl Planner {
                 .map(|scan| scan.blocks.len())
                 .unwrap_or_default(),
             attachment_count = input.attachments.len(),
-            "starting codex blueprint planner"
+            "starting codex unified planner"
         );
 
-        let prompt = build_blueprint_prompt(input);
+        let prompt = build_plan_prompt(input);
         let output = match codex
             .ask_with_schema_and_progress(
                 &prompt,
-                CodexResponseSchema::Blueprint,
+                CodexResponseSchema::Plan,
                 input.codex_session_key.as_deref(),
                 input.progress_id.as_deref(),
             )
@@ -286,27 +111,59 @@ impl Planner {
             Ok(Some(output)) if !output.trim().is_empty() => output,
             Ok(_) => return None,
             Err(error) => {
-                tracing::warn!(error = %error, "codex blueprint planning failed");
+                tracing::warn!(error = %error, "codex unified planning failed");
                 return None;
             }
         };
         tracing::info!(
             response_bytes = output.len(),
-            "codex blueprint response received; parsing blueprint json"
+            "codex plan response received; parsing json"
         );
 
-        let blueprint = match parse_blueprint_response(&output) {
-            Some(blueprint) => blueprint,
+        let plan = match parse_plan_response(&output) {
+            Some(plan) => plan,
             None => {
-                tracing::warn!("codex blueprint planning returned invalid json");
+                tracing::warn!("codex unified planning returned invalid json");
                 return None;
             }
         };
+        let mut actions = plan.actions;
+        let mut reply = plan.reply;
+
+        if let Some(blueprint) = plan.blueprint {
+            let (blueprint_actions, placement_note) = self
+                .actions_for_blueprint(input, blueprints, blueprint)
+                .await?;
+            reply = append_placement_note(reply, &placement_note);
+            actions.extend(blueprint_actions);
+        }
+
+        let action_types = actions.iter().map(action_type_name).collect::<Vec<_>>();
+        tracing::info!(
+            summary = %plan.summary,
+            action_count = actions.len(),
+            action_types = ?action_types,
+            "planned with codex unified planner"
+        );
+
+        Some(PlanResult {
+            reply,
+            summary: plan.summary,
+            actions,
+        })
+    }
+
+    async fn actions_for_blueprint(
+        &self,
+        input: &PlannerInput,
+        blueprints: &BlueprintStore,
+        blueprint: Blueprint,
+    ) -> Option<(Vec<GameAction>, String)> {
         tracing::info!(
             blueprint_id = %blueprint.id,
             block_count = blueprint.blocks.len(),
             material_count = blueprint.materials.len(),
-            "codex blueprint json parsed"
+            "codex plan included blueprint"
         );
         let PlacementDecision::Ready {
             origin,
@@ -340,11 +197,6 @@ impl Planner {
                 return None;
             }
         };
-        tracing::info!(
-            blueprint_id = %blueprint.id,
-            block_count = blueprint.blocks.len(),
-            "planned with codex blueprint planner"
-        );
         let (origin, clear_existing, pre_foundation_blocks, pre_clear_blocks, placement_note) =
             placement;
         let mut actions = Vec::new();
@@ -371,139 +223,7 @@ impl Planner {
             clear_existing,
         });
 
-        Some(PlanResult {
-            reply: format!(
-                "我已经生成并保存蓝图 `{}`，{}会按这份蓝图在你面前建造。",
-                blueprint.name, placement_note
-            ),
-            summary: format!("建造蓝图 {}", blueprint.id),
-            actions,
-        })
-    }
-
-    pub async fn plan_existing_build_edit(
-        &self,
-        input: &PlannerInput,
-        existing: &BuildRecord,
-    ) -> Option<PlanResult> {
-        let codex = self.codex.as_ref()?;
-        if !codex.enabled() {
-            return None;
-        }
-
-        tracing::info!(
-            build_id = %existing.id,
-            has_nearby_scan = input.nearby_scan.is_some(),
-            "starting codex existing-build edit planner"
-        );
-        let prompt = build_existing_edit_prompt(input, existing);
-        let output = match codex
-            .ask_with_schema_and_progress(
-                &prompt,
-                CodexResponseSchema::ExistingEditPlan,
-                input.codex_session_key.as_deref(),
-                input.progress_id.as_deref(),
-            )
-            .await
-        {
-            Ok(Some(output)) if !output.trim().is_empty() => output,
-            Ok(_) => return None,
-            Err(error) => {
-                tracing::warn!(
-                    build_id = %existing.id,
-                    error = %error,
-                    "codex existing-build edit planning failed"
-                );
-                return None;
-            }
-        };
-        tracing::info!(
-            build_id = %existing.id,
-            response_bytes = output.len(),
-            "codex existing-build edit response received; parsing json"
-        );
-
-        let plan = match parse_existing_edit_plan_response(&output) {
-            Some(plan) => plan,
-            None => {
-                tracing::warn!(build_id = %existing.id, "codex existing-build edit returned invalid json");
-                return None;
-            }
-        };
-        if plan.actions.is_empty() {
-            return None;
-        }
-
-        let mut actions = if plan.mode == ExistingEditMode::Replace {
-            clear_existing_build_actions(existing)
-        } else {
-            Vec::new()
-        };
-        actions.extend(plan.actions);
-
-        Some(PlanResult {
-            reply: plan.reply,
-            summary: plan.summary,
-            actions,
-        })
-    }
-
-    async fn try_codex_action_plan(&self, input: &PlannerInput) -> Option<PlanResult> {
-        let codex = self.codex.as_ref()?;
-        if !codex.enabled() {
-            return None;
-        }
-
-        tracing::info!("starting codex action planner");
-        let prompt = build_action_plan_prompt(input);
-        let output = match codex
-            .ask_with_schema_and_progress(
-                &prompt,
-                CodexResponseSchema::ActionPlan,
-                input.codex_session_key.as_deref(),
-                input.progress_id.as_deref(),
-            )
-            .await
-        {
-            Ok(Some(output)) if !output.trim().is_empty() => output,
-            Ok(_) => return None,
-            Err(error) => {
-                tracing::warn!(error = %error, "codex action planning failed");
-                return None;
-            }
-        };
-        tracing::info!(
-            response_bytes = output.len(),
-            "codex action response received; parsing action json"
-        );
-
-        let plan = match parse_action_plan_response(&output) {
-            Some(plan) => plan,
-            None => {
-                tracing::warn!("codex action planning returned invalid json");
-                return None;
-            }
-        };
-        if plan.actions.is_empty() {
-            return None;
-        }
-        let action_types = plan
-            .actions
-            .iter()
-            .map(action_type_name)
-            .collect::<Vec<_>>();
-        tracing::info!(
-            summary = %plan.summary,
-            action_count = plan.actions.len(),
-            action_types = ?action_types,
-            "planned with codex action planner"
-        );
-
-        Some(PlanResult {
-            reply: plan.reply,
-            summary: plan.summary,
-            actions: plan.actions,
-        })
+        Some((actions, placement_note))
     }
 }
 
@@ -515,66 +235,6 @@ fn action_type_name(action: &GameAction) -> &'static str {
         GameAction::Chat { .. } => "chat",
         GameAction::ScanNearbyAndPlan { .. } => "scan_nearby_and_plan",
     }
-}
-
-fn short_rephrase_hint() -> &'static str {
-    "请用更具体的一句话重试。"
-}
-
-fn rephrase_hints_for_build() -> &'static str {
-    "建议直接给尺寸和材质，例如“在我前方盖一个 7x7 橡木小屋，带门、窗户、床和火把”。也可以先说“先 dry-run 预览，不要执行”。"
-}
-
-fn rephrase_hints_for_common_actions() -> &'static str {
-    "建议改成明确动作，例如“给我一把钻石剑”“把时间调到白天”“把天气改成晴天”。"
-}
-
-pub(crate) fn existing_edit_scan_queued_reply(reply: Option<&str>) -> String {
-    let fallback = "收到，我会按你这次的要求基于当前目标建筑继续改造。";
-    let Some(reply) = reply.map(str::trim).filter(|reply| !reply.is_empty()) else {
-        return fallback.to_string();
-    };
-
-    if is_mechanical_existing_edit_reply(reply) {
-        fallback.to_string()
-    } else {
-        reply.to_string()
-    }
-}
-
-fn is_mechanical_existing_edit_reply(reply: &str) -> bool {
-    [
-        "扫描",
-        "Minecraft 端",
-        "/bw",
-        "重新执行",
-        "请站",
-        "站到",
-        "先确认",
-        "请确认",
-        "哪个部位",
-        "请指定",
-        "请补充",
-    ]
-    .iter()
-    .any(|needle| reply.contains(needle))
-}
-
-fn normalized_summary(summary: &str, fallback: &str) -> String {
-    let summary = summary.trim();
-    if summary.is_empty() {
-        fallback.to_string()
-    } else {
-        summary.to_string()
-    }
-}
-
-fn scan_text_with_attachment_hint(text: String, attachments: &[ChatAttachment]) -> String {
-    if attachments.is_empty() || text.contains("用户上传了参考图片") {
-        return text;
-    }
-
-    format!("{text}\n\n用户上传了参考图片，现场扫描后继续结合这次的文字和图片需求处理。")
 }
 
 struct BlueprintBounds {
@@ -1257,59 +917,6 @@ fn blueprint_bounds(blocks: &[crate::domain::types::BlueprintBlock]) -> Option<B
     Some(bounds)
 }
 
-fn expected_record_bounds(record: &BuildRecord) -> Option<BlueprintBounds> {
-    let mut bounds: Option<BlueprintBounds> = None;
-    for action in &record.expected_actions {
-        for block in &action.blocks {
-            let x = action.origin.x + block.x;
-            let y = action.origin.y + block.y;
-            let z = action.origin.z + block.z;
-            bounds = Some(match bounds {
-                Some(existing) => BlueprintBounds {
-                    min_x: existing.min_x.min(x),
-                    max_x: existing.max_x.max(x),
-                    min_y: existing.min_y.min(y),
-                    max_y: existing.max_y.max(y),
-                    min_z: existing.min_z.min(z),
-                    max_z: existing.max_z.max(z),
-                },
-                None => BlueprintBounds {
-                    min_x: x,
-                    max_x: x,
-                    min_y: y,
-                    max_y: y,
-                    min_z: z,
-                    max_z: z,
-                },
-            });
-        }
-    }
-    bounds
-}
-
-fn clear_existing_build_actions(record: &BuildRecord) -> Vec<GameAction> {
-    record
-        .expected_actions
-        .iter()
-        .enumerate()
-        .map(|(index, action)| GameAction::PlaceBlocks {
-            blueprint_id: Some(format!("{}:replacement-clear-{index}", record.id)),
-            origin: action.origin.clone(),
-            blocks: action
-                .blocks
-                .iter()
-                .map(|block| crate::domain::types::BlueprintBlock {
-                    x: block.x,
-                    y: block.y,
-                    z: block.z,
-                    material: "minecraft:air".to_string(),
-                })
-                .collect(),
-            clear_existing: true,
-        })
-        .collect()
-}
-
 fn is_auto_clear_material(material: &str) -> bool {
     let material = material_id(material);
     matches!(
@@ -1415,26 +1022,24 @@ fn player_forward_step(position: &PlayerPosition) -> (i32, i32) {
     (1, 1)
 }
 
-fn build_intent_prompt(input: &PlannerInput) -> String {
+fn build_plan_prompt(input: &PlannerInput) -> String {
     let attachments =
         serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
     let site_context = build_site_context(input);
     format!(
-        r#"你是 Blockwright 的 Minecraft 意图分类器。请只判断玩家这句话接下来应该进入哪一个规划器，不要生成执行动作或蓝图。
+        r#"你是 Blockwright 的 Minecraft AI 助手。流程由你和可用 skills 决定，外层服务只负责协议校验和安全边界，不做关键词识别，也不替你选择工作流。
 
-硬性规则：
-- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
-- JSON 必须符合：{{"intent":"blueprint|action|existing_build_edit|chat","reply":"中文短回复","summary":"短中文摘要"}}
-- 这里由 Codex 做自然语言意图识别，controller 不再使用本地关键词表兜底；你必须根据完整语义、上下文、附件和场地信息判断。
-- intent=blueprint：玩家想新建、生成、设计、摆放一个实体结构、装饰物、模型、建筑、场景、图片复刻结构或游戏内实物。只要目标是“在世界里出现一个东西”，就选它。
-- intent=existing_build_edit：玩家想改造、移动、升降、替换材料、修正入口/窗户/地基等，且语义指向附近或已经存在的 Blockwright 建筑。
-- intent=action：玩家想发物品、调整时间/天气/游戏模式/效果，或执行可由安全 Minecraft 指令完成的非建筑动作。
-- intent=chat：普通聊天、说明、无法判断、拒绝执行或缺少关键信息。
-- 如果在 blueprint 和 action 之间犹豫，只要结果会放置方块或生成实物，就选 blueprint。
-- 如果在 blueprint 和 existing_build_edit 之间犹豫：新做一个选 blueprint；改已有目标选 existing_build_edit。
-- 玩家已经说清楚“改造/优化/放大/重做/按图调整/继续优化”等方向时，不要追问必须改哪个小部位；existing_build_edit 可以是整栋重做、整体放大或自由优化。
-- controller 会自动处理现场扫描、最近建筑匹配和后续执行；reply 不要让玩家重新执行 `/bw`，不要要求玩家手动扫描、保存、登记、确认建筑或指定小部位。
-- reply 是给玩家看的简短中文说明，要自然说明你理解的设计方向；summary 是日志和任务列表用的中文短摘要。
+输出协议：
+- 只返回一个 JSON 对象，字段为 reply、summary、blueprint、actions。
+- reply 给普通玩家看，必须自然、简短、好懂；不要暴露 JSON、schema、队列、内部服务名、planner、Codex 错误等技术细节。
+- summary 是中文短摘要。
+- 只聊天、追问、解释方案时：blueprint=null，actions=[]。
+- 新建建筑、模型或场景时：调用并遵循 blockwright-build-planning skill，把结果放到 blueprint，actions=[]；Blockwright 会保存蓝图、选择落点并生成 Minecraft 放置动作。
+- 需要先让 Minecraft 扫描现场时：blueprint=null，actions 输出 scan_nearby_and_plan，并把用户文字和附件带回去。
+- 已经有足够世界坐标、方块清单或现场扫描时，可以直接在 actions 输出 place_blocks、give_item、run_command 或 chat。
+- 建筑改造、整体重做、按图片调整、补细节等调用并遵循 blockwright-existing-build-edit skill；新建建筑调用 blockwright-build-planning skill。如果你无法确定目标或做法，就先在 reply 里追问，不要硬下动作。
+- Minecraft 方块 material 使用命名空间 ID，可携带方块状态；蓝图 blocks 用相对坐标。
+- run_command 不带开头的 `/`，只做小范围、明确、安全的操作。
 
 玩家名：
 {player}
@@ -1453,152 +1058,6 @@ fn build_intent_prompt(input: &PlannerInput) -> String {
         site_context = site_context,
         attachments = attachments
     )
-}
-
-fn build_blueprint_prompt(input: &PlannerInput) -> String {
-    let attachments =
-        serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
-    let site_context = build_site_context(input);
-    format!(
-        r#"你是 Blockwright 的 Minecraft 建筑规划器。请把用户需求规划成一个可保存、可执行、可校验的蓝图 JSON。
-
-硬性规则：
-- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
-- JSON 必须符合字段：id、name、description、size、materials、blocks、tags。
-- blocks 里的 x/y/z 必须是相对坐标，不能输出世界绝对坐标。
-- 方块材质必须使用 Minecraft 命名空间 ID，例如 minecraft:oak_planks。
-- 需要表达方块状态时可以写在 material 里，例如 minecraft:oak_leaves[persistent=true]、minecraft:oak_door[half=lower,facing=south]。
-- 先生成蓝图，再由执行端按同一份 blocks 放置；不要输出命令步骤、背包操作或玩家右键操作。
-- 常规蓝图优先控制在 300-1200 个方块；玩家明确要求“大、复杂、逼真、按图复刻、继续优化”时可以到 2000 个方块，不要因为超过 500 个方块就降级成很小的模型。
-- materials 必须和 blocks 统计一致。
-- 先理解玩家真正想要的建筑，再规划结构、尺寸、材料、关键部位和摆放方式。
-- 蓝图最低的普通地板/地基层默认从相对 y=0 开始；不要把世界绝对高度写进 blocks，也不要无故使用负 y。
-- 默认假设 controller 会把蓝图 y=0 放在玩家面向目标点附近的第一层空气上，优先使用玩家正面目标点，而不是随便搬到远处空地。
-- 蓝图本身不要设计成覆盖玩家脚下、头部或贴身一圈活动空间；建筑再大也必须整体在玩家前方，不能把玩家包进结构里。
-- 如果目标点是坑、水边、坡地或奇怪地形，不要拒绝；要把地形融入设计，让建筑通过平台、露台、木桩、石砖基座、楼梯、桥接或挡土墙自然贴合场地。
-- 住宅、木屋、树屋、房间这类可居住建筑，默认要能实际使用：至少有完整地板、墙、屋顶、可通行入口、两格高室内空间、床、照明和基础窗户，除非玩家明确只要外观模型。
-- 门要按两格结构输出上下两块，例如同一个位置 y=1 用 minecraft:oak_door[half=lower,facing=south]，y=2 用 minecraft:oak_door[half=upper,facing=south]，并让入口前后留出通行空间。
-- 床要按 head/foot 两块输出，朝向一致，周围至少留一格可站立空间。
-- 树屋、庭院、树冠、装饰树叶必须避免自然凋零：优先使用 minecraft:oak_leaves[persistent=true] 这类 persistent=true 叶子；如果不使用 persistent=true，就必须保证叶子离对应原木足够近。
-- 室内不能被实心方块填满；家具、床、火把、梯子、楼梯等要留出玩家移动路径，不要只生成封闭外壳。
-- 照明优先用 torch、lantern、glowstone 等稳定光源，封闭建筑内部至少放一个光源，避免夜晚不可用。
-- 悬空建筑、树屋和二楼必须有可到达路径，例如梯子、楼梯或台阶；不要生成玩家无法进入的房间。
-- 入口要面向或连通玩家侧的室外路径，不能把唯一入口贴在墙、悬崖、水面、坑洞或不可通行区域上；如果目标地形复杂，要设计台阶、平台或桥接让入口可达。
-- 较宽建筑要有完整地板或美观地基，让它看起来坐落在地形里；不要只靠一个角或一根柱子支撑普通房屋。
-- 水、岩浆、火、沙子/沙砾、红石机关、门、床、告示牌等有特殊状态或物理特性的方块，只有能明确表达状态和安全放置时才使用。
-- description 用中文简短写清楚设计思路和处理方式。
-- 玩家说“生成/建造/做一个/我要一个 + 建筑物名”时，直接生成可执行小型蓝图，不要返回聊天提示。
-- 你会收到 controller 的场地摘要；生成蓝图时要假设扫描中心就是玩家面前想要处理的位置。controller 会尽量在这个目标点或很小范围内落位；地形不理想时会优先做场地融合和美观支撑，而不是直接拒绝或远距离迁移。
-- 如果这是同一会话里的后续反馈，例如“抬高一点”“往左一点”“纠正地基”“重新设计入口”，要理解成对当前建筑的调整思路，而不是重新换一块地。
-
-用户文字：
-{text}
-
-场地摘要：
-{site_context}
-
-附件元数据：
-{attachments}
-"#,
-        text = input.text.trim(),
-        site_context = site_context,
-        attachments = attachments
-    )
-}
-
-fn build_existing_edit_prompt(input: &PlannerInput, existing: &BuildRecord) -> String {
-    let site_context = build_site_context(input);
-    let existing_context = build_existing_record_context(existing);
-    let attachments =
-        serde_json::to_string(&input.attachments).unwrap_or_else(|_| "[]".to_string());
-    format!(
-        r#"你是 Blockwright 的 Minecraft 现有建筑自由改造规划器。玩家已经站在目标建筑前，controller 已经按附近扫描和空间位置匹配到了当前要改的整栋建筑。请直接输出可执行改造计划 JSON。
-
-硬性规则：
-- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
-- JSON 必须符合字段：reply、summary、mode、actions。
-- mode 只能是 patch 或 replace。
-- actions 只能输出 place_blocks；每个 action 的 origin 是世界绝对放置原点，blocks 是相对 origin 的方块列表。
-- 方块材质必须使用 Minecraft 命名空间 ID，例如 minecraft:oak_planks；需要清除单个方块时可以使用 minecraft:air。
-- 不要再要求玩家说明“哪个部位”，也不要因为目标不够模板化就拒绝。你要根据玩家这句话自己判断是局部补丁还是整栋重做。
-- 小范围材料替换、局部细节、补灯、加装饰、修正窗口/入口，优先 mode=patch，只输出需要改的方块，clear_existing=false。
-- 整体放大、重做、变逼真、换主题、移动、升降、旋转、整体结构变化，使用 mode=replace。replace 时 actions 只输出新的最终建筑；controller 会先清掉旧建筑。
-- 如果是“移动/升降/换位置”这类整体调整，mode=replace，并把新 actions 的 origin 改到目标位置，不要把 origin 仍然放在旧位置。
-- 如果是“放大/重做/逼真/升级/更真实/更大气”，mode=replace，输出完整的新最终结构，不要只输出几个装饰方块。
-- 常规改造优先控制在 300-1200 个方块；玩家明确要求整体放大、重做、逼真、复杂、按图复刻时可以到 2000 个方块，不要只输出几个象征性装饰方块。
-- 对摩天轮、旋转木马、桥、塔、雕塑等模型，要有可辨认的整体轮廓、支撑结构、中心轴、座舱/装饰和地基。
-- reply 用中文说明会怎么改，summary 用中文短摘要。
-
-玩家文字：
-{text}
-
-已匹配建筑：
-{existing_context}
-
-场地摘要：
-{site_context}
-
-附件元数据：
-{attachments}
-"#,
-        text = input.text.trim(),
-        existing_context = existing_context,
-        site_context = site_context,
-        attachments = attachments
-    )
-}
-
-fn build_existing_record_context(existing: &BuildRecord) -> String {
-    let action_count = existing.expected_actions.len();
-    let total_blocks = existing
-        .expected_actions
-        .iter()
-        .map(|action| action.expected_count)
-        .sum::<u32>();
-    let bounds = expected_record_bounds(existing)
-        .map(|bounds| {
-            format!(
-                "bounds=({}, {}, {})..({}, {}, {})",
-                bounds.min_x, bounds.min_y, bounds.min_z, bounds.max_x, bounds.max_y, bounds.max_z
-            )
-        })
-        .unwrap_or_else(|| "bounds=未知".to_string());
-    let actions_json = build_existing_actions_context(existing, 2000);
-    format!(
-        "id={}，summary={}，action_count={}，recorded_blocks={}，{}，actions={}",
-        existing.id, existing.summary, action_count, total_blocks, bounds, actions_json
-    )
-}
-
-fn build_existing_actions_context(existing: &BuildRecord, max_blocks: usize) -> String {
-    let mut remaining = max_blocks;
-    let mut truncated = false;
-    let actions = existing
-        .expected_actions
-        .iter()
-        .enumerate()
-        .map(|(index, action)| {
-            let take = remaining.min(action.blocks.len());
-            remaining -= take;
-            if take < action.blocks.len() {
-                truncated = true;
-            }
-            let blocks = action.blocks.iter().take(take).collect::<Vec<_>>();
-            serde_json::json!({
-                "index": index,
-                "blueprint_id": action.blueprint_id.clone(),
-                "origin": action.origin.clone(),
-                "expected_count": action.expected_count,
-                "included_blocks": blocks,
-            })
-        })
-        .collect::<Vec<_>>();
-    serde_json::json!({
-        "truncated": truncated,
-        "max_included_blocks": max_blocks,
-        "actions": actions,
-    })
-    .to_string()
 }
 
 fn build_site_context(input: &PlannerInput) -> String {
@@ -1648,67 +1107,26 @@ fn build_site_context(input: &PlannerInput) -> String {
     )
 }
 
-fn build_action_plan_prompt(input: &PlannerInput) -> String {
-    format!(
-        r#"你是 Blockwright 的 Minecraft 指令理解器。请把玩家自然语言转换成 Blockwright controller 可执行的动作 JSON。
-
-硬性规则：
-- 只输出一个 JSON 对象，不要输出 Markdown、解释或代码块。
-- JSON 必须符合：{{"reply":"中文回复","summary":"短中文摘要","actions":[...]}}
-- actions 当前只允许：
-  1. 发物品：{{"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}}
-  2. 执行 Minecraft 指令：{{"type":"run_command","command":"time set day"}}
-  3. 聊天提示：{{"type":"chat","message":"中文提示"}}
-- 如果结构化输出 schema 要求保留未使用字段，未使用字段填 null，不要填假值。
-- 需要识别完整物品名，不能只因为文本包含“钻石”就发 minecraft:diamond。
-- 例如“钻石镐/钻石稿子/diamond pickaxe”应是 minecraft:diamond_pickaxe。
-- 例如“钻石斧/diamond axe”应是 minecraft:diamond_axe。
-- 例如“钻石剑/diamond sword”应是 minecraft:diamond_sword。
-- 例如“给我钻石”才是 minecraft:diamond，count 为 64。
-- 这个动作理解器只处理物品、安全 Minecraft 指令和普通聊天；建筑和改造需求已经由 Codex 意图分类器拦截。
-- 如果这里仍收到建筑、改造或放置方块类需求，返回普通 chat 提示，不要输出 place_blocks 或危险命令。
-- 对能用原版 Minecraft 指令完成的需求，输出 run_command。command 不要带开头的 `/`。
-- 例如“我想白天/天亮吧”应是 time set day。
-- 例如“我想晚上”应是 time set night。
-- 例如“别下雨/天气晴朗”应是 weather clear。
-- 例如“下雨吧”应是 weather rain。
-- 例如“我想创造模式”应是 gamemode creative {player}。
-- 例如“我想回生存”应是 gamemode survival {player}。
-- 例如“给我速度/我要夜视”可用 effect give {player} minecraft:speed 120 1 true / effect give {player} minecraft:night_vision 600 0 true。
-- 允许使用的命令根只包括：time、weather、difficulty、gamerule、gamemode、effect、enchant、experience、xp、tp、teleport、spawnpoint、setworldspawn、summon。
-- 不要输出 op、deop、stop、reload、ban、kick、whitelist、save-all、execute、fill、setblock、data、function 等危险或大范围命令。
-- 如果用户文字不能安全映射成物品或白名单 Minecraft 指令，返回普通 chat 提示。
-- item 必须使用 Minecraft 命名空间 ID，count 必须大于 0。
-
-玩家名：
-{player}
-
-用户文字：
-{text}
-"#,
-        player = input.player.as_deref().unwrap_or("unknown"),
-        text = input.text.trim()
-    )
-}
-
-fn parse_blueprint_response(output: &str) -> Option<Blueprint> {
+fn parse_plan_response(output: &str) -> Option<CodexPlan> {
     let json = extract_json_object(output.trim())?;
     serde_json::from_str(json).ok()
 }
 
-fn parse_intent_response(output: &str) -> Option<PlannerIntent> {
-    let json = extract_json_object(output.trim())?;
-    serde_json::from_str(json).ok()
-}
+fn append_placement_note(reply: String, placement_note: &str) -> String {
+    let note = placement_note.trim();
+    if note.is_empty() {
+        return reply;
+    }
 
-fn parse_action_plan_response(output: &str) -> Option<CodexActionPlan> {
-    let json = extract_json_object(output.trim())?;
-    serde_json::from_str(json).ok()
-}
-
-fn parse_existing_edit_plan_response(output: &str) -> Option<CodexExistingEditPlan> {
-    let json = extract_json_object(output.trim())?;
-    serde_json::from_str(json).ok()
+    let reply = reply.trim();
+    let suffix = format!("{note}会按这份蓝图建造。");
+    if reply.is_empty() {
+        suffix
+    } else if reply.contains(note) {
+        reply.to_string()
+    } else {
+        format!("{reply} {suffix}")
+    }
 }
 
 fn extract_json_object(output: &str) -> Option<&str> {
@@ -1726,8 +1144,8 @@ mod tests {
     use crate::{
         config::CodexConfig,
         domain::types::{
-            Blueprint, BlueprintBlock, BlueprintSize, BuildRecord, BuildStatus, ChatAttachmentKind,
-            ChatAttachmentSource, ExpectedBuildAction, MaterialCount, WorldScanBlock,
+            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentKind, ChatAttachmentSource,
+            MaterialCount, WorldScanBlock,
         },
     };
     use std::{
@@ -1751,39 +1169,11 @@ mod tests {
         BlueprintStore::new(temp_dir(name)).await.unwrap()
     }
 
-    fn planner_with_fake_codex_responses(
-        name: &str,
-        intent_message: &str,
-        blueprint_message: &str,
-        action_message: &str,
-    ) -> Planner {
+    fn planner_with_fake_plan(name: &str, plan_message: &str) -> Planner {
         let dir = temp_dir(name);
         fs::create_dir_all(&dir).unwrap();
-        let intent_path = dir.join("intent.json");
-        let blueprint_path = dir.join("blueprint.json");
-        let action_path = dir.join("action.json");
-        let existing_edit_path = dir.join("existing-edit.json");
-        fs::write(&intent_path, intent_message).unwrap();
-        fs::write(&blueprint_path, blueprint_message).unwrap();
-        fs::write(&action_path, action_message).unwrap();
-        fs::write(
-            &existing_edit_path,
-            r#"{
-  "reply": "已按当前建筑自由改造。",
-  "summary": "自由改造现有建筑",
-  "mode": "replace",
-  "actions": [
-    {
-      "type": "place_blocks",
-      "blueprint_id": "codex-existing-edit",
-      "origin": {"world": "minecraft:overworld", "x": 10, "y": 65, "z": 20},
-      "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
-      "clear_existing": true
-    }
-  ]
-}"#,
-        )
-        .unwrap();
+        let plan_path = dir.join("plan.json");
+        fs::write(&plan_path, plan_message).unwrap();
         let script_path = dir.join("fake-codex.sh");
         fs::write(
             &script_path,
@@ -1812,27 +1202,15 @@ if [[ -z "$last_message" ]]; then
   exit 2
 fi
 case "$schema" in
-  *intent.schema.json)
-    cat "{intent_path}" > "$last_message"
-    ;;
-  *action-plan.schema.json)
-    cat "{action_path}" > "$last_message"
-    ;;
-  *blueprint.schema.json)
-    cat "{blueprint_path}" > "$last_message"
-    ;;
-  *existing-edit-plan.schema.json)
-    cat "{existing_edit_path}" > "$last_message"
+  *plan.schema.json)
+    cat "{plan_path}" > "$last_message"
     ;;
   *)
     exit 3
     ;;
 esac
 "#,
-                intent_path = intent_path.to_string_lossy(),
-                action_path = action_path.to_string_lossy(),
-                blueprint_path = blueprint_path.to_string_lossy(),
-                existing_edit_path = existing_edit_path.to_string_lossy()
+                plan_path = plan_path.to_string_lossy()
             ),
         )
         .unwrap();
@@ -1848,21 +1226,28 @@ esac
     }
 
     fn planner_with_fake_codex(name: &str, blueprint_message: &str) -> Planner {
-        planner_with_fake_codex_responses(
-            name,
-            r#"{"intent":"blueprint","reply":"按建筑处理。","summary":"建筑需求"}"#,
-            blueprint_message,
-            r#"{"reply":"无法处理建筑动作。","summary":"普通提示","actions":[{"type":"chat","player":null,"item":null,"count":null,"command":null,"message":"无法处理建筑动作。"}]}"#,
-        )
+        planner_with_fake_plan(name, &blueprint_plan_message(blueprint_message))
     }
 
     fn planner_with_fake_action(name: &str, action_message: &str) -> Planner {
-        planner_with_fake_codex_responses(
-            name,
-            r#"{"intent":"action","reply":"按动作处理。","summary":"动作需求"}"#,
-            r#"not blueprint json"#,
-            action_message,
-        )
+        planner_with_fake_plan(name, action_message)
+    }
+
+    fn blueprint_plan_message(blueprint_message: &str) -> String {
+        let Some(json) = extract_json_object(blueprint_message.trim()) else {
+            return blueprint_message.to_string();
+        };
+        let Ok(blueprint) = serde_json::from_str::<Blueprint>(json) else {
+            return blueprint_message.to_string();
+        };
+        let blueprint_json = serde_json::from_str::<serde_json::Value>(json).unwrap();
+        serde_json::json!({
+            "reply": format!("我已经按你的要求规划好{}。", blueprint.name),
+            "summary": format!("建造蓝图 {}", blueprint.id),
+            "blueprint": blueprint_json,
+            "actions": []
+        })
+        .to_string()
     }
 
     fn test_blueprint(id: &str, tags: Vec<&str>) -> Blueprint {
@@ -1886,46 +1271,6 @@ esac
                 material: "minecraft:oak_planks".to_string(),
             }],
             tags: tags.into_iter().map(|value| value.to_string()).collect(),
-        }
-    }
-
-    fn test_build_record() -> BuildRecord {
-        BuildRecord {
-            id: "hm-job-1".to_string(),
-            server_id: "hmcl-lan".to_string(),
-            target_player: Some("Steve".to_string()),
-            summary: "建造蓝图 old-wheel".to_string(),
-            status: BuildStatus::Succeeded,
-            expected_actions: vec![ExpectedBuildAction {
-                blueprint_id: Some("old-wheel".to_string()),
-                origin: BlockOrigin {
-                    world: Some("minecraft:overworld".to_string()),
-                    x: 10,
-                    y: 64,
-                    z: 20,
-                },
-                expected_count: 2,
-                materials: vec![MaterialCount {
-                    material: "minecraft:oak_planks".to_string(),
-                    count: 2,
-                }],
-                blocks: vec![
-                    BlueprintBlock {
-                        x: 0,
-                        y: 0,
-                        z: 0,
-                        material: "minecraft:oak_planks".to_string(),
-                    },
-                    BlueprintBlock {
-                        x: 1,
-                        y: 0,
-                        z: 0,
-                        material: "minecraft:oak_planks".to_string(),
-                    },
-                ],
-            }],
-            result: None,
-            message: None,
         }
     }
 
@@ -2077,12 +1422,7 @@ esac
     #[tokio::test]
     async fn enabled_codex_failure_does_not_fall_back_to_keyword_rules() {
         let store = empty_store("codex-invalid-action").await;
-        let planner = planner_with_fake_codex_responses(
-            "codex-invalid-action",
-            r#"{"intent":"action","reply":"按动作处理。","summary":"动作需求"}"#,
-            "not blueprint json",
-            "not action json",
-        );
+        let planner = planner_with_fake_plan("codex-invalid-action", "not action json");
 
         let result = planner
             .plan(
@@ -2099,10 +1439,9 @@ esac
             )
             .await;
 
-        assert_eq!(result.summary, "大模型动作理解失败");
-        assert!(matches!(result.actions[0], GameAction::Chat { .. }));
-        assert!(result.reply.contains("给我一把钻石剑"));
-        assert!(result.reply.contains("把时间调到白天"));
+        assert_eq!(result.summary, "继续确认需求");
+        assert!(result.actions.is_empty());
+        assert!(result.reply.contains("可靠的下一步"));
     }
 
     #[tokio::test]
@@ -2125,9 +1464,37 @@ esac
             )
             .await;
 
-        assert_eq!(result.summary, "大模型建筑规划失败");
-        assert!(result.reply.contains("7x7"));
-        assert!(result.reply.contains("dry-run 预览"));
+        assert_eq!(result.summary, "继续确认需求");
+        assert!(result.actions.is_empty());
+        assert!(result.reply.contains("准备建什么、改什么"));
+    }
+
+    #[tokio::test]
+    async fn chat_plan_replies_without_minecraft_actions() {
+        let store = empty_store("codex-chat-only").await;
+        let planner = planner_with_fake_plan(
+            "codex-chat-only",
+            r#"{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？","summary":"讨论建造方案","blueprint":null,"actions":[]}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "先聊一下，我还没想好风格".to_string(),
+                    player: Some("Alex".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "讨论建造方案");
+        assert!(result.reply.contains("先聊方案"));
+        assert!(result.actions.is_empty());
     }
 
     #[tokio::test]
@@ -2221,22 +1588,35 @@ esac
     }
 
     #[tokio::test]
-    async fn existing_build_edit_uses_codex_plan_without_local_keyword_rules() {
-        let planner = planner_with_fake_codex(
+    async fn codex_plan_handles_build_edit_without_local_keyword_rules() {
+        let store = empty_store("codex-existing-edit").await;
+        let planner = planner_with_fake_plan(
             "codex-existing-edit",
             r#"{
-  "id": "unused-blueprint",
-  "name": "未使用蓝图",
-  "description": "这个测试直接走 existing edit schema。",
-  "size": {"width": 1, "height": 1, "depth": 1},
-  "materials": [{"material": "minecraft:oak_planks", "count": 1}],
-  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
-  "tags": ["test"]
+  "reply": "已按当前建筑自由改造。",
+  "summary": "自由改造现有建筑",
+  "blueprint": null,
+  "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-existing-clear",
+      "origin": {"world": "minecraft:overworld", "x": 10, "y": 64, "z": 20},
+      "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:air"}],
+      "clear_existing": true
+    },
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-existing-edit",
+      "origin": {"world": "minecraft:overworld", "x": 10, "y": 65, "z": 20},
+      "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+      "clear_existing": true
+    }
+  ]
 }"#,
         );
         let result = planner
-            .plan_existing_build_edit(
-                &PlannerInput {
+            .plan(
+                PlannerInput {
                     text: "把它整体升高一点，再做得更精致".to_string(),
                     player: Some("Steve".to_string()),
                     codex_session_key: None,
@@ -2245,10 +1625,9 @@ esac
                     attachments: Vec::new(),
                     progress_id: None,
                 },
-                &test_build_record(),
+                &store,
             )
-            .await
-            .unwrap();
+            .await;
 
         assert_eq!(result.summary, "自由改造现有建筑");
         assert_eq!(result.actions.len(), 2);
@@ -2259,8 +1638,8 @@ esac
                 blocks,
                 clear_existing: true,
                 ..
-            } if blueprint_id == "hm-job-1:replacement-clear-0"
-                && blocks.len() == 2
+            } if blueprint_id == "codex-existing-clear"
+                && blocks.len() == 1
                 && blocks[0].material == "minecraft:air"
         ));
         assert!(matches!(
@@ -2825,9 +2204,9 @@ esac
             )
             .await;
 
-        assert_eq!(result.summary, "Codex 未启用");
-        assert!(result.reply.contains("已关闭本地关键词意图匹配"));
-        assert!(matches!(result.actions[0], GameAction::Chat { .. }));
+        assert_eq!(result.summary, "AI 助手未启用");
+        assert!(result.reply.contains("AI 建造助手"));
+        assert!(result.actions.is_empty());
     }
 
     #[tokio::test]
@@ -2871,8 +2250,8 @@ esac
     }
 
     #[test]
-    fn blueprint_prompt_embeds_consistency_rules_for_codex() {
-        let prompt = build_blueprint_prompt(&PlannerInput {
+    fn plan_prompt_keeps_workflow_in_codex_and_skills() {
+        let prompt = build_plan_prompt(&PlannerInput {
             text: "照图片盖一个小塔".to_string(),
             player: None,
             codex_session_key: None,
@@ -2882,81 +2261,35 @@ esac
             progress_id: None,
         });
 
-        assert!(prompt.contains("只输出一个 JSON 对象"));
+        assert!(prompt.contains("blockwright-build-planning skill"));
+        assert!(prompt.contains("只返回一个 JSON 对象"));
+        assert!(prompt.contains("不做关键词识别"));
+        assert!(prompt.contains("流程由你和可用 skills 决定"));
+        assert!(prompt.contains("blockwright-existing-build-edit skill"));
+        assert!(prompt.contains("blueprint=null，actions=[]"));
+        assert!(prompt.contains("scan_nearby_and_plan"));
+        assert!(prompt.contains("place_blocks"));
         assert!(prompt.contains("相对坐标"));
-        assert!(prompt.contains("同一份 blocks 放置"));
-        assert!(prompt.contains("设计思路"));
-        assert!(prompt.contains("minecraft:oak_leaves[persistent=true]"));
-        assert!(prompt.contains("床"));
-        assert!(prompt.contains("两格高室内空间"));
-        assert!(prompt.contains("half=lower"));
-        assert!(prompt.contains("玩家面向目标点"));
-        assert!(prompt.contains("相对 y=0"));
-        assert!(prompt.contains("入口要面向或连通玩家侧"));
-        assert!(prompt.contains("同一会话里的后续反馈"));
+        assert!(prompt.contains("命名空间 ID"));
+        assert!(prompt.contains("give_item"));
+        assert!(prompt.contains("run_command"));
     }
 
     #[test]
-    fn intent_prompt_routes_builds_actions_and_existing_edits() {
-        let prompt = build_intent_prompt(&PlannerInput {
-            text: "给我旋转木马，可以大点，大气点".to_string(),
-            player: Some("Charles".to_string()),
-            codex_session_key: None,
-            position: None,
-            nearby_scan: None,
-            attachments: Vec::new(),
-            progress_id: None,
-        });
-
-        assert!(prompt.contains("意图分类器"));
-        assert!(prompt.contains("controller 不再使用本地关键词表兜底"));
-        assert!(prompt.contains("intent=blueprint"));
-        assert!(prompt.contains("intent=action"));
-        assert!(prompt.contains("intent=existing_build_edit"));
-    }
-
-    #[test]
-    fn action_plan_prompt_requires_complete_item_understanding() {
-        let prompt = build_action_plan_prompt(&PlannerInput {
-            text: "我要钻石稿子".to_string(),
-            player: Some("Steve".to_string()),
-            codex_session_key: None,
-            position: None,
-            nearby_scan: None,
-            attachments: Vec::new(),
-            progress_id: None,
-        });
-
-        assert!(prompt.contains("不能只因为文本包含“钻石”"));
-        assert!(prompt.contains("minecraft:diamond_pickaxe"));
-        assert!(prompt.contains("time set day"));
-        assert!(prompt.contains("gamemode creative Steve"));
-        assert!(prompt.contains("Codex 意图分类器"));
-    }
-
-    #[test]
-    fn parses_codex_intent_json() {
-        let output = r#"{"intent":"blueprint","reply":"按建筑处理。","summary":"建筑需求"}"#;
-
-        let intent = parse_intent_response(output).unwrap();
-
-        assert_eq!(intent.intent, PlannerIntentKind::Blueprint);
-        assert_eq!(intent.summary, "建筑需求");
-    }
-
-    #[test]
-    fn parses_codex_action_plan_for_diamond_pickaxe() {
+    fn parses_codex_plan_for_diamond_pickaxe() {
         let output = r#"{
   "reply": "可以，已经准备给你一把钻石镐。",
   "summary": "发放钻石镐",
+  "blueprint": null,
   "actions": [
     {"type":"give_item","player":null,"item":"minecraft:diamond_pickaxe","count":1}
   ]
 }"#;
 
-        let plan = parse_action_plan_response(output).unwrap();
+        let plan = parse_plan_response(output).unwrap();
 
         assert_eq!(plan.summary, "发放钻石镐");
+        assert!(plan.blueprint.is_none());
         assert!(matches!(
             plan.actions[0],
             GameAction::GiveItem {
@@ -2968,16 +2301,17 @@ esac
     }
 
     #[test]
-    fn parses_codex_action_plan_for_minecraft_command() {
+    fn parses_codex_plan_for_minecraft_command() {
         let output = r#"{
   "reply": "可以，已经切到白天。",
   "summary": "设置为白天",
+  "blueprint": null,
   "actions": [
     {"type":"run_command","command":"time set day"}
   ]
 }"#;
 
-        let plan = parse_action_plan_response(output).unwrap();
+        let plan = parse_plan_response(output).unwrap();
 
         assert_eq!(plan.summary, "设置为白天");
         assert!(matches!(
@@ -2987,40 +2321,47 @@ esac
     }
 
     #[test]
-    fn parses_schema_constrained_action_plan_with_nullable_variant_fields() {
+    fn parses_scan_request_plan() {
         let output = r#"{
-  "reply": "可以，已经切到白天。",
-  "summary": "设置为白天",
+  "reply": "我先看一下你面前的场地，再继续处理。",
+  "summary": "扫描现场",
+  "blueprint": null,
   "actions": [
-    {"type":"run_command","player":null,"item":null,"count":null,"command":"time set day","message":null}
+    {"type":"scan_nearby_and_plan","text":"把我面前这个建筑的窗户换成蓝色玻璃","attachments":[]}
   ]
 }"#;
 
-        let plan = parse_action_plan_response(output).unwrap();
+        let plan = parse_plan_response(output).unwrap();
 
-        assert_eq!(plan.summary, "设置为白天");
+        assert_eq!(plan.summary, "扫描现场");
         assert!(matches!(
             plan.actions[0],
-            GameAction::RunCommand { ref command } if command == "time set day"
+            GameAction::ScanNearbyAndPlan { ref text, .. } if text.contains("窗户")
         ));
     }
 
     #[test]
-    fn parses_codex_blueprint_json_even_when_wrapped() {
+    fn parses_codex_plan_with_blueprint_even_when_wrapped() {
         let output = r#"这里是结果：
 ```json
 {
-  "id": "tiny-tower",
-  "name": "小塔",
-  "description": "测试",
-  "size": {"width": 1, "height": 1, "depth": 1},
-  "materials": [{"material": "minecraft:stone", "count": 1}],
-  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:stone"}],
-  "tags": ["tower"]
+  "reply": "开始做小塔。",
+  "summary": "建造蓝图 tiny-tower",
+  "blueprint": {
+    "id": "tiny-tower",
+    "name": "小塔",
+    "description": "测试",
+    "size": {"width": 1, "height": 1, "depth": 1},
+    "materials": [{"material": "minecraft:stone", "count": 1}],
+    "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:stone"}],
+    "tags": ["tower"]
+  },
+  "actions": []
 }
 ```"#;
 
-        let blueprint = parse_blueprint_response(output).unwrap();
+        let plan = parse_plan_response(output).unwrap();
+        let blueprint = plan.blueprint.unwrap();
 
         assert_eq!(blueprint.id, "tiny-tower");
         assert_eq!(blueprint.blocks[0].material, "minecraft:stone");

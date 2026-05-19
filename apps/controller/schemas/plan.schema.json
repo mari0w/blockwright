@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "attachment": {
+      "type": "object"
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z", "material"],
+      "properties": {
+        "x": { "type": "integer", "minimum": -96, "maximum": 96 },
+        "y": { "type": "integer", "minimum": -64, "maximum": 128 },
+        "z": { "type": "integer", "minimum": -96, "maximum": 96 },
+        "material": {
+          "type": "string",
+          "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world", "x", "y", "z"],
+      "properties": {
+        "world": { "type": ["string", "null"] },
+        "x": { "type": "integer", "minimum": -30000000, "maximum": 30000000 },
+        "y": { "type": "integer", "minimum": -64, "maximum": 320 },
+        "z": { "type": "integer", "minimum": -30000000, "maximum": 30000000 }
+      }
+    },
+    "blueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "size", "materials", "blocks", "tags"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height", "depth"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1, "maximum": 96 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 128 },
+            "depth": { "type": "integer", "minimum": 1, "maximum": 96 }
+          }
+        },
+        "materials": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["material", "count"],
+            "properties": {
+              "material": {
+                "type": "string",
+                "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
+              },
+              "count": { "type": "integer", "minimum": 1, "maximum": 2000 }
+            }
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/block" }
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "giveItemAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "player", "item", "count"],
+      "properties": {
+        "type": { "const": "give_item" },
+        "player": { "type": ["string", "null"] },
+        "item": {
+          "type": "string",
+          "pattern": "^minecraft:[a-z0-9_./-]+$"
+        },
+        "count": { "type": "integer", "minimum": 1, "maximum": 6400 }
+      }
+    },
+    "placeBlocksAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "blueprint_id", "origin", "blocks", "clear_existing"],
+      "properties": {
+        "type": { "const": "place_blocks" },
+        "blueprint_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 96 },
+        "origin": { "$ref": "#/$defs/origin" },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/block" }
+        },
+        "clear_existing": { "type": "boolean" }
+      }
+    },
+    "runCommandAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "command"],
+      "properties": {
+        "type": { "const": "run_command" },
+        "command": { "type": "string", "minLength": 1, "maxLength": 160 }
+      }
+    },
+    "chatAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "message"],
+      "properties": {
+        "type": { "const": "chat" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
+    "scanNearbyAndPlanAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text", "attachments"],
+      "properties": {
+        "type": { "const": "scan_nearby_and_plan" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "attachments": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/attachment" }
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/giveItemAction" },
+        { "$ref": "#/$defs/placeBlocksAction" },
+        { "$ref": "#/$defs/runCommandAction" },
+        { "$ref": "#/$defs/chatAction" },
+        { "$ref": "#/$defs/scanNearbyAndPlanAction" }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reply", "summary", "blueprint", "actions"],
+  "properties": {
+    "reply": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "blueprint": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/blueprint" }
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/action" }
+    }
+  }
+}

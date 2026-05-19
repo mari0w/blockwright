@@ -64,7 +64,10 @@ pub(crate) async fn queue_chat_message(
             PlannerInput {
                 text: message.text,
                 player: target_player.clone(),
-                codex_session_key: Some(format!("robot:{}:{}", message.platform, message.sender)),
+                codex_session_key: Some(format!(
+                    "robot:{}:{}:{}",
+                    message.platform, message.conversation_id, message.sender
+                )),
                 position: message.position,
                 nearby_scan: None,
                 attachments: message.attachments,
@@ -78,7 +81,7 @@ pub(crate) async fn queue_chat_message(
         .server_id
         .unwrap_or_else(|| state.config.minecraft.default_server_id.clone());
     let has_build = has_build_action(&plan.actions);
-    let queued_job = if plan.actions.is_empty() {
+    let queued_job = if plan.actions.is_empty() || only_chat_actions(&plan.actions) {
         None
     } else if !has_build && has_scan_action(&plan.actions) {
         if let Some(job) = state
@@ -116,7 +119,7 @@ pub(crate) async fn queue_chat_message(
             {
                 tracing::error!(error = %error, "failed to register planned robot build");
                 return RobotMessageResponse {
-                    reply: "构建记录保存失败，已取消下发建筑任务。".to_string(),
+                    reply: "构建记录保存失败，已取消发送建筑任务。".to_string(),
                     queued_job: None,
                 };
             }
@@ -163,4 +166,11 @@ fn has_scan_action(actions: &[crate::domain::types::GameAction]) -> bool {
             crate::domain::types::GameAction::ScanNearbyAndPlan { .. }
         )
     })
+}
+
+fn only_chat_actions(actions: &[crate::domain::types::GameAction]) -> bool {
+    !actions.is_empty()
+        && actions
+            .iter()
+            .all(|action| matches!(action, crate::domain::types::GameAction::Chat { .. }))
 }

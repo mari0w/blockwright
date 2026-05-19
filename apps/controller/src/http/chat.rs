@@ -157,7 +157,7 @@ async fn save_matrix_local_config(
         message: if poller_started {
             "Matrix/Element 本地配置已保存，并已启动 polling。".to_string()
         } else if request.enabled {
-            "Matrix/Element 本地配置已保存；如果已有 polling 在运行，新配置下次重启 controller 生效。"
+            "Matrix/Element 本地配置已保存；如果已有轮询在运行，新配置会在下次重启服务后生效。"
                 .to_string()
         } else {
             "Matrix/Element 本地配置已保存，当前为禁用状态。".to_string()

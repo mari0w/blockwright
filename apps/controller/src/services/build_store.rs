@@ -3,18 +3,9 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::domain::types::{
-    ActionExecutionReport, BlockOrigin, BlueprintBlock, BuildRecord, BuildStatus,
-    ExpectedBuildAction, GameAction, JobResultRequest, MaterialCount, WorldScan,
+    ActionExecutionReport, BuildRecord, BuildStatus, ExpectedBuildAction, GameAction,
+    JobResultRequest, MaterialCount,
 };
-
-#[derive(Debug, Clone)]
-pub struct BuildMatch {
-    pub record: BuildRecord,
-    pub action_index: usize,
-    pub matched_blocks: u32,
-    pub scanned_expected_blocks: u32,
-    pub score: f32,
-}
 
 #[derive(Clone)]
 pub struct BuildStore {
@@ -102,99 +93,6 @@ impl BuildStore {
         Ok(Some(record))
     }
 
-    pub async fn match_scan(&self, server_id: &str, scan: &WorldScan) -> Vec<BuildMatch> {
-        let scan_blocks = scan
-            .blocks
-            .iter()
-            .map(|block| ((block.x, block.y, block.z), block.material.as_str()))
-            .collect::<HashMap<_, _>>();
-
-        let mut matches = Vec::new();
-        for record in self.items.read().await.values() {
-            if record.server_id != server_id {
-                continue;
-            }
-
-            for (action_index, action) in record.expected_actions.iter().enumerate() {
-                if let Some(world) = &action.origin.world {
-                    if world != &scan.world {
-                        continue;
-                    }
-                }
-
-                let mut scanned_expected_blocks = 0;
-                let mut matched_blocks = 0;
-                for block in &action.blocks {
-                    let absolute = (
-                        action.origin.x + block.x,
-                        action.origin.y + block.y,
-                        action.origin.z + block.z,
-                    );
-                    let Some(actual) = scan_blocks.get(&absolute) else {
-                        continue;
-                    };
-                    scanned_expected_blocks += 1;
-                    if materials_match(block.material.as_str(), actual) {
-                        matched_blocks += 1;
-                    }
-                }
-
-                if matched_blocks == 0 {
-                    continue;
-                }
-                let score = matched_blocks as f32 / action.expected_count.max(1) as f32;
-                matches.push(BuildMatch {
-                    record: record.clone(),
-                    action_index,
-                    matched_blocks,
-                    scanned_expected_blocks,
-                    score,
-                });
-            }
-        }
-
-        matches.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
-                .then_with(|| right.matched_blocks.cmp(&left.matched_blocks))
-                .then_with(|| left.record.id.cmp(&right.record.id))
-        });
-        matches
-    }
-
-    pub async fn adopt_scan_as_build(
-        &self,
-        id: String,
-        server_id: String,
-        target_player: Option<String>,
-        scan: &WorldScan,
-    ) -> Result<Option<BuildMatch>, Box<dyn std::error::Error + Send + Sync>> {
-        let Some(action) = expected_action_from_scan(scan) else {
-            return Ok(None);
-        };
-        let matched_blocks = action.blocks.len() as u32;
-        let record = BuildRecord {
-            id,
-            server_id,
-            target_player,
-            summary: "自动登记附近建筑".to_string(),
-            status: BuildStatus::Succeeded,
-            expected_actions: vec![action],
-            result: None,
-            message: Some("由附近扫描自动登记，供后续透明改造使用。".to_string()),
-        };
-
-        self.save_record(record.clone()).await?;
-        Ok(Some(BuildMatch {
-            record,
-            action_index: 0,
-            matched_blocks,
-            scanned_expected_blocks: matched_blocks,
-            score: 1.0,
-        }))
-    }
-
     async fn load_from_disk(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut dir = tokio::fs::read_dir(self.data_dir.as_ref()).await?;
         let mut loaded = HashMap::new();
@@ -260,112 +158,6 @@ fn material_counts(blocks: &[crate::domain::types::BlueprintBlock]) -> Vec<Mater
     items
 }
 
-fn expected_action_from_scan(scan: &WorldScan) -> Option<ExpectedBuildAction> {
-    let adopted = scan
-        .blocks
-        .iter()
-        .filter(|block| is_adoptable_scan_material(&block.material))
-        .collect::<Vec<_>>();
-    let first = adopted.first()?;
-    let (min_x, min_y, min_z) = adopted.iter().skip(1).fold(
-        (first.x, first.y, first.z),
-        |(min_x, min_y, min_z), block| (min_x.min(block.x), min_y.min(block.y), min_z.min(block.z)),
-    );
-    let blocks = adopted
-        .into_iter()
-        .map(|block| BlueprintBlock {
-            x: block.x - min_x,
-            y: block.y - min_y,
-            z: block.z - min_z,
-            material: block.material.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    Some(ExpectedBuildAction {
-        blueprint_id: Some("auto-adopted-nearby-build".to_string()),
-        origin: BlockOrigin {
-            world: Some(scan.world.clone()),
-            x: min_x,
-            y: min_y,
-            z: min_z,
-        },
-        expected_count: blocks.len() as u32,
-        materials: material_counts(&blocks),
-        blocks,
-    })
-}
-
-fn is_adoptable_scan_material(material: &str) -> bool {
-    let material = material_spec(material).0;
-    !matches!(
-        material,
-        "minecraft:water"
-            | "minecraft:lava"
-            | "minecraft:grass_block"
-            | "minecraft:dirt"
-            | "minecraft:coarse_dirt"
-            | "minecraft:rooted_dirt"
-            | "minecraft:podzol"
-            | "minecraft:mycelium"
-            | "minecraft:stone"
-            | "minecraft:deepslate"
-            | "minecraft:granite"
-            | "minecraft:diorite"
-            | "minecraft:andesite"
-            | "minecraft:calcite"
-            | "minecraft:tuff"
-            | "minecraft:gravel"
-            | "minecraft:sand"
-            | "minecraft:red_sand"
-            | "minecraft:sandstone"
-            | "minecraft:red_sandstone"
-            | "minecraft:clay"
-            | "minecraft:ice"
-            | "minecraft:packed_ice"
-            | "minecraft:blue_ice"
-            | "minecraft:snow"
-            | "minecraft:snow_block"
-            | "minecraft:short_grass"
-            | "minecraft:tall_grass"
-            | "minecraft:fern"
-            | "minecraft:large_fern"
-            | "minecraft:seagrass"
-            | "minecraft:tall_seagrass"
-            | "minecraft:kelp"
-            | "minecraft:kelp_plant"
-    )
-}
-
-fn materials_match(expected: &str, actual: &str) -> bool {
-    let expected = material_spec(expected);
-    let actual = material_spec(actual);
-    if expected.0 != actual.0 {
-        return false;
-    }
-    if expected.1.is_empty() || actual.1.is_empty() {
-        return true;
-    }
-    expected
-        .1
-        .iter()
-        .all(|(key, value)| actual.1.get(key).is_some_and(|actual| actual == value))
-}
-
-fn material_spec(material: &str) -> (&str, HashMap<&str, &str>) {
-    let Some((id, states)) = material
-        .strip_suffix(']')
-        .and_then(|value| value.split_once('['))
-    else {
-        return (material, HashMap::new());
-    };
-
-    let states = states
-        .split(',')
-        .filter_map(|part| part.split_once('='))
-        .collect::<HashMap<_, _>>();
-    (id, states)
-}
-
 fn report_is_inconsistent(record: &BuildRecord) -> bool {
     let Some(report) = record.result.as_ref() else {
         return true;
@@ -403,9 +195,7 @@ fn safe_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::{
-        BlockMismatch, BlockOrigin, BlueprintBlock, JobExecutionReport, WorldScanBlock,
-    };
+    use crate::domain::types::{BlockMismatch, BlockOrigin, BlueprintBlock, JobExecutionReport};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_DIR_ID: AtomicU64 = AtomicU64::new(1);
@@ -445,30 +235,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn material_match_accepts_stateful_expected_with_plain_scan_id() {
-        assert!(materials_match(
-            "minecraft:oak_leaves[persistent=true]",
-            "minecraft:oak_leaves"
-        ));
-        assert!(materials_match(
-            "minecraft:oak_door[half=upper,facing=south]",
-            "minecraft:oak_door[half=upper,facing=south]"
-        ));
-        assert!(materials_match(
-            "minecraft:oak_door[half=upper,facing=south]",
-            "minecraft:oak_door[facing=south,half=upper,hinge=left,open=false,powered=false]"
-        ));
-        assert!(!materials_match(
-            "minecraft:oak_door[half=upper,facing=south]",
-            "minecraft:oak_door[half=lower,facing=south]"
-        ));
-        assert!(!materials_match(
-            "minecraft:oak_leaves[persistent=true]",
-            "minecraft:birch_leaves"
-        ));
-    }
-
     #[tokio::test]
     async fn registers_planned_build_from_place_blocks_action() {
         let store = BuildStore::new(temp_dir("planned")).await.unwrap();
@@ -489,100 +255,6 @@ mod tests {
         assert_eq!(record.expected_actions[0].expected_count, 2);
         assert_eq!(record.expected_actions[0].materials[0].count, 2);
         assert!(store.get("hm-job-1").await.is_some());
-    }
-
-    #[tokio::test]
-    async fn match_scan_uses_planned_records_without_manual_save_step() {
-        let store = BuildStore::new(temp_dir("planned-match")).await.unwrap();
-        store
-            .register_planned(
-                "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
-                Some("Steve".to_string()),
-                "建造测试".to_string(),
-                &[place_action()],
-            )
-            .await
-            .unwrap();
-        let scan = WorldScan {
-            world: "minecraft:overworld".to_string(),
-            center_x: 10,
-            center_y: 64,
-            center_z: 10,
-            radius: 8,
-            blocks: vec![
-                WorldScanBlock {
-                    x: 10,
-                    y: 64,
-                    z: 10,
-                    material: "minecraft:oak_planks".to_string(),
-                },
-                WorldScanBlock {
-                    x: 11,
-                    y: 64,
-                    z: 10,
-                    material: "minecraft:oak_planks".to_string(),
-                },
-            ],
-        };
-
-        let matches = store.match_scan("hmcl-lan", &scan).await;
-
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].record.id, "hm-job-1");
-        assert_eq!(matches[0].record.status, BuildStatus::Planned);
-    }
-
-    #[tokio::test]
-    async fn auto_adopts_scan_as_build_without_user_confirmation() {
-        let store = BuildStore::new(temp_dir("auto-adopt")).await.unwrap();
-        let scan = WorldScan {
-            world: "minecraft:overworld".to_string(),
-            center_x: 20,
-            center_y: 64,
-            center_z: 30,
-            radius: 8,
-            blocks: vec![
-                WorldScanBlock {
-                    x: 20,
-                    y: 63,
-                    z: 30,
-                    material: "minecraft:water[level=0]".to_string(),
-                },
-                WorldScanBlock {
-                    x: 20,
-                    y: 64,
-                    z: 30,
-                    material: "minecraft:gold_block".to_string(),
-                },
-                WorldScanBlock {
-                    x: 21,
-                    y: 64,
-                    z: 30,
-                    material: "minecraft:copper_block".to_string(),
-                },
-            ],
-        };
-
-        let adopted = store
-            .adopt_scan_as_build(
-                "hm-job-2".to_string(),
-                "hmcl-lan".to_string(),
-                Some("Steve".to_string()),
-                &scan,
-            )
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(adopted.record.id, "hm-job-2");
-        assert_eq!(adopted.record.status, BuildStatus::Succeeded);
-        assert_eq!(adopted.record.expected_actions[0].blocks.len(), 2);
-        assert_eq!(adopted.record.expected_actions[0].origin.y, 64);
-        assert!(adopted.record.expected_actions[0]
-            .blocks
-            .iter()
-            .all(|block| block.material != "minecraft:water[level=0]"));
     }
 
     #[tokio::test]

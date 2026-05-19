@@ -148,59 +148,92 @@ if [[ -z "$last_message" ]]; then
   exit 2
 fi
 case "$schema" in
-  *intent.schema.json)
-    if grep -q "窗户换成蓝色玻璃" "$prompt_file"; then
+  *plan.schema.json)
+    if grep -q "给我一把钻石剑" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
-{"intent":"existing_build_edit","reply":"我会基于当前建筑把窗户改成蓝色玻璃，并按你的整体要求继续优化。","summary":"改造窗户颜色"}
-JSON
-    elif grep -q "摩天轮整体放大" "$prompt_file"; then
-      cat > "$last_message" <<'JSON'
-{"intent":"existing_build_edit","reply":"我会把当前摩天轮整体放大重做成更逼真的版本。","summary":"重做放大现有摩天轮"}
-JSON
-    elif grep -q "给我一把钻石剑" "$prompt_file"; then
-      cat > "$last_message" <<'JSON'
-{"intent":"action","reply":"按动作处理。","summary":"动作需求"}
-JSON
-    else
-      cat > "$last_message" <<'JSON'
-{"intent":"blueprint","reply":"按建筑处理。","summary":"建筑需求"}
-JSON
-    fi
-    ;;
-  *blueprint.schema.json)
-    cat > "$last_message" <<'JSON'
 {
-  "id": "oak-house-small",
-  "name": "测试小木屋",
-  "description": "用于 API 测试的简化小木屋，包含玻璃窗。",
-  "size": {"width": 3, "height": 3, "depth": 3},
-  "materials": [
-    {"material": "minecraft:oak_planks", "count": 5},
-    {"material": "minecraft:glass", "count": 4}
-  ],
-  "blocks": [
-    {"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
-    {"x": 1, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
-    {"x": 2, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
-    {"x": 0, "y": 1, "z": 0, "material": "minecraft:glass"},
-    {"x": 1, "y": 1, "z": 0, "material": "minecraft:glass"},
-    {"x": 0, "y": 2, "z": 0, "material": "minecraft:glass"},
-    {"x": 1, "y": 2, "z": 0, "material": "minecraft:glass"},
-    {"x": 2, "y": 1, "z": 0, "material": "minecraft:oak_planks"},
-    {"x": 2, "y": 2, "z": 0, "material": "minecraft:oak_planks"}
-  ],
-  "tags": ["house"]
+  "reply": "可以，已经准备给你一把钻石剑。",
+  "summary": "发放钻石剑",
+  "blueprint": null,
+  "actions": [
+    {"type": "give_item", "player": "Steve", "item": "minecraft:diamond_sword", "count": 1}
+  ]
 }
 JSON
-    ;;
-  *existing-edit-plan.schema.json)
-    if grep -q "摩天轮整体放大" "$prompt_file"; then
+    elif grep -q "先聊一下" "$prompt_file"; then
+      cat > "$last_message" <<'JSON'
+{"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？我确认后再开始动工。","summary":"讨论建造方案","blueprint":null,"actions":[]}
+JSON
+    elif grep -q "窗户换成蓝色玻璃" "$prompt_file" && grep -q "未收到附近场地扫描" "$prompt_file"; then
+      if grep -q "window.png" "$prompt_file"; then
+        cat > "$last_message" <<'JSON'
+{
+  "reply": "我会基于当前建筑把窗户改成蓝色玻璃，并按你的整体要求继续优化。",
+  "summary": "改造窗户颜色",
+  "blueprint": null,
+  "actions": [
+    {
+      "type": "scan_nearby_and_plan",
+      "text": "把我面前这个建筑的窗户换成蓝色玻璃\n\n用户上传了参考图片，现场扫描后继续结合这次的文字和图片需求处理。",
+      "attachments": [
+        {
+          "kind": "image",
+          "source": {"type": "local_path", "path": "/tmp/window.png"},
+          "file_name": "window.png",
+          "mime_type": "image/png"
+        }
+      ]
+    }
+  ]
+}
+JSON
+      else
+        if grep -q "更大更复杂" "$prompt_file"; then
+          cat > "$last_message" <<'JSON'
+{"reply":"我会基于当前建筑把窗户改成蓝色玻璃，并继续做得更大更复杂。","summary":"改造窗户颜色","blueprint":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我面前这个建筑的窗户换成蓝色玻璃，还要更大更复杂","attachments":[]}]}
+JSON
+        else
+          cat > "$last_message" <<'JSON'
+{"reply":"我会基于当前建筑把窗户改成蓝色玻璃。","summary":"改造窗户颜色","blueprint":null,"actions":[{"type":"scan_nearby_and_plan","text":"把我脚下这个建筑的窗户换成蓝色玻璃","attachments":[]}]}
+JSON
+        fi
+      fi
+    elif grep -q "窗户换成蓝色玻璃" "$prompt_file"; then
+      cat > "$last_message" <<'JSON'
+{
+  "reply": "已按当前建筑自由调整窗户颜色。",
+  "summary": "调整现有建筑窗户",
+  "blueprint": null,
+  "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-window-edit",
+      "origin": {"world": "world", "x": 20, "y": 64, "z": 30},
+      "blocks": [
+        {"x": 0, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 1, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 0, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"},
+        {"x": 1, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"}
+      ],
+      "clear_existing": false
+    }
+  ]
+}
+JSON
+    elif grep -q "摩天轮整体放大" "$prompt_file"; then
       cat > "$last_message" <<'JSON'
 {
   "reply": "已按当前匹配到的摩天轮整体重做，会先清理旧结构，再放置新的逼真摩天轮。",
   "summary": "整体重做逼真摩天轮",
-  "mode": "replace",
+  "blueprint": null,
   "actions": [
+    {
+      "type": "place_blocks",
+      "blueprint_id": "codex-realistic-ferris-wheel-clear",
+      "origin": {"world": "world", "x": 20, "y": 64, "z": 30},
+      "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:air"}],
+      "clear_existing": true
+    },
     {
       "type": "place_blocks",
       "blueprint_id": "codex-realistic-ferris-wheel",
@@ -218,37 +251,34 @@ JSON
     else
       cat > "$last_message" <<'JSON'
 {
-  "reply": "已按当前匹配到的建筑自由调整窗户颜色。",
-  "summary": "调整现有建筑窗户",
-  "mode": "patch",
-  "actions": [
-    {
-      "type": "place_blocks",
-      "blueprint_id": "codex-window-edit",
-      "origin": {"world": "world", "x": 20, "y": 64, "z": 30},
-      "blocks": [
-        {"x": 0, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
-        {"x": 1, "y": 1, "z": 0, "material": "minecraft:blue_stained_glass"},
-        {"x": 0, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"},
-        {"x": 1, "y": 2, "z": 0, "material": "minecraft:blue_stained_glass"}
-      ],
-      "clear_existing": false
-    }
-  ]
+  "reply": "我已经规划好测试小木屋。",
+  "summary": "建造蓝图 oak-house-small",
+  "blueprint": {
+    "id": "oak-house-small",
+    "name": "测试小木屋",
+    "description": "用于 API 测试的简化小木屋，包含玻璃窗。",
+    "size": {"width": 3, "height": 3, "depth": 3},
+    "materials": [
+      {"material": "minecraft:oak_planks", "count": 5},
+      {"material": "minecraft:glass", "count": 4}
+    ],
+    "blocks": [
+      {"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+      {"x": 1, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+      {"x": 2, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+      {"x": 0, "y": 1, "z": 0, "material": "minecraft:glass"},
+      {"x": 1, "y": 1, "z": 0, "material": "minecraft:glass"},
+      {"x": 0, "y": 2, "z": 0, "material": "minecraft:glass"},
+      {"x": 1, "y": 2, "z": 0, "material": "minecraft:glass"},
+      {"x": 2, "y": 1, "z": 0, "material": "minecraft:oak_planks"},
+      {"x": 2, "y": 2, "z": 0, "material": "minecraft:oak_planks"}
+    ],
+    "tags": ["house"]
+  },
+  "actions": []
 }
 JSON
     fi
-    ;;
-  *action-plan.schema.json)
-    cat > "$last_message" <<'JSON'
-{
-  "reply": "可以，已经准备给你一把钻石剑。",
-  "summary": "发放钻石剑",
-  "actions": [
-    {"type": "give_item", "player": "Steve", "item": "minecraft:diamond_sword", "count": 1}
-  ]
-}
-JSON
     ;;
   "")
     if grep -q "Blockwright 网页语音输入的翻译器" "$prompt_file"; then
@@ -327,7 +357,20 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert_eq!(page_response.status(), StatusCode::OK);
     let page_body = response_text(page_response).await;
     assert!(page_body.contains("voiceHold"));
-    assert!(page_body.contains("voiceTarget"));
+    assert!(page_body.contains("viewport-fit=cover"));
+    assert!(page_body.contains("手机语音需要 HTTPS 地址"));
+    assert!(page_body.contains("id=\"cameraImage\""));
+    assert!(page_body.contains("capture=\"environment\""));
+    assert!(page_body.contains("id=\"libraryImages\""));
+    assert!(page_body.contains("Minecraft 用户名"));
+    assert!(page_body.contains("text.hidden = active"));
+    assert!(page_body.contains("send.hidden = active"));
+    assert!(page_body.contains("切换到文字输入"));
+    assert!(!page_body.contains("Minecraft 玩家"));
+    assert!(!page_body.contains("voiceTarget"));
+    assert!(!page_body.contains("识别语言"));
+    assert!(!page_body.contains("翻译为"));
+    assert!(!page_body.contains("/web/translate"));
 
     let message_response = app
         .oneshot(request(
@@ -383,6 +426,46 @@ async fn web_voice_translate_uses_codex_without_api_token() {
     assert_eq!(body["translated"], true);
     assert_eq!(body["target_language"], "zh-CN");
     assert_eq!(body["translated_text"], "帮我建一个小木屋");
+}
+
+#[tokio::test]
+async fn web_chat_reply_does_not_queue_minecraft_job() {
+    let app = test_app_with_fake_codex(true, "api-web-chat-only").await;
+
+    let response = app
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/web/message",
+            Some(json!({
+                "username": "Charles",
+                "target_player": "Charles",
+                "server_id": "hmcl-lan",
+                "text": "先聊一下，我想做一个建筑但还没想好风格",
+                "images": []
+            })),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+
+    assert!(body["reply"].as_str().unwrap().contains("先聊方案"));
+    assert!(body["queued_job_id"].is_null());
+    assert!(body["queued_summary"].is_null());
+
+    let next_response = app
+        .oneshot(request(
+            "GET",
+            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            None,
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    let next_body = response_json(next_response).await;
+    assert!(next_body["job"].is_null());
 }
 
 #[tokio::test]
@@ -711,7 +794,7 @@ async fn web_job_status_reports_queue_claim_and_result() {
         .unwrap();
     let queued_body = response_json(queued_response).await;
     assert_eq!(queued_body["phase"], "queued");
-    assert!(queued_body["message"].as_str().unwrap().contains("队列"));
+    assert!(queued_body["message"].as_str().unwrap().contains("接手"));
 
     let next_response = app
         .clone()
@@ -741,7 +824,10 @@ async fn web_job_status_reports_queue_claim_and_result() {
         .unwrap();
     let running_body = response_json(running_response).await;
     assert_eq!(running_body["phase"], "running");
-    assert!(running_body["message"].as_str().unwrap().contains("已领取"));
+    assert!(running_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("正在处理"));
 
     let result_response = app
         .clone()
@@ -785,6 +871,7 @@ async fn web_job_status_reports_queue_claim_and_result() {
     let succeeded_body = response_json(succeeded_response).await;
     assert_eq!(succeeded_body["phase"], "succeeded");
     assert_eq!(succeeded_body["build_status"], "succeeded");
+    assert!(succeeded_body["result_message"].is_null());
 }
 
 #[tokio::test]
@@ -853,7 +940,7 @@ async fn minecraft_modification_without_scan_asks_fabric_to_rescan_once() {
 }
 
 #[tokio::test]
-async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
+async fn minecraft_modification_with_scan_uses_codex_plan() {
     let app = test_app_with_fake_codex(true, "api-minecraft-modification").await;
     let build_request = json!({
         "server_id": "local-paper",
@@ -974,7 +1061,7 @@ async fn minecraft_modification_uses_nearby_scan_to_target_saved_build() {
 }
 
 #[tokio::test]
-async fn minecraft_modification_auto_adopts_scanned_build_when_no_record_exists() {
+async fn minecraft_modification_with_unrecorded_scan_uses_codex_plan() {
     let app = test_app_with_fake_codex(true, "api-minecraft-auto-adopt").await;
     let modification_request = json!({
         "server_id": "local-paper",
@@ -1234,7 +1321,7 @@ async fn minecraft_progress_endpoint_reports_codex_phase_for_request() {
     assert!(progress_body["message"]
         .as_str()
         .unwrap()
-        .contains("controller"));
+        .contains("Blockwright"));
 }
 
 #[tokio::test]

@@ -126,7 +126,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "blockwright_health",
-                "description": "Return controller identity, server name, environment, and Codex status.",
+                "description": "Return Blockwright service identity, server name, environment, and Codex status.",
                 "inputSchema": object_schema(json!({}))
             },
             {
@@ -310,8 +310,8 @@ fn blockwright_protocol() -> Value {
         "safe_actions": ["give_item", "place_blocks", "run_command", "chat", "scan_nearby_and_plan"],
         "building_contract": [
             "Blueprint blocks use relative coordinates.",
-            "The controller chooses the player-facing target from scan data and may prepare the site tastefully.",
-            "The controller saves build records before Minecraft execution.",
+            "Blockwright chooses the player-facing target from scan data and may prepare the site tastefully.",
+            "Blockwright saves build records before Minecraft execution.",
             "Fabric/Paper executes actions through server world APIs and returns verification reports.",
             "Block material state strings are part of consistency, for example minecraft:oak_door[half=lower,facing=south]."
         ],
@@ -323,7 +323,7 @@ fn blockwright_protocol() -> Value {
         "preferred_flow": [
             "Use tools to inspect blueprints/builds or validate blueprint JSON.",
             "Use blockwright_assistant_message for natural-language assistant behavior; keep execute=false until ready to enqueue.",
-            "Return Blockwright action/blueprint JSON to the controller.",
+            "Return Blockwright action/blueprint JSON through this protocol.",
             "Let Fabric/Paper execute and verify world changes."
         ]
     })

@@ -25,7 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(state.config.server.port);
-    let bind_addr = format!("{}:{port}", state.config.server.host);
+    let host = std::env::var("HOST").unwrap_or_else(|_| state.config.server.host.clone());
+    let bind_addr = format!("{host}:{port}");
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 

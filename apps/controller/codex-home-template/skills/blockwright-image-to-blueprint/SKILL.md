@@ -17,7 +17,7 @@ Use this skill for image-based building requests.
 6. Ensure `materials` matches `blocks`.
 7. Preserve Minecraft playability when the image looks like a usable building: entrance, interior headroom, bed or core furniture, lighting, windows, and a reachable path.
 8. Use explicit block states for special blocks. Leaves should use `persistent=true`; doors and beds should include their upper/lower or head/foot states.
-9. Convert the image into an origin-safe blueprint: the lowest normal floor/foundation should start at relative `y=0`, so the controller can place it on a real ground surface.
+9. Convert the image into an origin-safe blueprint: the lowest normal floor/foundation should start at relative `y=0`, so Blockwright can place it on a real ground surface.
 10. If the image shows a floating or cliffside structure, include a believable support/access path instead of leaving the room unreachable.
 11. When the provided site is irregular, adapt the image-inspired build to the player-facing terrain with a deck, terrace, piles, stairs, or base rather than refusing the request.
 

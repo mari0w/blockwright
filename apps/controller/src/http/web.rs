@@ -224,19 +224,20 @@ fn web_job_status_response(
     let result_message = build
         .as_ref()
         .and_then(|item| item.message.clone())
-        .or_else(|| queue_status.as_ref().and_then(|item| item.message.clone()));
+        .or_else(|| queue_status.as_ref().and_then(|item| item.message.clone()))
+        .and_then(clean_user_status_detail);
 
     match build.as_ref().map(|item| &item.status) {
         Some(BuildStatus::Succeeded) => WebJobStatusResponse {
             phase: "succeeded".to_string(),
-            message: "Minecraft 执行完成，校验报告已回写。".to_string(),
+            message: "Minecraft 已经完成这次操作。".to_string(),
             summary,
             build_status,
             result_message,
         },
         Some(BuildStatus::Failed) => WebJobStatusResponse {
             phase: "failed".to_string(),
-            message: "Minecraft 执行失败，已回写失败原因。".to_string(),
+            message: "这次没能放到世界里，可以调整说法后再试。".to_string(),
             summary,
             build_status,
             result_message,
@@ -249,9 +250,9 @@ fn web_job_status_response(
             WebJobStatusResponse {
                 phase: if pending { "queued" } else { "running" }.to_string(),
                 message: if pending {
-                    "任务还在队列里，等待 Minecraft 执行端领取。".to_string()
+                    "我已经准备好方案，正在等 Minecraft 接手。".to_string()
                 } else {
-                    "Minecraft 执行端已领取任务，正在放置方块并生成校验报告。".to_string()
+                    "Minecraft 正在处理，可能在扫描现场或放置方块。".to_string()
                 },
                 summary,
                 build_status,
@@ -261,41 +262,49 @@ fn web_job_status_response(
         None => match queue_status.as_ref().map(|item| &item.phase) {
             Some(JobQueuePhase::Pending) => WebJobStatusResponse {
                 phase: "queued".to_string(),
-                message: "任务还在队列里，等待 Minecraft 执行端领取。".to_string(),
+                message: "我已经准备好方案，正在等 Minecraft 接手。".to_string(),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Claimed) => WebJobStatusResponse {
                 phase: "running".to_string(),
-                message: "Minecraft 执行端已领取任务，正在扫描或执行。".to_string(),
+                message: "Minecraft 正在处理，可能在扫描现场或放置方块。".to_string(),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Succeeded) => WebJobStatusResponse {
                 phase: "succeeded".to_string(),
-                message: "Minecraft 执行端已回写成功。".to_string(),
+                message: "Minecraft 已经完成这次操作。".to_string(),
                 summary,
                 build_status,
                 result_message,
             },
             Some(JobQueuePhase::Failed) => WebJobStatusResponse {
                 phase: "failed".to_string(),
-                message: "Minecraft 执行端已回写失败。".to_string(),
+                message: "这次没能放到世界里，可以调整说法后再试。".to_string(),
                 summary,
                 build_status,
                 result_message,
             },
             None => WebJobStatusResponse {
                 phase: "unknown".to_string(),
-                message: "没有找到这个任务的实时状态。".to_string(),
+                message: "暂时查不到这次操作的状态。".to_string(),
                 summary,
                 build_status,
                 result_message,
             },
         },
     }
+}
+
+fn clean_user_status_detail(message: String) -> Option<String> {
+    let value = message.trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("ok") || value == "成功" {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 struct TranslationLanguage {
@@ -497,12 +506,20 @@ fn upload_extension(file_name: Option<&str>, mime_type: Option<&str>) -> &'stati
         if lower.ends_with(".gif") {
             return ".gif";
         }
+        if lower.ends_with(".heic") {
+            return ".heic";
+        }
+        if lower.ends_with(".heif") {
+            return ".heif";
+        }
     }
 
     match mime_type.unwrap_or_default() {
         "image/jpeg" => ".jpg",
         "image/webp" => ".webp",
         "image/gif" => ".gif",
+        "image/heic" => ".heic",
+        "image/heif" => ".heif",
         _ => ".png",
     }
 }
