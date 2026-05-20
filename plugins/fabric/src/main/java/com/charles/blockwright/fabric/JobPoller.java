@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 public final class JobPoller {
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockwrightFabricMod.MOD_ID);
+    private static final int MAX_SCAN_REPLAN_ATTEMPTS = 3;
 
     private final MinecraftServer server;
     private final Supplier<BlockwrightConfig> configSupplier;
@@ -91,7 +92,7 @@ public final class JobPoller {
             if (executeLiveQueryJob(controllerClient, job, player)) {
                 return;
             }
-            if (executeScanAndPlanJob(controllerClient, job, player)) {
+            if (executeScanAndPlanJob(controllerClient, job, player, 0)) {
                 return;
             }
             report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
@@ -148,10 +149,33 @@ public final class JobPoller {
     private boolean executeScanAndPlanJob(
             ControllerClient controllerClient,
             JsonModels.GameJob job,
-            ServerPlayerEntity player) {
+            ServerPlayerEntity player,
+            int attempt) {
         JsonModels.GameAction scanAction = firstScanAction(job.actions);
         if (scanAction == null) {
             return false;
+        }
+
+        executeScanAndPlanAction(controllerClient, job.id, player, scanAction, attempt);
+        return true;
+    }
+
+    private void executeScanAndPlanAction(
+            ControllerClient controllerClient,
+            String originalJobId,
+            ServerPlayerEntity player,
+            JsonModels.GameAction scanAction,
+            int attempt) {
+        if (attempt >= MAX_SCAN_REPLAN_ATTEMPTS) {
+            CompletableFuture.runAsync(
+                    () -> sendJobResult(
+                            controllerClient,
+                            originalJobId,
+                            false,
+                            "连续扫描后仍未生成可执行方案，已停止，避免一直重复扫描。",
+                            null),
+                    executor);
+            return;
         }
 
         PlayerSnapshot playerSnapshot = PlayerSnapshot.from(player);
@@ -161,9 +185,9 @@ public final class JobPoller {
                 : scanAction.text;
         if (text == null || text.isBlank()) {
             CompletableFuture.runAsync(
-                    () -> sendJobResult(controllerClient, job.id, false, "缺少要继续处理的原始需求", null),
+                    () -> sendJobResult(controllerClient, originalJobId, false, "缺少要继续处理的原始需求", null),
                     executor);
-            return true;
+            return;
         }
 
         CompletableFuture
@@ -175,15 +199,19 @@ public final class JobPoller {
                                 scanAction.attachments,
                                 nearbyScan),
                         executor)
-                .thenAccept(response -> server.execute(() -> executeScannedResponse(controllerClient, job, playerSnapshot, response)))
+                .thenAccept(response -> server.execute(() -> executeScannedResponse(
+                        controllerClient,
+                        originalJobId,
+                        playerSnapshot,
+                        response,
+                        attempt + 1)))
                 .exceptionally(error -> {
                     CompletableFuture.runAsync(
-                            () -> sendJobResult(controllerClient, job.id, false, rootMessage(error), null),
+                            () -> sendJobResult(controllerClient, originalJobId, false, rootMessage(error), null),
                             executor);
                     LOGGER.warn("Blockwright queued scan planning failed", error);
                     return null;
                 });
-        return true;
     }
 
     private JsonModels.GameAction firstScanAction(List<JsonModels.GameAction> actions) {
@@ -231,18 +259,25 @@ public final class JobPoller {
 
     private void executeScannedResponse(
             ControllerClient controllerClient,
-            JsonModels.GameJob originalJob,
+            String originalJobId,
             PlayerSnapshot playerSnapshot,
-            JsonModels.MinecraftMessageResponse response) {
+            JsonModels.MinecraftMessageResponse response,
+            int attempt) {
         ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerSnapshot.name());
         if (currentPlayer == null) {
             CompletableFuture.runAsync(
-                    () -> sendJobResult(controllerClient, originalJob.id, false, "玩家已离线", null),
+                    () -> sendJobResult(controllerClient, originalJobId, false, "玩家已离线", null),
                     executor);
             return;
         }
 
         currentPlayer.sendMessage(net.minecraft.text.Text.literal(response.reply), false);
+        JsonModels.GameAction nextScanAction = firstScanAction(response.actions);
+        if (nextScanAction != null) {
+            executeScanAndPlanAction(controllerClient, originalJobId, currentPlayer, nextScanAction, attempt);
+            return;
+        }
+
         boolean ok = true;
         String message = "ok";
         JsonModels.JobExecutionReport report = null;
@@ -263,7 +298,7 @@ public final class JobPoller {
         JsonModels.JobExecutionReport resultReport = report;
         CompletableFuture.runAsync(
                 () -> {
-                    sendJobResult(controllerClient, originalJob.id, resultOk, resultMessage, resultReport);
+                    sendJobResult(controllerClient, originalJobId, resultOk, resultMessage, resultReport);
                     if (response.jobId != null && !response.jobId.isBlank()) {
                         sendJobResult(controllerClient, response.jobId, resultOk, resultMessage, resultReport);
                     }

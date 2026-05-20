@@ -1639,11 +1639,13 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 - 玩家明确要建造、放置、修改世界时，结合现场数据和对应 skill 直接设计/执行；没有说风格、大小、朝向时，自主选合理默认值。
 - 只有意图冲突、危险，或改造既有建筑时目标确实不唯一，才追问。不要因为缺少审美细节、位置细节或“你想怎么做”而中断明确请求。
 - 可从 context_bundle 得到的数据不要重复查；缺少关键实时数据时，用 MCP 工具或输出 `scan_nearby_and_plan` 补齐。
+- 如果 context_bundle.site.nearby_scan 已经存在，本轮就不要再次输出 `scan_nearby_and_plan`；必须基于现有扫描直接规划/执行，或者明确回复为什么无法继续。
 
 建筑只是一种 skill 场景：
 - 一个完整建筑对应一个 blueprint 对象和保存后的蓝图文件；blocks 使用相对坐标，materials/count 必须一致。
 - 设计自由交给模型和 skills。已有蓝图是可复用资料，不是限制；现场地形、玩家视角、主题和可玩性都可以影响最终设计。
 - 新建建筑优先让玩家在面前看得到、进得去，但可以根据水、坡、树、空地、遮挡等现场条件微调。
+- 玩家提供图片并要求按图建造时，默认意图是复刻，不是简化版或小模型；先分析图片里的体积、比例、宽高深、可见细节和材料分区，再按实际视觉规模生成足够大的完整蓝图，明显需要很多方块就使用很多方块。
 - 改造既有建筑时，先用 nearby_scan、玩家位置和构建记录匹配目标；多个候选都合理或部位不明确时才问。
 
 输出协议只是当前 controller 兼容层：
@@ -3652,8 +3654,8 @@ BLOCKWRIGHT_JSON
             "codex-image-attachment",
             r#"{
   "id": "image-inspired-house",
-  "name": "图片参考小屋",
-  "description": "按附件图片生成的简化建筑。",
+  "name": "图片复刻小屋",
+  "description": "按附件图片生成的复刻建筑。",
   "size": {"width": 1, "height": 1, "depth": 1},
   "materials": [{"material": "minecraft:oak_planks", "count": 1}],
   "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
@@ -3718,6 +3720,9 @@ BLOCKWRIGHT_JSON
         assert!(prompt.contains("命名空间 ID"));
         assert!(prompt.contains("give_item"));
         assert!(prompt.contains("run_command"));
+        assert!(prompt.contains("默认意图是复刻"));
+        assert!(prompt.contains("不是简化版或小模型"));
+        assert!(prompt.contains("明显需要很多方块就使用很多方块"));
         assert!(!prompt.contains("新建建筑、模型或场景时：调用并遵循"));
     }
 

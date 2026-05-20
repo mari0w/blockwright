@@ -288,6 +288,10 @@ mod tests {
         assert!(PACKAGED_CODEX_HOME_FILES.iter().any(|(path, content)| path
             == &"skills/blockwright-build-planning/SKILL.md"
             && content.contains("Blockwright Building Planning")));
+        assert!(PACKAGED_CODEX_HOME_FILES.iter().any(|(path, content)| path
+            == &"skills/blockwright-image-to-blueprint/SKILL.md"
+            && content.contains("one-to-one Minecraft recreation")
+            && content.contains("not a small reference model")));
     }
 
     #[tokio::test]

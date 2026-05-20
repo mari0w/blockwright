@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 public final class BlockwrightFabricMod implements ModInitializer {
     public static final String MOD_ID = "blockwright";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    private static final int MAX_SCAN_REPLAN_ATTEMPTS = 3;
     private static final ExecutorService REQUEST_EXECUTOR =
             Executors.newSingleThreadExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "blockwright-controller-client");
@@ -106,7 +107,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
                         return;
                     }
                     currentPlayer.sendMessage(Text.literal(response.reply), false);
-                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response)) {
+                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response, 0)) {
                         executeDirectActions(controllerClient, server, currentPlayer, response);
                     }
                 }))
@@ -206,7 +207,8 @@ public final class BlockwrightFabricMod implements ModInitializer {
             ControllerClient controllerClient,
             MinecraftServer server,
             ServerPlayerEntity player,
-            JsonModels.MinecraftMessageResponse response) {
+            JsonModels.MinecraftMessageResponse response,
+            int attempt) {
         if (response.actions == null) {
             return false;
         }
@@ -216,7 +218,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
                 continue;
             }
 
-            sendScannedRetry(controllerClient, server, player, action);
+            sendScannedRetry(controllerClient, server, player, action, attempt);
             return true;
         }
 
@@ -227,7 +229,13 @@ public final class BlockwrightFabricMod implements ModInitializer {
             ControllerClient controllerClient,
             MinecraftServer server,
             ServerPlayerEntity player,
-            JsonModels.GameAction action) {
+            JsonModels.GameAction action,
+            int attempt) {
+        if (attempt >= MAX_SCAN_REPLAN_ATTEMPTS) {
+            player.sendMessage(Text.literal("Blockwright 连续扫描后仍未生成可执行方案，已停止，避免一直重复扫描。"), false);
+            return;
+        }
+
         PlayerSnapshot playerSnapshot = PlayerSnapshot.from(player);
         JsonModels.WorldScan nearbyScan = WorldScanner.scan(player, config);
         String playerName = playerSnapshot.name();
@@ -254,7 +262,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
                         return;
                     }
                     currentPlayer.sendMessage(Text.literal(response.reply), false);
-                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response)) {
+                    if (!executeScanAndPlanAction(controllerClient, server, currentPlayer, response, attempt + 1)) {
                         executeDirectActions(controllerClient, server, currentPlayer, response);
                     }
                 }))
