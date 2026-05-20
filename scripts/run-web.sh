@@ -9,7 +9,7 @@ if [[ ! -f .env && -f .env.example ]]; then
 fi
 
 export SERVER_NAME="${SERVER_NAME:-local}"
-export RUST_LOG="${RUST_LOG:-info,tower_http=debug}"
+export RUST_LOG="${RUST_LOG:-info}"
 
 if [[ "${PORT:-}" =~ ^[0-9]+$ ]]; then
   http_port="${PORT}"
@@ -33,5 +33,6 @@ else
   echo "手机语音 HTTPS 默认地址：https://127.0.0.1:${https_port}/web"
 fi
 echo "临时换端口示例：PORT=18765 ./scripts/run-web.sh"
+echo "临时查看 HTTP 轮询细节：RUST_LOG=info,tower_http=debug ./scripts/run-web.sh"
 
 exec cargo run -p blockwright-controller -- serve

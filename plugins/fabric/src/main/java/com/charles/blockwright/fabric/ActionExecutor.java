@@ -250,16 +250,11 @@ public final class ActionExecutor {
 
         int placed = 0;
         int skippedExisting = 0;
-        int skippedLimit = 0;
         int skippedPlayerSafety = 0;
 
         for (int index = 0; index < action.blocks.size(); index++) {
             JsonModels.BlueprintBlock blockItem = action.blocks.get(index);
             if (blockItem == null) {
-                continue;
-            }
-            if (index >= config.maxBlocksPerAction) {
-                skippedLimit++;
                 continue;
             }
 
@@ -281,12 +276,11 @@ public final class ActionExecutor {
         verifyPlacedBlocks(action, world, basePos, report);
         report.placedCount = placed;
         report.skippedExistingCount = skippedExisting;
-        report.skippedLimitCount = skippedLimit;
+        report.skippedLimitCount = 0;
         report.skippedPlayerSafetyCount = skippedPlayerSafety;
         defaultPlayer.sendMessage(Text.literal(new PlacementStats(
                 placed,
                 skippedExisting,
-                skippedLimit,
                 skippedPlayerSafety).summary()), false);
         return report;
     }

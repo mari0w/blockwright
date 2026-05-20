@@ -13,7 +13,7 @@ Use this skill for image-based building requests.
 2. Map image materials to common vanilla Minecraft blocks.
 3. Simplify fine visual details into block-level structure.
 4. Generate a blueprint with relative coordinates.
-5. Choose the scale based on the image, user text, and site data. Keep it small enough for local-world execution by default, but use up to 5000 blocks when the player asks for a large or detailed recreation.
+5. Choose the scale based on the image, user text, and site data. Do not shrink the idea just to fit a preset block budget; make the image-inspired build as complete and large as the player request implies.
 6. Ensure `materials` matches `blocks`.
 7. Preserve Minecraft playability when the image looks like a usable building: entrance, interior headroom, bed or core furniture, lighting, windows, and a reachable path.
 8. Use explicit block states for special blocks. Leaves should use `persistent=true`; doors and beds should include their upper/lower or head/foot states.

@@ -19,7 +19,7 @@ final class BlockwrightConfigTest {
         assertEquals(5, config.connectTimeoutSeconds);
         assertEquals(1800, config.requestTimeoutSeconds);
         assertTrue(config.protectExistingBlocks);
-        assertEquals(5000, config.maxBlocksPerAction);
+        assertEquals(0, config.maxBlocksPerAction);
         assertEquals(8, config.scanRadius);
         assertEquals(5, config.scanForwardBlocks);
         assertEquals(8000, config.maxScanBlocks);
@@ -64,7 +64,7 @@ final class BlockwrightConfigTest {
         assertEquals("", config.sharedToken);
         assertEquals(1, config.connectTimeoutSeconds);
         assertEquals(1800, config.requestTimeoutSeconds);
-        assertEquals(50_000, config.maxBlocksPerAction);
+        assertEquals(100_000, config.maxBlocksPerAction);
         assertEquals(3, config.scanRadius);
         assertEquals(12, config.scanForwardBlocks);
         assertEquals(100, config.maxScanBlocks);

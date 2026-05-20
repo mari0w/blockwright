@@ -17,7 +17,7 @@ public final class BlockwrightConfig {
     public int connectTimeoutSeconds = 5;
     public int requestTimeoutSeconds = MAX_REQUEST_TIMEOUT_SECONDS;
     public boolean protectExistingBlocks = true;
-    public int maxBlocksPerAction = 5000;
+    public int maxBlocksPerAction = 0;
     public int scanRadius = 8;
     public int scanForwardBlocks = 5;
     public int maxScanBlocks = 8000;

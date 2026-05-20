@@ -20,10 +20,10 @@ final class PlacementPolicyTest {
     }
 
     @Test
-    void normalizesBlockLimitIntoSafeRange() {
-        assertEquals(1, PlacementPolicy.normalizeMaxBlocks(0));
+    void keepsBlockLimitUncappedForLegacyConfig() {
+        assertEquals(0, PlacementPolicy.normalizeMaxBlocks(0));
         assertEquals(5000, PlacementPolicy.normalizeMaxBlocks(5000));
-        assertEquals(50_000, PlacementPolicy.normalizeMaxBlocks(100_000));
+        assertEquals(100_000, PlacementPolicy.normalizeMaxBlocks(100_000));
     }
 
     @Test

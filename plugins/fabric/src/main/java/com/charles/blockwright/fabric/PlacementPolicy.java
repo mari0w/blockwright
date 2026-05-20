@@ -9,9 +9,6 @@ final class PlacementPolicy {
     }
 
     static int normalizeMaxBlocks(int value) {
-        if (value < 1) {
-            return 1;
-        }
-        return Math.min(value, 50_000);
+        return Math.max(value, 0);
     }
 }

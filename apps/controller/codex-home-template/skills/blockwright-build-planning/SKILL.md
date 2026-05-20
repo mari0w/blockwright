@@ -15,7 +15,7 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 4. Generate a blueprint, not Minecraft commands and not inventory/manual interaction steps.
 5. Keep all block coordinates relative to the blueprint origin.
 6. Use common vanilla Minecraft block IDs with the `minecraft:` namespace.
-7. Keep ordinary blueprints compact, but use up to 5000 blocks when the user asks for a large, detailed, realistic, scenic, or reference-image-based build.
+7. Let the player's request, the site, and the design quality decide the blueprint scale. Do not cap a building to a preset block budget; large, detailed, realistic, scenic, or reference-image-based builds may be as large as needed.
 8. Make `materials` match the exact block counts in `blocks`.
 9. Use block states inside `material` when Minecraft needs them, for example `minecraft:oak_leaves[persistent=true]`, `minecraft:oak_door[half=lower,facing=south]`, and `minecraft:red_bed[part=foot,facing=north]`.
 10. Treat blueprint `y=0` as the first placed layer on top of the selected ground surface. Do not encode absolute world height in the blueprint.
@@ -33,7 +33,7 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 - Prefer a coherent building concept: recognizable silhouette, readable front side, entrance, interior logic, material palette, roof/top treatment, lighting, and small details.
 - Let the site influence the build. Sand, water, slopes, trees, existing paths, cliffs, and open space can change the base, platform, bridge, stair, deck, window direction, or viewing angle.
 - Avoid rigid rejection. If the terrain is imperfect, adapt the building with foundation, terrace, stilts, retaining walls, stairs, bridges, or tasteful clearing.
-- Keep the design compact enough to execute, but do not make it toy-like when the request implies a landmark or themed building.
+- Let the design scale follow the request and the site. Do not shrink a landmark, themed building, or reference-image build merely to make it compact.
 
 ## Minecraft Playability Rules
 
@@ -47,7 +47,7 @@ Use this skill when the player asks Blockwright to create a new Minecraft struct
 - Use stable lighting such as torches, lanterns, or glowstone inside enclosed spaces.
 - Avoid gravity, fluid, fire, redstone, and other special-physics blocks unless the required state and safe placement are clear.
 - Plan the entrance so it can connect naturally to the player-facing side of the site. Avoid putting the only door against a wall, cliff, water, or a one-block pit.
-- Prefer a compact, supported footprint. If the target terrain is a pit, slope, water edge, or odd surface, make the build feel intentionally integrated with a terrace, deck, bridge, stairs, wooden piles, stone-brick base, or retaining wall.
+- Prefer a supported footprint that fits the terrain. If the target terrain is a pit, slope, water edge, or odd surface, make the build feel intentionally integrated with a terrace, deck, bridge, stairs, wooden piles, stone-brick base, or retaining wall.
 - Do not create terrain-clearing helper blocks inside the blueprint. Blockwright handles clearing and placement; the blueprint should describe the final structure.
 - Do not reject a build because the current terrain may be imperfect. Assume Blockwright will prefer the player's facing target and can prepare the site with tasteful clearing/foundation when needed.
 

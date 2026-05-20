@@ -843,9 +843,15 @@ fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
     }
 
     let lower = line.to_ascii_lowercase();
-    let category = if lower.contains("failed to connect to websocket")
-        || lower.contains("responses_websocket")
-    {
+    let tls_or_certificate = lower.contains("tls") || lower.contains("certificate");
+    let has_failure_signal = lower.contains("error")
+        || lower.contains("fail")
+        || lower.contains("invalid")
+        || lower.contains("expired")
+        || lower.contains("untrusted")
+        || lower.contains("unknown issuer")
+        || lower.contains("self signed");
+    let category = if lower.contains("failed to connect to websocket") {
         "websocket_connect"
     } else if lower.contains("falling back to http") {
         "http_fallback"
@@ -870,7 +876,7 @@ fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
         || lower.contains("port 1087")
     {
         "proxy"
-    } else if lower.contains("tls") || lower.contains("certificate") {
+    } else if tls_or_certificate && has_failure_signal {
         "tls"
     } else if lower.contains("timeout") {
         "timeout"
@@ -1448,7 +1454,7 @@ BLOCKWRIGHT_JSON
     }
 
     #[test]
-    fn plan_response_schema_exposes_site_plan_and_expanded_blueprint_limits() {
+    fn plan_response_schema_exposes_site_plan_without_block_count_caps() {
         let schema =
             fs::read_to_string(CodexResponseSchema::Plan.path()).expect("schema should read");
         let schema: Value = serde_json::from_str(&schema).expect("schema should be valid json");
@@ -1461,18 +1467,15 @@ BLOCKWRIGHT_JSON
             .iter()
             .any(|value| value.as_str() == Some("site_plan")));
         assert!(schema.pointer("/$defs/sitePlan").is_some());
-        assert_eq!(
-            schema
-                .pointer("/$defs/blueprint/properties/blocks/maxItems")
-                .and_then(Value::as_u64),
-            Some(5000)
-        );
-        assert_eq!(
-            schema
-                .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
-                .and_then(Value::as_u64),
-            Some(5000)
-        );
+        assert!(schema
+            .pointer("/$defs/blueprint/properties/blocks/maxItems")
+            .is_none());
+        assert!(schema
+            .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
+            .is_none());
+        assert!(schema
+            .pointer("/$defs/blueprint/properties/materials/items/properties/count/maximum")
+            .is_none());
     }
 
     #[test]
@@ -1597,6 +1600,30 @@ BLOCKWRIGHT_JSON
         assert!(diagnostic.contains("127.0.0.1"));
         assert!(diagnostic.contains("1087"));
         assert!(!diagnostic.contains("secret"));
+    }
+
+    #[test]
+    fn stderr_diagnostic_ignores_codex_websocket_trace_info() {
+        let line = r#"2026-05-20T11:52:11.956920Z INFO session_loop{thread_id=019e453a}:submission_dispatch{otel.name="op.dispatch.user_input_with_turn_context"}:turn{model=gpt-5.5}:model_client.stream_responses_websocket{model=gpt-5.5 wire_api..."#;
+
+        assert!(codex_stderr_diagnostic(line).is_none());
+    }
+
+    #[test]
+    fn stderr_diagnostic_ignores_codex_ca_selection_info() {
+        let line = "2026-05-20T11:52:11.960952Z INFO codex_client::custom_ca: using system root certificates because no CA override environment variable was selected codex_ca_certificate_configured=false ssl_cert_file_configured=false";
+
+        assert!(codex_stderr_diagnostic(line).is_none());
+    }
+
+    #[test]
+    fn stderr_diagnostic_keeps_actual_tls_failure() {
+        let line = "ERROR request failed: tls certificate verify failed: unknown issuer";
+
+        let diagnostic = codex_stderr_diagnostic(line).unwrap();
+
+        assert!(diagnostic.contains("tls"));
+        assert!(diagnostic.contains("unknown issuer"));
     }
 
     #[test]

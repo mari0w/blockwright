@@ -138,7 +138,7 @@ data/builds/
 
 保存内容包括任务 ID、目标玩家、蓝图 ID、原点、材料统计和完整方块清单。Fabric 模组拿到的也是同一份方块清单。
 
-放置完成后，Fabric 模组会逐块读取世界里的实际方块，并把校验报告回传给 controller。只有实际世界里的方块和构建记录里的方块一致，任务才会标记为成功；如果因为已有建筑保护、单次上限、材质错误或其他原因导致世界里不是预期方块，记录会标记为失败，并保留最多 20 个差异坐标。
+放置完成后，Fabric 模组会逐块读取世界里的实际方块，并把校验报告回传给 controller。只有实际世界里的方块和构建记录里的方块一致，任务才会标记为成功；如果因为已有建筑保护、材质错误或其他原因导致世界里不是预期方块，记录会标记为失败，并保留最多 20 个差异坐标。
 
 ## 本地配置
 
@@ -158,7 +158,7 @@ data/builds/
   "connectTimeoutSeconds": 5,
   "requestTimeoutSeconds": 1800,
   "protectExistingBlocks": true,
-  "maxBlocksPerAction": 5000,
+  "maxBlocksPerAction": 0,
   "scanRadius": 8,
   "scanForwardBlocks": 5,
   "maxScanBlocks": 8000,
@@ -175,7 +175,7 @@ data/builds/
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
 
-`maxBlocksPerAction` 是单次动作最多放置多少方块，默认 5000，用来防止误生成超大蓝图卡住存档。
+`maxBlocksPerAction` 是旧版本兼容字段，当前 Fabric 执行端不再按它截断蓝图方块，默认 `0` 表示不限制。
 
 `scanRadius` 默认 8，`scanForwardBlocks` 默认 5，`maxScanBlocks` 默认 8000。Fabric 模组会把玩家视线前方附近的非空气方块作为基础上下文发给 controller；Codex 也可以通过 MCP 工具继续读取玩家状态、物品栏、手持物和附近方块。这样发物品、查状态、改造已有建筑和自由建造都走同一套真实世界数据，不靠本地关键词猜测。
 

@@ -96,6 +96,12 @@ make run-web
 PORT=18765 ./scripts/run-web.sh
 ```
 
+默认日志只保留关键业务信息，不打印 Fabric 每 2 秒轮询任务的 HTTP 细节。需要临时排查 HTTP 请求时再打开 debug：
+
+```bash
+RUST_LOG=info,tower_http=debug ./scripts/run-web.sh
+```
+
 停止服务时，在运行脚本的终端按 `Ctrl+C`。
 
 默认会同时输出本机和局域网访问地址：

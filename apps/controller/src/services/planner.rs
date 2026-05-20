@@ -247,10 +247,8 @@ impl Planner {
             .ask_with_schema_and_progress(
                 &prompt,
                 CodexResponseSchema::Plan,
-                // Planner prompt already carries the full context_bundle. Reusing old Codex
-                // threads makes game commands slower and can pollute the next build with stale
-                // JSON or prior failed examples, so each planning turn is intentionally fresh.
-                None,
+                // 同一个玩家/用户名要沿用同一条 Codex 会话；上下文满时 CodexClient 会清掉旧线程并重试。
+                input.codex_session_key.as_deref(),
                 input.progress_id.as_deref(),
             )
             .await
@@ -1503,6 +1501,18 @@ fn looks_like_existing_build_request(text: &str) -> bool {
             "上次",
             "之前",
             "前面",
+            "继续",
+            "接着",
+            "续上",
+            "续建",
+            "没建完",
+            "未建完",
+            "补完",
+            "补上",
+            "剩下",
+            "剩余",
+            "建完",
+            "做完",
             "已有",
             "现有",
             "这个",
@@ -2201,7 +2211,7 @@ context_bundle：
         .ask_with_schema_and_progress(
             &prompt,
             CodexResponseSchema::Plan,
-            None,
+            input.codex_session_key.as_deref(),
             input.progress_id.as_deref(),
         )
         .await
@@ -2566,6 +2576,87 @@ exit 1
                 ..
             } if item == "minecraft:diamond_sword"
         ));
+    }
+
+    #[tokio::test]
+    async fn planner_reuses_codex_session_key_for_same_player() {
+        let store = empty_store("planner-session").await;
+        let dir = temp_dir("planner-session-codex");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-session.sh");
+        let args_log = dir.join("args.log");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{args_log}'
+last_message=""
+resume_thread=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    resume)
+      resume_thread="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+thread_id="${{resume_thread:-thread-player}}"
+printf '{{"type":"thread.started","thread_id":"%s"}}\n' "$thread_id"
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"继续处理。","summary":"会话续接测试","blueprint":null,"site_plan":null,"actions":[]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log = args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        let planner = Planner::new(CodexClient::with_session_path(
+            CodexConfig {
+                enabled: true,
+                command: script_path.to_string_lossy().to_string(),
+                timeout_seconds: 5,
+            },
+            dir.join("sessions.json"),
+        ));
+
+        for text in ["先照图片盖一个房子", "继续把它建完"] {
+            planner
+                .plan(
+                    PlannerInput {
+                        text: text.to_string(),
+                        player: Some("Steve".to_string()),
+                        codex_session_key: Some("minecraft:Steve".to_string()),
+                        position: None,
+                        player_state: None,
+                        nearby_scan: None,
+                        attachments: Vec::new(),
+                        progress_id: None,
+                    },
+                    &store,
+                )
+                .await;
+        }
+
+        let args = fs::read_to_string(args_log).unwrap();
+        let lines = args.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert!(!lines[0].contains("resume thread-player"));
+        assert!(lines[1].contains("resume thread-player"));
     }
 
     #[tokio::test]

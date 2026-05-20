@@ -379,6 +379,11 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         page_body.contains("voiceHold.addEventListener('pointermove', updateVoiceCancelGesture)")
     );
     assert!(page_body.contains("function updateVoiceCancelGesture"));
+    assert!(page_body.contains("bw.chatHistory.v1"));
+    assert!(page_body.contains("bw.activeJob.v1"));
+    assert!(page_body.contains("function restoreChatHistory"));
+    assert!(page_body.contains("function resumeSavedJobPolling"));
+    assert!(page_body.contains("setMessageProgress(item, '状态：正在恢复上次任务状态...'"));
     assert!(page_body.contains("viewport-fit=cover"));
     assert!(page_body.contains("手机语音需要 HTTPS 地址"));
     assert!(page_body.contains("id=\"cameraImage\""));
