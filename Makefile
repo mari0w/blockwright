@@ -4,12 +4,15 @@ JAVA21_HOME ?= $(shell (test -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk
 GRADLE_JAVA21_ENV = $(if $(JAVA21_HOME),JAVA_HOME="$(JAVA21_HOME)")
 .DEFAULT_GOAL := install-hmcl
 
-.PHONY: install install-hmcl test test-controller test-paper test-fabric build-plugins build-fabric build-paper coverage coverage-controller
+.PHONY: install install-hmcl run-web test test-controller test-paper test-fabric build-plugins build-fabric build-paper coverage coverage-controller
 
 install: install-hmcl
 
 install-hmcl:
 	./scripts/install-hmcl-mod.sh "$(HMCL_DIR)"
+
+run-web:
+	./scripts/run-web.sh
 
 test: test-controller test-paper test-fabric
 

@@ -372,6 +372,13 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert_eq!(page_response.status(), StatusCode::OK);
     let page_body = response_text(page_response).await;
     assert!(page_body.contains("voiceHold"));
+    assert!(page_body.contains("id=\"voiceCancelZone\""));
+    assert!(page_body.contains("上滑到这里取消"));
+    assert!(page_body.contains("松手取消"));
+    assert!(
+        page_body.contains("voiceHold.addEventListener('pointermove', updateVoiceCancelGesture)")
+    );
+    assert!(page_body.contains("function updateVoiceCancelGesture"));
     assert!(page_body.contains("viewport-fit=cover"));
     assert!(page_body.contains("手机语音需要 HTTPS 地址"));
     assert!(page_body.contains("id=\"cameraImage\""));

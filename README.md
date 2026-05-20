@@ -70,12 +70,33 @@ flowchart LR
 - 可选：`cargo-llvm-cov`，用于本地覆盖率门禁。
 - 已登录的 Codex CLI。controller 不再用本地关键词规则兜底识别建筑或动作意图。
 
-### 启动 controller
+### 启动 Web 端
+
+仓库里的脚本已经提交执行权限，正常 clone 后可以直接运行。如果从压缩包或聊天软件拷贝导致执行权限丢失，先恢复一次：
 
 ```bash
-cp .env.example .env
-cargo run -p blockwright-controller
+chmod +x scripts/*.sh
 ```
+
+启动 Web 端：
+
+```bash
+./scripts/run-web.sh
+```
+
+脚本会自动补齐本地 `.env` 示例文件，并启动 controller 的 `/web` 页面服务。也可以用 Makefile：
+
+```bash
+make run-web
+```
+
+临时换端口：
+
+```bash
+PORT=18765 ./scripts/run-web.sh
+```
+
+停止服务时，在运行脚本的终端按 `Ctrl+C`。
 
 默认会同时输出本机和局域网访问地址：
 
@@ -86,7 +107,15 @@ Blockwright 本机 HTTPS：https://127.0.0.1:8766/web
 Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 ```
 
-HTTPS 是给手机语音用的本地自签方案。controller 会自动生成根证书和服务器证书；手机第一次访问 HTTPS 地址前，需要先在 `/web` 设置页下载 `Blockwright 本地根证书`。Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是保存证书文件，不是上传到 Google，也不是安装完成；进入设置后也通常不会自动提醒，需要手动进入“安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 `Blockwright-Local-Root-CA.cer`。iPhone/iPad 请用 Safari 打开证书下载链接；下载后在“设置”顶部的“已下载描述文件”或“通用 > VPN 与设备管理/描述文件”里安装，再到“通用 > 关于本机 > 证书信任设置”打开完全信任。HTTPS 端口默认是 HTTP 端口 + 1，也可以用 `HTTPS_PORT` 指定；如需临时关闭，设置 `HTTPS_ENABLED=false`。
+本机电脑用 `http://127.0.0.1:8765/web` 即可。手机语音必须用 HTTPS 地址，因为手机浏览器通常只允许 HTTPS 页面申请麦克风权限。
+
+HTTPS 是本地自签方案，controller 会自动生成根证书和服务器证书。手机第一次访问 HTTPS 地址前，需要先在 `/web` 设置页下载 `Blockwright 本地根证书`。Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是保存证书文件，不是上传到 Google，也不是安装完成；进入设置后也通常不会自动提醒，需要手动进入“安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 `Blockwright-Local-Root-CA.cer`。iPhone/iPad 请用 Safari 打开证书下载链接；下载后在“设置”顶部的“已下载描述文件”或“通用 > VPN 与设备管理/描述文件”里安装，再到“通用 > 关于本机 > 证书信任设置”打开完全信任。
+
+证书信任完成后，重新打开 HTTPS 地址，浏览器提示麦克风权限时选择允许。HTTPS 端口默认是 HTTP 端口 + 1，也可以用 `HTTPS_PORT` 指定；如果只在本机电脑调试文字输入或页面样式，可以临时关闭 HTTPS：
+
+```bash
+HTTPS_ENABLED=false ./scripts/run-web.sh
+```
 
 健康检查：
 
@@ -94,7 +123,7 @@ HTTPS 是给手机语音用的本地自签方案。controller 会自动生成根
 curl http://127.0.0.1:8765/health
 ```
 
-默认配置位于 [config/servers/local.yaml](config/servers/local.yaml)。本地开发默认 `require_token: false`，适合可信局域网；如果放到不受控网络，必须启用共享 token。
+默认配置位于 [config/servers/local.yaml](config/servers/local.yaml)。本地开发默认 `require_token: false`，适合可信局域网；如果放到不受控网络，必须启用共享 token。真实 token、Webhook、client secret 只写未追踪的 `.env` 或本地配置，不能提交到仓库。
 
 ### 安装 HMCL / Fabric 模组
 

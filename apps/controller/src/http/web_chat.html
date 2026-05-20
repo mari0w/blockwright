@@ -348,6 +348,46 @@
     .voice-panel[hidden] {
       display: none;
     }
+    .voice-cancel-zone {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--composer-height) + 14px);
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: auto;
+      max-width: calc(100vw - 32px);
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(27, 32, 37, .96);
+      color: var(--muted);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 8px);
+      transition: opacity .12s ease, transform .12s ease, color .12s ease, border-color .12s ease, background .12s ease;
+      visibility: hidden;
+      white-space: nowrap;
+    }
+    .voice-cancel-zone svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      stroke: currentColor;
+    }
+    .voice-panel.recording .voice-cancel-zone {
+      opacity: 1;
+      transform: translate(-50%, 0);
+      visibility: visible;
+    }
+    .voice-panel.cancel-ready .voice-cancel-zone {
+      border-color: var(--danger);
+      background: rgba(255, 107, 107, .18);
+      color: #ffdede;
+    }
     .voice-hold {
       display: inline-flex;
       align-items: center;
@@ -380,6 +420,11 @@
     .voice-hold.recording {
       border-color: var(--danger);
       background: rgba(255, 107, 107, .16);
+      color: #ffdede;
+    }
+    .voice-hold.cancel-ready {
+      border-color: var(--danger);
+      background: rgba(255, 107, 107, .24);
       color: #ffdede;
     }
     .voice-hold.sending {
@@ -967,6 +1012,13 @@
             </button>
             <textarea id="text" rows="1" wrap="off" placeholder="说你想建什么、改什么。"></textarea>
             <div id="voicePanel" class="voice-panel" hidden>
+              <div id="voiceCancelZone" class="voice-cancel-zone" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+                <span id="voiceCancelText">上滑到这里取消</span>
+              </div>
               <button id="voiceHold" class="voice-hold" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                   <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
@@ -1179,6 +1231,8 @@
     const voiceToggleMic = document.getElementById('voiceToggleMic');
     const voiceToggleKeyboard = document.getElementById('voiceToggleKeyboard');
     const voicePanel = document.getElementById('voicePanel');
+    const voiceCancelZone = document.getElementById('voiceCancelZone');
+    const voiceCancelText = document.getElementById('voiceCancelText');
     const voiceHold = document.getElementById('voiceHold');
     const voiceHoldText = document.getElementById('voiceHoldText');
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1194,6 +1248,9 @@
     let voiceFinalText = '';
     let voiceInterimText = '';
     let voicePressing = false;
+    let voiceCancelArmed = false;
+    let voicePointerStartY = null;
+    let voicePointerId = null;
     let microphonePermissionWatcher = null;
     let httpsGuideStep = 0;
     let lastTouchEndAt = 0;
@@ -1343,6 +1400,7 @@
     });
 
     voiceHold.addEventListener('pointerdown', startVoiceInput);
+    voiceHold.addEventListener('pointermove', updateVoiceCancelGesture);
     voiceHold.addEventListener('pointerup', stopVoiceInput);
     voiceHold.addEventListener('pointercancel', cancelVoiceInput);
     voiceHold.addEventListener('selectstart', preventVoiceHoldSelection);
@@ -1980,6 +2038,65 @@
       event.preventDefault();
     }
 
+    function startVoiceCancelGesture(event) {
+      voicePointerId = event?.pointerId ?? null;
+      voicePointerStartY = typeof event?.clientY === 'number' ? event.clientY : null;
+      setVoiceCancelArmed(false);
+    }
+
+    function releaseVoicePointer(event) {
+      if (event?.pointerId != null && voiceHold.releasePointerCapture) {
+        try {
+          voiceHold.releasePointerCapture(event.pointerId);
+        } catch (_) {
+        }
+      }
+      voicePointerId = null;
+      voicePointerStartY = null;
+    }
+
+    function resetVoiceCancelGesture() {
+      voiceCancelArmed = false;
+      voicePointerStartY = null;
+      voicePointerId = null;
+      voicePanel.classList.remove('recording');
+      voicePanel.classList.remove('cancel-ready');
+      voiceHold.classList.remove('cancel-ready');
+      voiceCancelText.textContent = '上滑到这里取消';
+    }
+
+    function setVoiceCancelArmed(armed) {
+      voiceCancelArmed = Boolean(armed);
+      voicePanel.classList.toggle('cancel-ready', voiceCancelArmed);
+      voiceHold.classList.toggle('cancel-ready', voiceCancelArmed);
+      voiceCancelText.textContent = voiceCancelArmed ? '松手取消发送' : '上滑到这里取消';
+      if (voiceHoldActive && !voiceStopping) {
+        voiceHoldText.textContent = voiceCancelArmed ? '松手取消' : '松手发送';
+      }
+    }
+
+    function updateVoiceCancelGesture(event) {
+      if (!voiceHoldActive && !voicePressing) {
+        return;
+      }
+      if (voicePointerId != null && event?.pointerId != null && event.pointerId !== voicePointerId) {
+        return;
+      }
+      if (voicePointerStartY == null || typeof event?.clientY !== 'number') {
+        return;
+      }
+      event.preventDefault();
+      const cancelDistance = 72;
+      const cancelRect = voiceCancelZone.getBoundingClientRect();
+      const insideCancelZone = (
+        event.clientX >= cancelRect.left - 24
+        && event.clientX <= cancelRect.right + 24
+        && event.clientY >= cancelRect.top - 12
+        && event.clientY <= cancelRect.bottom + 24
+      );
+      setVoiceCancelArmed(insideCancelZone || voicePointerStartY - event.clientY >= cancelDistance);
+    }
+
     async function startVoiceInput(event) {
       if (voiceUnavailable) {
         setStatus(voiceUnavailable, true);
@@ -1992,14 +2109,18 @@
       if (event?.pointerId != null && voiceHold.setPointerCapture) {
         voiceHold.setPointerCapture(event.pointerId);
       }
+      startVoiceCancelGesture(event);
       voicePressing = true;
       const permissionOk = await ensureMicrophonePermission(true);
       if (!permissionOk) {
         voicePressing = false;
+        releaseVoicePointer(event);
+        resetVoiceCancelGesture();
         return;
       }
       if (!voicePressing) {
         setStatus('按住说话时会开始录音。', false);
+        resetVoiceCancelGesture();
         return;
       }
 
@@ -2026,6 +2147,7 @@
         recognition = null;
         voiceHoldActive = false;
         voiceStopping = false;
+        resetVoiceCancelGesture();
         voiceHold.classList.remove('recording');
         if (shouldFinish) {
           voiceHold.classList.add('sending');
@@ -2039,6 +2161,7 @@
 
       try {
         recognition.start();
+        voicePanel.classList.add('recording');
         voiceHold.classList.add('recording');
         voiceHold.classList.remove('sending');
         voiceHoldText.textContent = '松手发送';
@@ -2047,6 +2170,7 @@
         recognition = null;
         voiceHoldActive = false;
         voiceHadError = true;
+        resetVoiceCancelGesture();
         voiceHold.classList.remove('recording');
         voiceHold.classList.remove('sending');
         resetVoiceHoldLabel();
@@ -2069,17 +2193,19 @@
     }
 
     function stopVoiceInput(event) {
-      if (!voiceHoldActive) {
-        voicePressing = false;
+      event?.preventDefault?.();
+      releaseVoicePointer(event);
+      if (voiceCancelArmed) {
+        cancelVoiceInput(event);
         return;
       }
-      event?.preventDefault?.();
-      if (event?.pointerId != null && voiceHold.releasePointerCapture) {
-        try {
-          voiceHold.releasePointerCapture(event.pointerId);
-        } catch (_) {
-        }
+      if (!voiceHoldActive) {
+        voicePressing = false;
+        resetVoiceCancelGesture();
+        return;
       }
+      setVoiceCancelArmed(false);
+      voicePanel.classList.remove('recording');
       voiceHoldActive = false;
       voicePressing = false;
       voiceStopping = true;
@@ -2093,6 +2219,7 @@
 
     function cancelVoiceInput(event) {
       event?.preventDefault?.();
+      releaseVoicePointer(event);
       voiceHoldActive = false;
       voicePressing = false;
       voiceStopping = false;
@@ -2101,6 +2228,7 @@
         recognition.abort();
       }
       recognition = null;
+      resetVoiceCancelGesture();
       voiceHold.classList.remove('recording');
       voiceHold.classList.remove('sending');
       resetVoiceHoldLabel();
