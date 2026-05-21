@@ -29,7 +29,13 @@ version.
 5. Only simplify details that are physically impossible at Minecraft block
    resolution. Never replace the image with a tiny token, thumbnail, flat facade,
    or generic concept build when a fuller recreation is possible.
-6. Generate a blueprint with relative coordinates.
+6. Generate a blueprint with relative coordinates. For large or repetitive
+   image recreations, prefer blueprint `primitives` instead of tiny hand-written
+   `blocks`: `box`/`fill_box`/`cuboid` are solid cuboids and
+   `hollow_box`/`shell` are outer shells. Each primitive uses
+   `from`, `to`, and `material`; `from`/`to` are inclusive relative
+   coordinates. Blockwright expands primitives into the final `blocks` list and
+   recomputes `materials`.
 7. Choose the scale based on the image, user text, and site data. Do not shrink
    the idea just to fit a preset block budget; make the image-based build as
    complete and large as the player request implies.
@@ -68,6 +74,10 @@ version.
   is chosen by visual analysis and player intent, not by an artificial maximum.
 - If a part is occluded or not visible, infer the most plausible continuation,
   but keep every visible part of the image represented in the blueprint.
+- Do not output a blueprint with only a few symbolic blocks for an image
+  recreation. If the visible subject needs a wide body, real depth, multiple
+  material zones, windows, trim, ears, limbs, wheels, roof tiers, or decorations,
+  represent those features explicitly with blocks or primitives.
 
 ## Limits
 

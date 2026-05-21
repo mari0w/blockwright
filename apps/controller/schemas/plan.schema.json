@@ -60,6 +60,41 @@
         }
       }
     },
+    "blueprintPrimitive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "from", "to", "material"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["box", "fill_box", "cuboid", "hollow_box", "shell"]
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "z": { "type": "integer" }
+          }
+        },
+        "to": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "z"],
+          "properties": {
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "z": { "type": "integer" }
+          }
+        },
+        "material": {
+          "type": "string",
+          "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
+        }
+      }
+    },
     "origin": {
       "type": "object",
       "additionalProperties": false,
@@ -74,7 +109,11 @@
     "blueprint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "description", "size", "materials", "blocks", "tags"],
+      "required": ["id", "name", "description", "size", "materials", "tags"],
+      "anyOf": [
+        { "required": ["blocks"] },
+        { "required": ["primitives"] }
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -112,6 +151,11 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/block" }
+        },
+        "primitives": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/blueprintPrimitive" }
         },
         "tags": {
           "type": "array",

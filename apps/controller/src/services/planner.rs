@@ -9,7 +9,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::PathBuf,
 };
 
@@ -19,6 +19,7 @@ const CONTEXT_BLUEPRINT_LIMIT: usize = 24;
 const CONTEXT_BUILD_LIMIT: usize = 12;
 const CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT: usize = 32;
 const CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT: usize = 32;
+const BLUEPRINT_PRIMITIVE_MAX_BLOCKS: usize = 50_000;
 
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
@@ -39,7 +40,7 @@ pub struct PlanResult {
     pub actions: Vec<GameAction>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CodexPlan {
     reply: String,
     summary: String,
@@ -277,7 +278,7 @@ impl Planner {
             "codex plan response received; parsing json"
         );
 
-        let plan = match parse_plan_response_for_input(&output, &input.text) {
+        let mut plan = match parse_plan_response_for_input(&output, &input.text) {
             Some(plan) => plan,
             None => {
                 tracing::warn!("codex unified planning returned invalid json");
@@ -287,6 +288,21 @@ impl Planner {
                 }
             }
         };
+        if let Some(issues) = image_recreation_quality_issues(input, plan.blueprint.as_ref()) {
+            tracing::warn!(
+                issues = ?issues,
+                "codex image recreation blueprint did not pass minimum quality gate"
+            );
+            match repair_low_quality_image_plan(codex, input, &context, &plan, &issues).await {
+                Some(repaired)
+                    if image_recreation_quality_issues(input, repaired.blueprint.as_ref())
+                        .is_none() =>
+                {
+                    plan = repaired;
+                }
+                _ => return Some(low_quality_image_plan_fallback(&issues)),
+            }
+        }
         let mut actions = plan.actions;
         let mut reply = plan.reply;
 
@@ -1404,6 +1420,76 @@ fn local_image_attachment_paths(attachments: &[ChatAttachment]) -> Vec<PathBuf> 
     paths
 }
 
+fn image_recreation_quality_issues(
+    input: &PlannerInput,
+    blueprint: Option<&Blueprint>,
+) -> Option<Vec<String>> {
+    if local_image_attachment_paths(&input.attachments).is_empty()
+        || image_request_allows_tiny_or_planar(&input.text)
+    {
+        return None;
+    }
+    let blueprint = blueprint?;
+    let mut issues = Vec::new();
+    let solid_blocks = blueprint
+        .blocks
+        .iter()
+        .filter(|block| block.material != "minecraft:air")
+        .count();
+    if solid_blocks < 96 {
+        issues.push(format!(
+            "方块数只有 {solid_blocks}，图片复刻不能退化成小模型"
+        ));
+    }
+
+    if let Some(bounds) = blueprint_bounds(&blueprint.blocks) {
+        let width = bounds.max_x - bounds.min_x + 1;
+        let height = bounds.max_y - bounds.min_y + 1;
+        let depth = bounds.max_z - bounds.min_z + 1;
+        if width < 5 {
+            issues.push(format!("宽度只有 {width} 格，无法表达图片主体轮廓"));
+        }
+        if height < 4 {
+            issues.push(format!("高度只有 {height} 格，缺少可读立面"));
+        }
+        if depth < 3 {
+            issues.push(format!("深度只有 {depth} 格，图片复刻建筑必须是 3D 体量"));
+        }
+    }
+
+    let material_count = blueprint
+        .blocks
+        .iter()
+        .filter(|block| block.material != "minecraft:air")
+        .map(|block| block.material.as_str())
+        .collect::<HashSet<_>>()
+        .len();
+    if material_count < 2 {
+        issues.push("材质少于 2 种，缺少图片里的颜色或材质分区".to_string());
+    }
+
+    (!issues.is_empty()).then_some(issues)
+}
+
+fn image_request_allows_tiny_or_planar(text: &str) -> bool {
+    let text = text.trim();
+    [
+        "简化",
+        "迷你",
+        "小模型",
+        "小一点",
+        "缩小",
+        "简单版",
+        "像素画",
+        "平面",
+        "贴图",
+        "壁画",
+        "浮雕",
+    ]
+    .iter()
+    .any(|keyword| text.contains(keyword))
+}
+
 async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext> {
     blueprints
         .list()
@@ -1682,6 +1768,7 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 - 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
 - blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
 - 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
+- 复杂建筑或图片复刻可以在 blueprint 内使用 primitives 减少手写 blocks：box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from、to、material，from/to 是闭区间相对坐标。controller 会展开为完整 blocks 并重算 materials。
 - 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图和放置语义上保持一致。
 - 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
 - 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan，动作形状必须是 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}，不要加 player、radius、purpose 等字段。
@@ -1916,7 +2003,10 @@ fn is_standalone_blueprint_object(value: &serde_json::Value) -> bool {
     };
     object.contains_key("id")
         && object.contains_key("name")
-        && (object.contains_key("blocks") || object.contains_key("block_list"))
+        && (object.contains_key("blocks")
+            || object.contains_key("block_list")
+            || object.contains_key("primitives")
+            || object.contains_key("primitive_blocks"))
         && (object.contains_key("size")
             || object.contains_key("dimensions")
             || object.contains_key("dimension"))
@@ -1946,6 +2036,12 @@ fn normalize_blueprint_shape(value: &mut serde_json::Value) {
         return;
     };
 
+    if !blueprint.contains_key("blocks") {
+        if let Some(block_list) = blueprint.get("block_list").cloned() {
+            blueprint.insert("blocks".to_string(), block_list);
+        }
+    }
+
     if !blueprint.contains_key("size") {
         if let Some(dimensions) = blueprint
             .get("dimensions")
@@ -1971,6 +2067,7 @@ fn normalize_blueprint_shape(value: &mut serde_json::Value) {
         }
     }
 
+    expand_blueprint_primitives(blueprint);
     blueprint
         .entry("description")
         .or_insert_with(|| serde_json::Value::String(String::new()));
@@ -1978,6 +2075,157 @@ fn normalize_blueprint_shape(value: &mut serde_json::Value) {
         .entry("tags")
         .or_insert_with(|| serde_json::Value::Array(Vec::new()));
     normalize_blueprint_material_counts(blueprint);
+}
+
+fn expand_blueprint_primitives(blueprint: &mut serde_json::Map<String, serde_json::Value>) {
+    let primitive_values = blueprint
+        .get("primitives")
+        .or_else(|| blueprint.get("primitive_blocks"))
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if primitive_values.is_empty() {
+        return;
+    }
+
+    let mut blocks = blueprint
+        .get("blocks")
+        .or_else(|| blueprint.get("block_list"))
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut added_blocks = 0usize;
+    for primitive in primitive_values {
+        let Some(mut expanded) = expand_blueprint_primitive(&primitive, &mut added_blocks) else {
+            continue;
+        };
+        blocks.append(&mut expanded);
+    }
+    if blocks.is_empty() {
+        return;
+    }
+
+    let blocks = dedupe_blueprint_block_values(blocks);
+    blueprint.insert("blocks".to_string(), serde_json::Value::Array(blocks));
+}
+
+fn expand_blueprint_primitive(
+    primitive: &serde_json::Value,
+    added_blocks: &mut usize,
+) -> Option<Vec<serde_json::Value>> {
+    let object = primitive.as_object()?;
+    let kind = object
+        .get("type")
+        .or_else(|| object.get("kind"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("box");
+    let material = object
+        .get("material")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())?;
+    let (min_x, max_x, min_y, max_y, min_z, max_z) = primitive_bounds(object)?;
+    let shell_only = matches!(
+        kind,
+        "hollow_box" | "shell_box" | "shell" | "hollow" | "outline_box"
+    );
+
+    let span_x = (max_x - min_x + 1) as usize;
+    let span_y = (max_y - min_y + 1) as usize;
+    let span_z = (max_z - min_z + 1) as usize;
+    let volume = span_x.saturating_mul(span_y).saturating_mul(span_z);
+    if added_blocks.saturating_add(volume) > BLUEPRINT_PRIMITIVE_MAX_BLOCKS {
+        return None;
+    }
+
+    let mut blocks = Vec::new();
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            for z in min_z..=max_z {
+                if shell_only
+                    && x != min_x
+                    && x != max_x
+                    && y != min_y
+                    && y != max_y
+                    && z != min_z
+                    && z != max_z
+                {
+                    continue;
+                }
+                *added_blocks += 1;
+                blocks.push(serde_json::json!({
+                    "x": x,
+                    "y": y,
+                    "z": z,
+                    "material": material,
+                }));
+            }
+        }
+    }
+    Some(blocks)
+}
+
+fn primitive_bounds(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(i32, i32, i32, i32, i32, i32)> {
+    let from = object
+        .get("from")
+        .or_else(|| object.get("min"))
+        .and_then(serde_json::Value::as_object);
+    let to = object
+        .get("to")
+        .or_else(|| object.get("max"))
+        .and_then(serde_json::Value::as_object);
+
+    let x1 = object_int(object, "x1").or_else(|| from.and_then(|value| object_int(value, "x")))?;
+    let y1 = object_int(object, "y1").or_else(|| from.and_then(|value| object_int(value, "y")))?;
+    let z1 = object_int(object, "z1").or_else(|| from.and_then(|value| object_int(value, "z")))?;
+    let x2 = object_int(object, "x2").or_else(|| to.and_then(|value| object_int(value, "x")))?;
+    let y2 = object_int(object, "y2").or_else(|| to.and_then(|value| object_int(value, "y")))?;
+    let z2 = object_int(object, "z2").or_else(|| to.and_then(|value| object_int(value, "z")))?;
+
+    Some((
+        x1.min(x2),
+        x1.max(x2),
+        y1.min(y2),
+        y1.max(y2),
+        z1.min(z2),
+        z1.max(z2),
+    ))
+}
+
+fn object_int(object: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<i32> {
+    let value = object.get(key)?;
+    value
+        .as_i64()
+        .and_then(|number| i32::try_from(number).ok())
+        .or_else(|| value.as_u64().and_then(|number| i32::try_from(number).ok()))
+}
+
+fn dedupe_blueprint_block_values(blocks: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    let mut by_position = BTreeMap::<(i32, i32, i32), serde_json::Value>::new();
+    for block in blocks {
+        let Some(object) = block.as_object() else {
+            continue;
+        };
+        let (Some(x), Some(y), Some(z), Some(material)) = (
+            object_int(object, "x"),
+            object_int(object, "y"),
+            object_int(object, "z"),
+            object.get("material").and_then(serde_json::Value::as_str),
+        ) else {
+            continue;
+        };
+        by_position.insert(
+            (x, y, z),
+            serde_json::json!({
+                "x": x,
+                "y": y,
+                "z": z,
+                "material": material,
+            }),
+        );
+    }
+    by_position.into_values().collect()
 }
 
 fn dimension_value(
@@ -2261,6 +2509,82 @@ context_bundle：
         );
     }
     repaired
+}
+
+async fn repair_low_quality_image_plan(
+    codex: &CodexClient,
+    input: &PlannerInput,
+    context: &PlanContextBundle,
+    original_plan: &CodexPlan,
+    issues: &[String],
+) -> Option<CodexPlan> {
+    let context_json = serde_json::to_string_pretty(context).ok()?;
+    let original_plan_json = serde_json::to_string_pretty(original_plan).ok()?;
+    let issue_text = issues.join("\n- ");
+    let prompt = format!(
+        r#"上一轮图片复刻蓝图太粗糙，Blockwright 没有下发到 Minecraft。请基于同一张图片和同一份 context_bundle 重做蓝图，只返回协议 JSON，不要解释。
+
+必须修复的问题：
+- {issue_text}
+
+修复要求：
+- 不要输出小模型、平面门面或象征性方块。
+- 如果图片是建筑、房间、车辆、雕像、动物或大型物体，要保留三维体量、正面/侧面/顶部、材料分区和关键细节。
+- 可以在 blueprint 内使用 primitives 降低 JSON 长度：box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from/to/material，坐标都是相对坐标且 from/to 均为闭区间。
+- controller 会把 primitives 展开成完整 blocks 并重算 materials；如果直接输出 blocks，也要足够完整。
+- actions 保持 []，让 controller 保存蓝图后下发。
+
+原始玩家需求：
+{user_text}
+
+context_bundle：
+{context_json}
+
+上一轮协议 JSON：
+{original_plan_json}
+"#,
+        issue_text = issue_text,
+        user_text = input.text,
+        context_json = context_json,
+        original_plan_json = original_plan_json
+    );
+    let image_paths = local_image_attachment_paths(&input.attachments);
+    let output = match codex
+        .ask_with_schema_and_progress_and_images(
+            &prompt,
+            CodexResponseSchema::Plan,
+            input.codex_session_key.as_deref(),
+            input.progress_id.as_deref(),
+            &image_paths,
+        )
+        .await
+    {
+        Ok(Some(output)) if !output.trim().is_empty() => output,
+        Ok(_) => return None,
+        Err(error) => {
+            tracing::warn!(error = %error, "codex low-quality image plan repair failed");
+            return None;
+        }
+    };
+    let repaired = parse_plan_response_for_input(&output, &input.text);
+    if repaired.is_none() {
+        tracing::warn!(
+            response_bytes = output.len(),
+            "codex low-quality image repair returned invalid json"
+        );
+    }
+    repaired
+}
+
+fn low_quality_image_plan_fallback(issues: &[String]) -> PlanResult {
+    PlanResult {
+        reply: format!(
+            "这版图片复刻蓝图太粗糙，我没有发送到 Minecraft。主要问题：{}。请重新发送图片或补充要保留的重点，我会重新规划。",
+            issues.join("；")
+        ),
+        summary: "图片复刻蓝图质量不足".to_string(),
+        actions: Vec::new(),
+    }
 }
 
 async fn invalid_codex_plan_fallback(input: &PlannerInput) -> PlanResult {
@@ -3716,6 +4040,87 @@ BLOCKWRIGHT_JSON
         assert_eq!(result.summary, "建造蓝图 image-inspired-house");
     }
 
+    #[tokio::test]
+    async fn image_recreation_quality_gate_repairs_tiny_blueprint() {
+        let store = empty_store("image-quality-repair").await;
+        let dir = temp_dir("image-quality-repair-upload");
+        fs::create_dir_all(&dir).unwrap();
+        let image_path = dir.join("reference.png");
+        fs::write(&image_path, b"png").unwrap();
+        let planner = planner_with_fake_plan_sequence(
+            "codex-image-quality-repair",
+            &[
+                r#"{
+  "reply": "我按图片做一个小模型。",
+  "summary": "建造蓝图 tiny-image-token",
+  "blueprint": {
+    "id": "tiny-image-token",
+    "name": "图片小模型",
+    "description": "过小的图片复刻。",
+    "size": {"width": 1, "height": 1, "depth": 1},
+    "materials": [{"material": "minecraft:oak_planks", "count": 1}],
+    "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"}],
+    "tags": ["image_reference"]
+  },
+  "site_plan": null,
+  "actions": []
+}"#,
+                r#"{
+  "reply": "我已经重做成更完整的三维复刻建筑。",
+  "summary": "建造蓝图 image-repaired-house",
+  "blueprint": {
+    "id": "image-repaired-house",
+    "name": "图片复刻建筑",
+    "description": "使用 primitives 表达的图片复刻建筑。",
+    "size": {"width": 8, "height": 4, "depth": 6},
+    "primitives": [
+      {"type": "box", "from": {"x": 0, "y": 0, "z": 0}, "to": {"x": 7, "y": 0, "z": 5}, "material": "minecraft:stone_bricks"},
+      {"type": "hollow_box", "from": {"x": 0, "y": 1, "z": 0}, "to": {"x": 7, "y": 3, "z": 5}, "material": "minecraft:oak_planks"}
+    ],
+    "tags": ["image_reference"]
+  },
+  "site_plan": null,
+  "actions": []
+}"#,
+            ],
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "照这个图片复刻".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: None,
+                    nearby_scan: None,
+                    attachments: vec![ChatAttachment {
+                        kind: ChatAttachmentKind::Image,
+                        source: ChatAttachmentSource::LocalPath {
+                            path: image_path.to_string_lossy().to_string(),
+                        },
+                        file_name: Some("reference.png".to_string()),
+                        mime_type: Some("image/png".to_string()),
+                    }],
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 image-repaired-house");
+        assert!(store.get("tiny-image-token").await.is_none());
+        let repaired = store.get("image-repaired-house").await.unwrap();
+        assert!(repaired.blocks.len() >= 96);
+        assert!(result.actions.iter().any(|action| matches!(
+            action,
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(id),
+                ..
+            } if id == "image-repaired-house"
+        )));
+    }
+
     #[test]
     fn local_image_attachment_paths_collects_existing_local_images() {
         let dir = temp_dir("local-image-paths");
@@ -3805,6 +4210,8 @@ BLOCKWRIGHT_JSON
         assert!(prompt.contains("默认意图是复刻"));
         assert!(prompt.contains("不是简化版或小模型"));
         assert!(prompt.contains("明显需要很多方块就使用很多方块"));
+        assert!(prompt.contains("primitives"));
+        assert!(prompt.contains("hollow_box"));
         assert!(!prompt.contains("新建建筑、模型或场景时：调用并遵循"));
     }
 
@@ -4290,6 +4697,48 @@ BLOCKWRIGHT_JSON
         assert_eq!(blueprint.materials.len(), 2);
         assert!(site_plan.clear_existing.is_some_and(|value| !value));
         assert!(plan.actions.is_empty());
+    }
+
+    #[test]
+    fn expands_blueprint_primitives_before_parsing_plan() {
+        let output = r#"{
+  "reply": "开始复刻。",
+  "summary": "建造蓝图 primitive-house",
+  "blueprint": {
+    "id": "primitive-house",
+    "name": "Primitive 小屋",
+    "description": "用 primitives 表达的蓝图。",
+    "size": {"width": 5, "height": 4, "depth": 4},
+    "primitives": [
+      {"type": "box", "from": {"x": 0, "y": 0, "z": 0}, "to": {"x": 4, "y": 0, "z": 3}, "material": "minecraft:stone_bricks"},
+      {"type": "hollow_box", "from": {"x": 0, "y": 1, "z": 0}, "to": {"x": 4, "y": 3, "z": 3}, "material": "minecraft:oak_planks"}
+    ],
+    "tags": ["image_reference"]
+  },
+  "site_plan": null,
+  "actions": []
+}"#;
+
+        let plan = parse_plan_response(output).unwrap();
+        let blueprint = plan.blueprint.unwrap();
+
+        assert_eq!(blueprint.blocks.len(), 74);
+        assert_eq!(
+            blueprint
+                .materials
+                .iter()
+                .find(|item| item.material == "minecraft:stone_bricks")
+                .map(|item| item.count),
+            Some(20)
+        );
+        assert_eq!(
+            blueprint
+                .materials
+                .iter()
+                .find(|item| item.material == "minecraft:oak_planks")
+                .map(|item| item.count),
+            Some(54)
+        );
     }
 
     #[test]

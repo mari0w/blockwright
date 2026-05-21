@@ -1557,6 +1557,9 @@ BLOCKWRIGHT_JSON
             .pointer("/$defs/blueprint/properties/blocks/maxItems")
             .is_none());
         assert!(schema
+            .pointer("/$defs/blueprint/properties/primitives")
+            .is_some());
+        assert!(schema
             .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
             .is_none());
         assert!(schema
@@ -1794,7 +1797,8 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
                     .collect::<std::collections::BTreeSet<_>>();
                 for property in properties.keys() {
                     assert!(
-                        required.contains(property.as_str()),
+                        required.contains(property.as_str())
+                            || any_of_required_properties(value).contains(property.as_str()),
                         "{path}.properties.{property} must be listed in required"
                     );
                 }
@@ -1822,6 +1826,18 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
             Some(Value::Array(kinds)) => kinds.iter().any(|kind| kind.as_str() == Some("object")),
             _ => false,
         }
+    }
+
+    fn any_of_required_properties(value: &Value) -> std::collections::BTreeSet<&str> {
+        value
+            .get("anyOf")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .flat_map(|item| item.get("required").and_then(Value::as_array))
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect()
     }
 
     fn assert_schema_omits_unsupported_keywords(value: &Value, path: &str) {

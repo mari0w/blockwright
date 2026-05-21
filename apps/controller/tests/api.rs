@@ -255,6 +255,26 @@ JSON
   ]
 }
 JSON
+    elif grep -q "local_path" "$prompt_file" && grep -q "house.png" "$prompt_file"; then
+      cat > "$last_message" <<'JSON'
+{
+  "reply": "我已经按参考图片规划成更完整的三维复刻蓝图。",
+  "summary": "建造蓝图 image-reference-house",
+  "blueprint": {
+    "id": "image-reference-house",
+    "name": "图片复刻小木屋",
+    "description": "用于 Web 图片复刻测试的三维小木屋。",
+    "size": {"width": 8, "height": 4, "depth": 6},
+    "primitives": [
+      {"type": "box", "from": {"x": 0, "y": 0, "z": 0}, "to": {"x": 7, "y": 0, "z": 5}, "material": "minecraft:stone_bricks"},
+      {"type": "hollow_box", "from": {"x": 0, "y": 1, "z": 0}, "to": {"x": 7, "y": 3, "z": 5}, "material": "minecraft:oak_planks"}
+    ],
+    "tags": ["house", "image_reference"]
+  },
+  "site_plan": null,
+  "actions": []
+}
+JSON
     else
       cat > "$last_message" <<'JSON'
 {
