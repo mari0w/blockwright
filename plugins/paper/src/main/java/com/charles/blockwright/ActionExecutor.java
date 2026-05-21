@@ -17,8 +17,6 @@ import org.bukkit.inventory.PlayerInventory;
 public final class ActionExecutor {
     private static final int HOTBAR_SIZE = 9;
     private static final int PLAYER_STORAGE_SIZE = 36;
-    private static final int MAX_REPORTED_MISMATCHES = 20;
-
     private final BlockwrightPlugin plugin;
 
     public ActionExecutor(BlockwrightPlugin plugin) {
@@ -230,54 +228,8 @@ public final class ActionExecutor {
             placed++;
         }
 
-        verifyPlacedBlocks(action, origin, world, report);
         report.placedCount = placed;
         return report;
-    }
-
-    private void verifyPlacedBlocks(
-            JsonModels.GameAction action,
-            Location origin,
-            World world,
-            JsonModels.ActionExecutionReport report) {
-        for (JsonModels.BlueprintBlock blockItem : action.blocks) {
-            if (blockItem == null) {
-                report.mismatchCount++;
-                addMismatch(report, origin.getBlockX(), origin.getBlockY(), origin.getBlockZ(), "unknown", "missing_blueprint_block");
-                continue;
-            }
-
-            int x = origin.getBlockX() + blockItem.x;
-            int y = origin.getBlockY() + blockItem.y;
-            int z = origin.getBlockZ() + blockItem.z;
-            BlockData actual = world.getBlockAt(x, y, z).getBlockData();
-            if (matchesBlockData(actual, blockItem.material)) {
-                report.verifiedCount++;
-            } else {
-                report.mismatchCount++;
-                addMismatch(report, x, y, z, blockItem.material, actual.getAsString(false));
-            }
-        }
-    }
-
-    private void addMismatch(
-            JsonModels.ActionExecutionReport report,
-            int x,
-            int y,
-            int z,
-            String expected,
-            String actual) {
-        if (report.mismatches.size() >= MAX_REPORTED_MISMATCHES) {
-            return;
-        }
-
-        JsonModels.BlockMismatch mismatch = new JsonModels.BlockMismatch();
-        mismatch.x = x;
-        mismatch.y = y;
-        mismatch.z = z;
-        mismatch.expected = expected;
-        mismatch.actual = actual;
-        report.mismatches.add(mismatch);
     }
 
     private JsonModels.ActionExecutionReport nonBlockReport(String actionType) {
@@ -362,26 +314,11 @@ public final class ActionExecutor {
         return material;
     }
 
-    private Material blockMaterialFromId(String materialId) {
-        Material material = materialFromId(materialId);
-        if (!material.isBlock()) {
-            throw new IllegalArgumentException("不支持的 Minecraft 方块：" + materialId);
-        }
-        return material;
-    }
-
     private BlockData blockDataFromId(String materialId) {
         try {
             return Bukkit.createBlockData(materialId);
         } catch (IllegalArgumentException error) {
             throw new IllegalArgumentException("不支持的 Minecraft 方块状态：" + materialId, error);
         }
-    }
-
-    private boolean matchesBlockData(BlockData actual, String expectedMaterial) {
-        if (!expectedMaterial.contains("[")) {
-            return actual.getMaterial() == blockMaterialFromId(expectedMaterial);
-        }
-        return blockDataFromId(expectedMaterial).matches(actual);
     }
 }

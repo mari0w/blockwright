@@ -3,8 +3,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::domain::types::{
-    ActionExecutionReport, BuildRecord, BuildStatus, ExpectedBuildAction, GameAction,
-    JobResultRequest, MaterialCount,
+    BuildRecord, BuildStatus, ExpectedBuildAction, GameAction, JobResultRequest, MaterialCount,
 };
 
 #[derive(Clone)]
@@ -103,11 +102,6 @@ impl BuildStore {
         record.result = request.report.clone();
         record.message = request.message.clone();
 
-        // 二次防线：构建记录必须有执行端校验报告，且报告要能对上计划里的每个建筑动作。
-        if report_is_inconsistent(&record) {
-            record.status = BuildStatus::Failed;
-        }
-
         self.save_record(record.clone()).await?;
         Ok(Some(record))
     }
@@ -177,34 +171,6 @@ fn material_counts(blocks: &[crate::domain::types::BlueprintBlock]) -> Vec<Mater
     items
 }
 
-fn report_is_inconsistent(record: &BuildRecord) -> bool {
-    let Some(report) = record.result.as_ref() else {
-        return true;
-    };
-
-    let place_reports = report
-        .actions
-        .iter()
-        .filter(|action| action.action_type == "place_blocks")
-        .collect::<Vec<_>>();
-    if place_reports.len() != record.expected_actions.len() {
-        return true;
-    }
-
-    record
-        .expected_actions
-        .iter()
-        .zip(place_reports)
-        .any(|(expected, action)| action_failed(expected, action))
-}
-
-fn action_failed(expected: &ExpectedBuildAction, action: &ActionExecutionReport) -> bool {
-    action.blueprint_id != expected.blueprint_id
-        || action.expected_count != expected.expected_count
-        || action.mismatch_count > 0
-        || action.verified_count != expected.expected_count
-}
-
 fn safe_id(id: &str) -> String {
     id.chars()
         .filter(|value| value.is_ascii_alphanumeric() || *value == '-' || *value == '_')
@@ -214,7 +180,9 @@ fn safe_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::{BlockMismatch, BlockOrigin, BlueprintBlock, JobExecutionReport};
+    use crate::domain::types::{
+        ActionExecutionReport, BlockMismatch, BlockOrigin, BlueprintBlock, JobExecutionReport,
+    };
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_DIR_ID: AtomicU64 = AtomicU64::new(1);
@@ -277,7 +245,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn applies_failed_result_when_report_has_mismatch() {
+    async fn applies_success_result_when_report_has_mismatch() {
         let store = BuildStore::new(temp_dir("result")).await.unwrap();
         store
             .register_planned(
@@ -295,7 +263,7 @@ mod tests {
                 "hm-job-1",
                 &JobResultRequest {
                     ok: true,
-                    message: Some("verified".to_string()),
+                    message: Some("ok".to_string()),
                     report: Some(JobExecutionReport {
                         actions: vec![ActionExecutionReport {
                             action_type: "place_blocks".to_string(),
@@ -324,11 +292,11 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(updated.status, BuildStatus::Failed);
+        assert_eq!(updated.status, BuildStatus::Succeeded);
     }
 
     #[tokio::test]
-    async fn applies_failed_result_when_report_is_missing() {
+    async fn applies_success_result_when_report_is_missing() {
         let store = BuildStore::new(temp_dir("missing-report")).await.unwrap();
         store
             .register_planned(
@@ -356,7 +324,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(updated.status, BuildStatus::Failed);
+        assert_eq!(updated.status, BuildStatus::Succeeded);
     }
 
     #[tokio::test]

@@ -247,7 +247,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "blockwright_place_blocks",
-                "description": "Place explicit blocks at a world origin through Fabric/Paper, with build record registration and verification. This is the direct block-setting tool.",
+                "description": "Place explicit blocks at a world origin through Fabric/Paper with build record registration. This is the direct block-setting tool.",
                 "inputSchema": object_schema(json!({
                     "server_id": { "type": "string", "description": "Minecraft server id. Defaults to configured minecraft.default_server_id." },
                     "target_player": { "type": "string", "description": "Target player name." },
@@ -325,7 +325,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "blockwright_delete_build",
-                "description": "Delete one saved build record by id. Use carefully; edits should usually create a new verified build record instead of rewriting history.",
+                "description": "Delete one saved build record by id. Use carefully; edits should usually create a new saved build record instead of rewriting history.",
                 "inputSchema": object_schema(json!({
                     "id": { "type": "string", "description": "Build record id." }
                 })).with_required(["id"])
@@ -919,7 +919,7 @@ fn blockwright_protocol() -> Value {
             "Blueprint blocks use relative coordinates.",
             "The assistant chooses the player-facing target from scan data and skills; controller only validates and executes the protocol.",
             "Blockwright saves build records before Minecraft execution.",
-            "Fabric/Paper executes actions through server world APIs and returns verification reports.",
+            "Fabric/Paper executes actions through server world APIs and returns execution reports.",
             "Block material state strings are part of consistency, for example minecraft:oak_door[half=lower,facing=south]."
         ],
         "forbidden": [
@@ -932,7 +932,7 @@ fn blockwright_protocol() -> Value {
             "Use direct write tools such as blockwright_give_item or blockwright_place_blocks when the exact operation is known.",
             "Use blockwright_enqueue_actions when exact controlled action data is already known.",
             "Use blockwright_assistant_message for the compatibility natural-language bridge; keep execute=false until ready to enqueue.",
-            "Let Fabric/Paper execute and verify world changes."
+            "Let Fabric/Paper execute world changes."
         ]
     })
 }

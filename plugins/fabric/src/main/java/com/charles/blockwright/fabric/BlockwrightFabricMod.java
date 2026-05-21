@@ -183,7 +183,7 @@ public final class BlockwrightFabricMod implements ModInitializer {
             report = new ActionExecutor(server, config).executeActions(response.actions, player);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑校验失败，已回传差异报告";
+                message = "建筑执行失败，已回传执行报告";
                 player.sendMessage(Text.literal(message), false);
             }
         } catch (Exception error) {

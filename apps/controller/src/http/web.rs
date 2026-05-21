@@ -428,6 +428,21 @@ mod tests {
 
         assert!(should_read_build_record(Some(&status)));
     }
+
+    #[test]
+    fn empty_web_text_with_image_defaults_to_recreation_request() {
+        let text = normalized_web_text("   ", true);
+
+        assert!(text.contains("复刻"));
+        assert!(text.contains("外形"));
+        assert!(text.contains("比例"));
+        assert!(!text.contains("参考这张图片帮我设计"));
+    }
+
+    #[test]
+    fn non_empty_web_text_is_preserved() {
+        assert_eq!(normalized_web_text("  照这个做  ", true), "照这个做");
+    }
 }
 
 struct TranslationLanguage {
@@ -601,7 +616,7 @@ fn normalized_web_text(text: &str, has_image: bool) -> String {
         return text.to_string();
     }
     if has_image {
-        "参考这张图片帮我设计一个 Minecraft 建筑。".to_string()
+        "按这张图片复刻一个 Minecraft 建筑，尽量保持外形、比例、材质分区和关键细节。".to_string()
     } else {
         "你好".to_string()
     }

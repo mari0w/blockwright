@@ -26,7 +26,6 @@ import net.minecraft.util.math.BlockPos;
 public final class ActionExecutor {
     private static final int HOTBAR_SIZE = 9;
     private static final int PLAYER_STORAGE_SIZE = 36;
-    private static final int MAX_REPORTED_MISMATCHES = 20;
     private static final int PLAYER_SAFETY_RADIUS = 1;
     private static final int PLAYER_SAFETY_HEIGHT_BLOCKS = 3;
 
@@ -67,6 +66,8 @@ public final class ActionExecutor {
                     sendChat(action, defaultPlayer);
                     report.actions.add(nonBlockReport("chat"));
                 }
+                case "scan_nearby_and_plan", "scan_nearby", "get_player_state" ->
+                        report.actions.add(nonBlockReport(action.type));
                 default -> {
                     defaultPlayer.sendMessage(Text.literal("Blockwright 暂不支持动作：" + action.type), false);
                     report.actions.add(nonBlockReport(action.type));
@@ -273,7 +274,6 @@ public final class ActionExecutor {
             placed++;
         }
 
-        verifyPlacedBlocks(action, world, basePos, report);
         report.placedCount = placed;
         report.skippedExistingCount = skippedExisting;
         report.skippedLimitCount = 0;
@@ -314,47 +314,6 @@ public final class ActionExecutor {
                 && targetY >= playerY
                 && targetY < playerY + PLAYER_SAFETY_HEIGHT_BLOCKS
                 && Math.abs(targetZ - playerZ) <= PLAYER_SAFETY_RADIUS;
-    }
-
-    private void verifyPlacedBlocks(
-            JsonModels.GameAction action,
-            ServerWorld world,
-            BlockPos basePos,
-            JsonModels.ActionExecutionReport report) {
-        for (JsonModels.BlueprintBlock blockItem : action.blocks) {
-            if (blockItem == null) {
-                report.mismatchCount++;
-                addMismatch(report, basePos, "unknown", "missing_blueprint_block");
-                continue;
-            }
-
-            BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
-            BlockState actualState = world.getBlockState(targetPos);
-            if (matchesBlockState(actualState, blockItem.material)) {
-                report.verifiedCount++;
-            } else {
-                report.mismatchCount++;
-                addMismatch(report, targetPos, blockItem.material, blockStateToString(actualState));
-            }
-        }
-    }
-
-    private void addMismatch(
-            JsonModels.ActionExecutionReport report,
-            BlockPos pos,
-            String expected,
-            String actual) {
-        if (report.mismatches.size() >= MAX_REPORTED_MISMATCHES) {
-            return;
-        }
-
-        JsonModels.BlockMismatch mismatch = new JsonModels.BlockMismatch();
-        mismatch.x = pos.getX();
-        mismatch.y = pos.getY();
-        mismatch.z = pos.getZ();
-        mismatch.expected = expected;
-        mismatch.actual = actual;
-        report.mismatches.add(mismatch);
     }
 
     private JsonModels.ActionExecutionReport nonBlockReport(String actionType) {
@@ -432,21 +391,6 @@ public final class ActionExecutor {
         return state;
     }
 
-    private boolean matchesBlockState(BlockState actualState, String expectedMaterial) {
-        BlockMaterialSpec spec = BlockMaterialSpec.parse(expectedMaterial);
-        Identifier id = Identifier.tryParse(spec.id());
-        if (id == null || !Registries.BLOCK.getId(actualState.getBlock()).equals(id)) {
-            return false;
-        }
-        for (Map.Entry<String, String> entry : spec.states().entrySet()) {
-            Property<?> property = findProperty(actualState, entry.getKey());
-            if (property == null || !propertyValueAsString(property, actualState).equals(entry.getValue())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private Property<?> findProperty(BlockState state, String name) {
         for (Property<?> property : state.getProperties()) {
             if (property.getName().equals(name)) {
@@ -466,31 +410,6 @@ public final class ActionExecutor {
             throw new IllegalArgumentException("非法方块状态：" + originalMaterial);
         }
         return state.with(property, parsed.get());
-    }
-
-    private <T extends Comparable<T>> String propertyValueAsString(Property<T> property, BlockState state) {
-        return property.name(state.get(property));
-    }
-
-    private String blockStateToString(BlockState state) {
-        String id = Registries.BLOCK.getId(state.getBlock()).toString();
-        if (state.getEntries().isEmpty()) {
-            return id;
-        }
-
-        List<String> entries = state.getEntries()
-                .entrySet()
-                .stream()
-                .map(entry -> propertyEntryToString(entry.getKey(), entry.getValue()))
-                .sorted()
-                .toList();
-        return id + "[" + String.join(",", entries) + "]";
-    }
-
-    private <T extends Comparable<T>> String propertyEntryToString(Property<T> property, Comparable<?> value) {
-        @SuppressWarnings("unchecked")
-        T typedValue = (T) value;
-        return property.getName() + "=" + property.name(typedValue);
     }
 
     private Identifier requireIdentifier(String value, String label) {

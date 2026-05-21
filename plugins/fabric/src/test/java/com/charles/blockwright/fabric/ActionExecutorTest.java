@@ -2,6 +2,7 @@ package com.charles.blockwright.fabric;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class ActionExecutorTest {
@@ -20,5 +21,17 @@ final class ActionExecutorTest {
     void handSlotSelectionReusesCurrentHandWhenHotbarIsFull() {
         assertEquals(4, ActionExecutor.chooseHandSlot(4, false, -1, -1, 9));
         assertEquals(4, ActionExecutor.chooseHandSlot(4, false, -1, -1, -1));
+    }
+
+    @Test
+    void scanControlActionsDoNotFallThroughAsUnsupported() {
+        JsonModels.GameAction action = new JsonModels.GameAction();
+        action.type = "scan_nearby_and_plan";
+
+        JsonModels.JobExecutionReport report =
+                new ActionExecutor(null, new BlockwrightConfig()).executeActions(List.of(action), null);
+
+        assertEquals(1, report.actions.size());
+        assertEquals("scan_nearby_and_plan", report.actions.get(0).actionType);
     }
 }

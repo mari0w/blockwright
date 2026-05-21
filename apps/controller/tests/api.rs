@@ -437,6 +437,10 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         "send.hidden = inputShell.classList.contains('voice-mode') || !hasSendContent()"
     ));
     assert!(page_body.contains("inputShell.classList.toggle('has-send'"));
+    assert!(page_body.contains("const currentImages = [...pendingImages];"));
+    assert!(page_body.contains(
+        "clearComposer();\n        const uploads = await Promise.all(currentImages.map((entry) => readImage(entry.file)));"
+    ));
     assert!(page_body.contains("function setAddPanel"));
     assert!(page_body.contains("操作已交给 Minecraft"));
     assert!(!page_body.contains("我已经准备好方案，正在等 Minecraft 接手"));
@@ -1095,7 +1099,7 @@ async fn web_item_job_status_does_not_blame_player_wording() {
 }
 
 #[tokio::test]
-async fn minecraft_build_message_returns_job_id_for_direct_verification() {
+async fn minecraft_build_message_returns_job_id_for_direct_execution() {
     let app = test_app_with_fake_codex(true, "api-minecraft-build").await;
     let minecraft_request = json!({
         "server_id": "local-paper",

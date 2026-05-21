@@ -98,7 +98,7 @@ public final class JobPoller {
             report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑校验失败，已回传差异报告";
+                message = "建筑执行失败，已回传执行报告";
             }
         } catch (Exception error) {
             ok = false;
@@ -285,7 +285,7 @@ public final class JobPoller {
             report = new ActionExecutor(server, configSupplier.get()).executeActions(response.actions, currentPlayer);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑校验失败，已回传差异报告";
+                message = "建筑执行失败，已回传执行报告";
             }
         } catch (Exception error) {
             ok = false;

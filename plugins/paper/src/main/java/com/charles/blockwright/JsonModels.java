@@ -188,19 +188,6 @@ public final class JsonModels {
         public List<ActionExecutionReport> actions;
 
         public boolean isOk() {
-            if (actions == null) {
-                return true;
-            }
-
-            for (ActionExecutionReport action : actions) {
-                if (action == null) {
-                    continue;
-                }
-                if ("place_blocks".equals(action.actionType)
-                        && (action.mismatchCount > 0 || action.verifiedCount != action.expectedCount)) {
-                    return false;
-                }
-            }
             return true;
         }
     }

@@ -15,7 +15,7 @@ Use this skill when the request references an existing structure near the player
 4. If exactly one nearby saved build clearly matches the requested target, plan a precise edit.
 5. If multiple nearby builds or parts match, or the nearest candidate is plausible but not certain, ask a short clarifying question before modifying.
 6. Modify only the requested part unless the player asks for a broader remodel.
-7. Produce explicit blocks for the changed area so Blockwright can save and verify the edit.
+7. Produce explicit blocks for the changed area so Blockwright can save and place the edit.
 8. Keep the world and stored build information consistent after the edit.
 9. Preserve Minecraft-specific behavior when editing: keep doors as two matching halves, beds as head/foot pairs, persistent leaves on decorative foliage, reachable paths, interior headroom, and lighting.
 10. Preserve the existing building's ground contact and access path. Do not move an edit upward, bury it, or leave a door/window/floor floating unless the player asked for that.

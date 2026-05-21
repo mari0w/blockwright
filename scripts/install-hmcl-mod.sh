@@ -3,6 +3,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+fabric_version() {
+  sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' plugins/fabric/build.gradle.kts | head -n 1
+}
+
 detect_running_game_dir() {
   ps -axo command= \
     | awk '
@@ -62,10 +66,11 @@ else
   GAME_DIR="${GAME_DIR/#\~/$HOME}"
 fi
 MODS_DIR="$GAME_DIR/mods"
-JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-0.1.3.jar"
 
 echo "正在重新编译 Blockwright Fabric 模组..."
 ./scripts/build-hmcl-mod.sh
+FABRIC_VERSION="$(fabric_version)"
+JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-${FABRIC_VERSION}.jar"
 
 if [[ ! -f "$JAR_PATH" ]]; then
   echo "构建失败：没有找到生成的 jar：$JAR_PATH" >&2
@@ -78,7 +83,7 @@ find "$MODS_DIR" -maxdepth 1 -type f -name 'blockwright-fabric-*.jar' -delete
 install -m 0644 "$JAR_PATH" "$MODS_DIR/"
 
 echo "已安装 Blockwright Fabric 模组到："
-echo "$MODS_DIR/blockwright-fabric-0.1.3.jar"
+echo "$MODS_DIR/$(basename "$JAR_PATH")"
 
 if ! find "$MODS_DIR" -maxdepth 1 -type f -iname 'fabric-api*.jar' | grep -q .; then
   echo

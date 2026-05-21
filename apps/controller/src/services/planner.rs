@@ -1,13 +1,17 @@
 use crate::{
     domain::types::{
-        BlockOrigin, Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, GameAction,
-        MaterialCount, PlayerPosition, PlayerState, WorldScan, WorldScanBlock,
+        BlockOrigin, Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, ChatAttachmentKind,
+        ChatAttachmentSource, GameAction, MaterialCount, PlayerPosition, PlayerState, WorldScan,
+        WorldScanBlock,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
     services::{blueprint_store::BlueprintStore, build_store::BuildStore},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 const PLAYER_SAFETY_RADIUS: i32 = 1;
 const PLAYER_SAFETY_HEIGHT_BLOCKS: i32 = 3;
@@ -237,19 +241,22 @@ impl Planner {
 
         let context = build_context_bundle(input, blueprints, builds).await;
         let prompt = render_plan_prompt(&context);
+        let image_paths = local_image_attachment_paths(&input.attachments);
         tracing::info!(
             prompt_bytes = prompt.len(),
             available_blueprint_count = context.available_blueprints.len(),
             recent_build_count = context.recent_builds.len(),
+            local_image_count = image_paths.len(),
             "codex unified planner prompt prepared"
         );
         let output = match codex
-            .ask_with_schema_and_progress(
+            .ask_with_schema_and_progress_and_images(
                 &prompt,
                 CodexResponseSchema::Plan,
                 // 同一个玩家/用户名要沿用同一条 Codex 会话；上下文满时 CodexClient 会清掉旧线程并重试。
                 input.codex_session_key.as_deref(),
                 input.progress_id.as_deref(),
+                &image_paths,
             )
             .await
         {
@@ -1340,7 +1347,7 @@ async fn build_context_bundle(
         protocol: PlanProtocolContext {
             output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
             controller_role: "controller 是 Minecraft AI 助手的工具运行时和兼容协议桥：提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；具体聊天、工具调用、建筑设计和执行方案由模型结合 skills 自主决定。",
-            safety_boundary: "Minecraft 执行只能通过受控 GameAction；run_command 不做命令白名单限制，建筑放置仍会拦截玩家安全区内放置、超出上限的方块和放置后校验不一致。",
+            safety_boundary: "Minecraft 执行只能通过受控 GameAction；run_command 不做命令白名单限制，建筑放置仍会拦截玩家安全区内放置。",
             targeting_policy: "明确请求直接完成；没有指定风格、规模、朝向或坐标时自主选择合理默认值。只有意图冲突、危险，或改造既有建筑且最近候选不确定、多个候选都合理或目标部位不明确时，才回复确认问题并不输出 Minecraft 动作。",
             available_skills: [
                 "blockwright-build-planning",
@@ -1376,6 +1383,25 @@ async fn build_context_bundle(
             ],
         },
     }
+}
+
+fn local_image_attachment_paths(attachments: &[ChatAttachment]) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let mut seen = HashSet::<PathBuf>::new();
+    for attachment in attachments {
+        if attachment.kind != ChatAttachmentKind::Image {
+            continue;
+        }
+        let ChatAttachmentSource::LocalPath { path } = &attachment.source else {
+            continue;
+        };
+        let path = PathBuf::from(path);
+        if !path.is_file() || !seen.insert(path.clone()) {
+            continue;
+        }
+        paths.push(path);
+    }
+    paths
 }
 
 async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext> {
@@ -1627,7 +1653,7 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
         r#"你是 Blockwright 的 Minecraft AI 助手。你不是固定建筑规划器，也不是进度播报器；你像普通聊天助手一样理解玩家的话，然后用 Minecraft MCP 工具和 skills 去读取数据、保存数据、执行动作或回复聊天。
 
 纯粹分工：
-- Minecraft/Fabric/Paper 提供事实和执行：玩家状态、手持物、物品栏、附近方块、世界放置、发物品、命令执行和校验报告。
+- Minecraft/Fabric/Paper 提供事实和执行：玩家状态、手持物、物品栏、附近方块、世界放置、发物品、命令执行和执行报告。
 - MCP 工具是基础能力：读取玩家状态、扫描附近方块、给物品、放方块、执行 Minecraft 命令、查询/保存/删除蓝图、搜索构建记录、入队受控 actions。需要事实就用工具或 context_bundle，不要靠猜，也不要用聊天文案假装读到了。
 - skills 是行为规范和专业经验：建筑怎么设计、怎么选址、怎么改造、怎么发物品、怎么组织 Minecraft 命令。skills 指导你的选择，但 controller 不替你写死方案。
 - controller 只是工具运行时和兼容协议桥：它提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；它不应该替你硬编码某一种建筑或替你确认玩家已经说清楚的事。
@@ -1656,7 +1682,7 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 - 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
 - blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
 - 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
-- 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图与校验语义上保持一致。
+- 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图和放置语义上保持一致。
 - 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
 - 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan，动作形状必须是 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}，不要加 player、radius、purpose 等字段。
 - Minecraft 方块 material 使用命名空间 ID，可带方块状态；蓝图 blocks 使用相对坐标。
@@ -2209,12 +2235,14 @@ context_bundle：
         context_json = context_json,
         invalid_output = invalid_output
     );
+    let image_paths = local_image_attachment_paths(&input.attachments);
     let output = match codex
-        .ask_with_schema_and_progress(
+        .ask_with_schema_and_progress_and_images(
             &prompt,
             CodexResponseSchema::Plan,
             input.codex_session_key.as_deref(),
             input.progress_id.as_deref(),
+            &image_paths,
         )
         .await
     {
@@ -3686,6 +3714,60 @@ BLOCKWRIGHT_JSON
             .await;
 
         assert_eq!(result.summary, "建造蓝图 image-inspired-house");
+    }
+
+    #[test]
+    fn local_image_attachment_paths_collects_existing_local_images() {
+        let dir = temp_dir("local-image-paths");
+        fs::create_dir_all(&dir).unwrap();
+        let image_path = dir.join("house.png");
+        fs::write(&image_path, b"png").unwrap();
+        let missing_path = dir.join("missing.png");
+
+        let paths = local_image_attachment_paths(&[
+            ChatAttachment {
+                kind: ChatAttachmentKind::Image,
+                source: ChatAttachmentSource::LocalPath {
+                    path: image_path.to_string_lossy().to_string(),
+                },
+                file_name: Some("house.png".to_string()),
+                mime_type: Some("image/png".to_string()),
+            },
+            ChatAttachment {
+                kind: ChatAttachmentKind::Image,
+                source: ChatAttachmentSource::LocalPath {
+                    path: image_path.to_string_lossy().to_string(),
+                },
+                file_name: Some("house-duplicate.png".to_string()),
+                mime_type: Some("image/png".to_string()),
+            },
+            ChatAttachment {
+                kind: ChatAttachmentKind::Image,
+                source: ChatAttachmentSource::LocalPath {
+                    path: missing_path.to_string_lossy().to_string(),
+                },
+                file_name: Some("missing.png".to_string()),
+                mime_type: Some("image/png".to_string()),
+            },
+            ChatAttachment {
+                kind: ChatAttachmentKind::Image,
+                source: ChatAttachmentSource::Url {
+                    url: "https://example.com/house.png".to_string(),
+                },
+                file_name: Some("remote.png".to_string()),
+                mime_type: Some("image/png".to_string()),
+            },
+            ChatAttachment {
+                kind: ChatAttachmentKind::File,
+                source: ChatAttachmentSource::LocalPath {
+                    path: image_path.to_string_lossy().to_string(),
+                },
+                file_name: Some("house.txt".to_string()),
+                mime_type: Some("text/plain".to_string()),
+            },
+        ]);
+
+        assert_eq!(paths, vec![image_path]);
     }
 
     #[tokio::test]

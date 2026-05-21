@@ -1,6 +1,5 @@
 package com.charles.blockwright.fabric;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -8,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 final class JsonModelsTest {
     @Test
-    void jobExecutionReportIsOkWhenPlacedBlocksVerify() {
+    void jobExecutionReportIsOkWithPlacementReport() {
         JsonModels.ActionExecutionReport action = new JsonModels.ActionExecutionReport();
         action.actionType = "place_blocks";
         action.expectedCount = 2;
@@ -22,7 +21,7 @@ final class JsonModelsTest {
     }
 
     @Test
-    void jobExecutionReportFailsWhenWorldDoesNotMatchBlueprint() {
+    void jobExecutionReportDoesNotFailOnPlacementMismatch() {
         JsonModels.ActionExecutionReport action = new JsonModels.ActionExecutionReport();
         action.actionType = "place_blocks";
         action.expectedCount = 2;
@@ -32,6 +31,6 @@ final class JsonModelsTest {
         JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
         report.actions = List.of(action);
 
-        assertFalse(report.isOk());
+        assertTrue(report.isOk());
     }
 }

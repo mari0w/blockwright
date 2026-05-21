@@ -98,7 +98,7 @@ impl CodexClient {
         &self,
         prompt: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, None, None, None).await
+        self.ask_inner(prompt, None, None, None, &[]).await
     }
 
     pub async fn ask_with_schema(
@@ -107,7 +107,7 @@ impl CodexClient {
         schema: CodexResponseSchema,
         session_key: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, Some(schema), session_key, None)
+        self.ask_inner(prompt, Some(schema), session_key, None, &[])
             .await
     }
 
@@ -118,7 +118,19 @@ impl CodexClient {
         session_key: Option<&str>,
         progress_id: Option<&str>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        self.ask_inner(prompt, Some(schema), session_key, progress_id)
+        self.ask_inner(prompt, Some(schema), session_key, progress_id, &[])
+            .await
+    }
+
+    pub async fn ask_with_schema_and_progress_and_images(
+        &self,
+        prompt: &str,
+        schema: CodexResponseSchema,
+        session_key: Option<&str>,
+        progress_id: Option<&str>,
+        image_paths: &[PathBuf],
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        self.ask_inner(prompt, Some(schema), session_key, progress_id, image_paths)
             .await
     }
 
@@ -128,6 +140,7 @@ impl CodexClient {
         schema: Option<CodexResponseSchema>,
         session_key: Option<&str>,
         progress_id: Option<&str>,
+        image_paths: &[PathBuf],
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         if !self.config.enabled {
             return Ok(None);
@@ -155,6 +168,7 @@ impl CodexClient {
             session_key = session_key.as_deref().unwrap_or("ephemeral"),
             resume_thread_id = resume_thread_id.as_deref().unwrap_or("new"),
             timeout_seconds = self.config.timeout_seconds,
+            image_count = image_paths.len(),
             "starting codex cli request"
         );
         tracing::info!(
@@ -200,6 +214,7 @@ impl CodexClient {
                     None,
                     resume_thread_id.as_deref(),
                     session_key.is_some(),
+                    image_paths,
                     self.runtime_home.as_deref().map(PathBuf::as_path),
                     &self.config.command,
                     schema_label,
@@ -507,6 +522,7 @@ async fn run_codex_exec(
     schema_path: Option<&Path>,
     resume_thread_id: Option<&str>,
     persist_session: bool,
+    image_paths: &[PathBuf],
     runtime_home: Option<&Path>,
     command_for_log: &str,
     schema_label: &str,
@@ -526,6 +542,9 @@ async fn run_codex_exec(
     command.arg("--json");
     if let Some(schema_path) = schema_path {
         command.arg("--output-schema").arg(schema_path);
+    }
+    for image_path in image_paths {
+        command.arg("--image").arg(image_path);
     }
     if let Some(thread_id) = resume_thread_id {
         command.arg("resume").arg(thread_id);
@@ -1370,6 +1389,73 @@ BLOCKWRIGHT_JSON
         let lines = args.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 1);
         assert!(!lines[0].contains("--output-schema"));
+    }
+
+    #[tokio::test]
+    async fn image_paths_are_passed_to_codex_cli() {
+        let dir = temp_dir("image-args");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-images.sh");
+        let args_log = dir.join("args.log");
+        let image_path = dir.join("reference.png");
+        fs::write(&image_path, b"png").unwrap();
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{}'
+last_message=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+printf '{{"type":"thread.started","thread_id":"thread-image"}}\n'
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::new(CodexConfig {
+            enabled: true,
+            command: script_path.to_string_lossy().to_string(),
+            timeout_seconds: 5,
+        });
+
+        let output = client
+            .ask_with_schema_and_progress_and_images(
+                "hello",
+                CodexResponseSchema::Plan,
+                None,
+                None,
+                &[image_path.clone()],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(output.contains("\"summary\":\"测试\""));
+        let args = fs::read_to_string(args_log).unwrap();
+        assert!(args.contains("--image"));
+        assert!(args.contains(image_path.to_string_lossy().as_ref()));
     }
 
     #[tokio::test]

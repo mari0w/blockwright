@@ -55,7 +55,7 @@ public final class JobPoller {
             report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑校验失败，已回传差异报告";
+                message = "建筑执行失败，已回传执行报告";
             }
         } catch (Exception error) {
             ok = false;

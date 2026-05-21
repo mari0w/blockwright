@@ -85,7 +85,7 @@ public final class BlockwrightCommand implements CommandExecutor {
             report = actionExecutor.executeActions(response.actions, playerName, origin);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑校验失败，已回传差异报告";
+                message = "建筑执行失败，已回传执行报告";
                 sendPlayerMessage(playerName, message);
             }
         } catch (Exception error) {

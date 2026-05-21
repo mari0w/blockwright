@@ -2498,7 +2498,9 @@
       let progressTimers = [];
       try {
         const currentText = text.value;
-        const uploads = await Promise.all(pendingImages.map((entry) => readImage(entry.file)));
+        const currentImages = [...pendingImages];
+        clearComposer();
+        const uploads = await Promise.all(currentImages.map((entry) => readImage(entry.file)));
         const body = {
           username: name,
           target_player: name,
@@ -2531,7 +2533,6 @@
           setStatus(`已回复${imageStatus(uploads.length)}`, false);
           clearMessageProgress(assistantMessage);
         }
-        clearComposer();
       } catch (error) {
         stopTimers(progressTimers);
         const message = error.message || String(error);
