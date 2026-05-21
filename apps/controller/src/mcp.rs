@@ -1221,6 +1221,7 @@ mod tests {
                 height: 1,
                 depth: 1,
             },
+            spec: None,
             materials: vec![MaterialCount {
                 material: "minecraft:oak_planks".to_string(),
                 count: 1,
@@ -1232,6 +1233,7 @@ mod tests {
                 material: "minecraft:oak_planks".to_string(),
             }],
             tags: vec!["room".to_string()],
+            expanded_hash: None,
         }
     }
 

@@ -46,9 +46,10 @@ impl BlueprintStore {
 
     pub async fn save(
         &self,
-        blueprint: Blueprint,
+        mut blueprint: Blueprint,
     ) -> Result<Blueprint, Box<dyn std::error::Error + Send + Sync>> {
         validate_blueprint_id(&blueprint.id)?;
+        blueprint.expanded_hash = Some(expanded_hash(&blueprint));
 
         let file_path = self.file_path(&blueprint.id);
         let json = serde_json::to_string_pretty(&blueprint)?;
@@ -113,6 +114,34 @@ fn safe_id(id: &str) -> String {
         .collect()
 }
 
+fn expanded_hash(blueprint: &Blueprint) -> String {
+    let mut blocks = blueprint.blocks.clone();
+    blocks.sort_by(|left, right| {
+        left.x
+            .cmp(&right.x)
+            .then_with(|| left.y.cmp(&right.y))
+            .then_with(|| left.z.cmp(&right.z))
+            .then_with(|| left.material.cmp(&right.material))
+    });
+
+    let mut hash = 0xcbf29ce484222325u64;
+    for block in blocks {
+        fn update(hash: &mut u64, bytes: &[u8]) {
+            for byte in bytes {
+                *hash ^= u64::from(*byte);
+                *hash = hash.wrapping_mul(0x100000001b3);
+            }
+        }
+        update(&mut hash, &block.x.to_le_bytes());
+        update(&mut hash, &block.y.to_le_bytes());
+        update(&mut hash, &block.z.to_le_bytes());
+        update(&mut hash, block.material.as_bytes());
+        update(&mut hash, &[0xff]);
+    }
+
+    format!("fnv1a64:{hash:016x}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,6 +168,7 @@ mod tests {
                 height: 1,
                 depth: 1,
             },
+            spec: None,
             materials: vec![MaterialCount {
                 material: "minecraft:oak_planks".to_string(),
                 count: 1,
@@ -150,6 +180,7 @@ mod tests {
                 material: "minecraft:oak_planks".to_string(),
             }],
             tags: tags.iter().map(|value| value.to_string()).collect(),
+            expanded_hash: None,
         }
     }
 
@@ -170,6 +201,41 @@ mod tests {
 
         assert_eq!(ids, vec!["a-house", "z-house"]);
         assert!(reloaded.get("a-house").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn save_persists_spec_and_expanded_hash() {
+        let data_dir = temp_dir("spec-hash");
+        let store = BlueprintStore::new(data_dir.clone()).await.unwrap();
+        let mut blueprint = blueprint("spec-house", &["house"]);
+        blueprint.spec = Some(serde_json::json!({
+            "format": "blockwright.blueprint_spec.v1",
+            "kind": "house",
+            "source": "test",
+            "intent": "测试保存 spec",
+            "notes": "",
+            "primitives": []
+        }));
+
+        let saved = store.save(blueprint).await.unwrap();
+
+        assert_eq!(
+            saved
+                .spec
+                .as_ref()
+                .and_then(|spec| spec.get("kind"))
+                .and_then(serde_json::Value::as_str),
+            Some("house")
+        );
+        assert!(saved
+            .expanded_hash
+            .as_deref()
+            .is_some_and(|value| { value.starts_with("fnv1a64:") }));
+
+        let reloaded = BlueprintStore::new(data_dir).await.unwrap();
+        let reloaded = reloaded.get("spec-house").await.unwrap();
+        assert_eq!(reloaded.expanded_hash, saved.expanded_hash);
+        assert!(reloaded.spec.is_some());
     }
 
     #[tokio::test]

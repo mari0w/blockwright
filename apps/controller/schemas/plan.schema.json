@@ -95,6 +95,25 @@
         }
       }
     },
+    "blueprintSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "kind", "source", "intent", "notes", "primitives"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "blockwright.blueprint_spec.v1"
+        },
+        "kind": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "intent": { "type": "string", "minLength": 1 },
+        "notes": { "type": "string" },
+        "primitives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blueprintPrimitive" }
+        }
+      }
+    },
     "origin": {
       "type": "object",
       "additionalProperties": false,
@@ -130,6 +149,12 @@
             "height": { "type": "integer", "minimum": 1 },
             "depth": { "type": "integer", "minimum": 1 }
           }
+        },
+        "spec": {
+          "anyOf": [
+            { "$ref": "#/$defs/blueprintSpec" },
+            { "type": "null" }
+          ]
         },
         "materials": {
           "type": "array",

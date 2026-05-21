@@ -111,6 +111,8 @@ struct BlueprintContext {
     description: String,
     size: BlueprintSize,
     tags: Vec<String>,
+    spec: Option<serde_json::Value>,
+    expanded_hash: Option<String>,
     block_count: usize,
     materials: Vec<MaterialCount>,
     block_sample_limit: usize,
@@ -1504,6 +1506,8 @@ async fn blueprint_contexts(blueprints: &BlueprintStore) -> Vec<BlueprintContext
                 description: blueprint.description,
                 size: blueprint.size,
                 tags: blueprint.tags,
+                spec: blueprint.spec,
+                expanded_hash: blueprint.expanded_hash,
                 block_count,
                 materials: blueprint.materials,
                 block_sample_limit: CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT,
@@ -1768,7 +1772,7 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 - 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
 - blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
 - 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
-- 复杂建筑或图片复刻可以在 blueprint 内使用 primitives 减少手写 blocks：box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from、to、material，from/to 是闭区间相对坐标。controller 会展开为完整 blocks 并重算 materials。
+- 复杂建筑或图片复刻可以在 blueprint 内使用 spec/primitives 减少手写 blocks：spec 保存建筑语义和后续可编辑意图；primitives 是可展开体块。box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from、to、material，from/to 是闭区间相对坐标。controller 会展开为完整 blocks、重算 materials，并保存 spec 与 expanded_hash。
 - 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图和放置语义上保持一致。
 - 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
 - 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan，动作形状必须是 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}，不要加 player、radius、purpose 等字段。
@@ -2088,6 +2092,7 @@ fn expand_blueprint_primitives(blueprint: &mut serde_json::Map<String, serde_jso
         return;
     }
 
+    ensure_blueprint_spec_for_primitives(blueprint, &primitive_values);
     let mut blocks = blueprint
         .get("blocks")
         .or_else(|| blueprint.get("block_list"))
@@ -2107,6 +2112,50 @@ fn expand_blueprint_primitives(blueprint: &mut serde_json::Map<String, serde_jso
 
     let blocks = dedupe_blueprint_block_values(blocks);
     blueprint.insert("blocks".to_string(), serde_json::Value::Array(blocks));
+}
+
+fn ensure_blueprint_spec_for_primitives(
+    blueprint: &mut serde_json::Map<String, serde_json::Value>,
+    primitive_values: &[serde_json::Value],
+) {
+    if let Some(spec) = blueprint
+        .get_mut("spec")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        spec.entry("primitives".to_string())
+            .or_insert_with(|| serde_json::Value::Array(primitive_values.to_vec()));
+        return;
+    }
+    if blueprint.get("spec").is_some_and(|value| !value.is_null()) {
+        return;
+    }
+
+    let kind = blueprint
+        .get("tags")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|tags| tags.first())
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("structure");
+    let name = blueprint
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("generated blueprint");
+    let description = blueprint
+        .get("description")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+
+    blueprint.insert(
+        "spec".to_string(),
+        serde_json::json!({
+            "format": "blockwright.blueprint_spec.v1",
+            "kind": kind,
+            "source": "primitives",
+            "intent": name,
+            "notes": description,
+            "primitives": primitive_values
+        }),
+    );
 }
 
 fn expand_blueprint_primitive(
@@ -2835,6 +2884,7 @@ exit 1
                 height: 1,
                 depth: 1,
             },
+            spec: None,
             materials: vec![MaterialCount {
                 material: "minecraft:oak_planks".to_string(),
                 count: 1,
@@ -2846,6 +2896,7 @@ exit 1
                 material: "minecraft:oak_planks".to_string(),
             }],
             tags: tags.into_iter().map(|value| value.to_string()).collect(),
+            expanded_hash: None,
         }
     }
 
@@ -4738,6 +4789,17 @@ BLOCKWRIGHT_JSON
                 .find(|item| item.material == "minecraft:oak_planks")
                 .map(|item| item.count),
             Some(54)
+        );
+        let spec = blueprint.spec.unwrap();
+        assert_eq!(
+            spec.get("format").and_then(serde_json::Value::as_str),
+            Some("blockwright.blueprint_spec.v1")
+        );
+        assert_eq!(
+            spec.get("primitives")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(2)
         );
     }
 

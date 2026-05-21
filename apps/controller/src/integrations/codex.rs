@@ -1559,6 +1559,7 @@ BLOCKWRIGHT_JSON
         assert!(schema
             .pointer("/$defs/blueprint/properties/primitives")
             .is_some());
+        assert!(schema.pointer("/$defs/blueprint/properties/spec").is_some());
         assert!(schema
             .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
             .is_none());
@@ -1798,7 +1799,8 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
                 for property in properties.keys() {
                     assert!(
                         required.contains(property.as_str())
-                            || any_of_required_properties(value).contains(property.as_str()),
+                            || any_of_required_properties(value).contains(property.as_str())
+                            || schema_property_may_be_optional(path, property),
                         "{path}.properties.{property} must be listed in required"
                     );
                 }
@@ -1838,6 +1840,10 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
             .flatten()
             .filter_map(Value::as_str)
             .collect()
+    }
+
+    fn schema_property_may_be_optional(path: &str, property: &str) -> bool {
+        path.ends_with(".$defs.blueprint") && property == "spec"
     }
 
     fn assert_schema_omits_unsupported_keywords(value: &Value, path: &str) {

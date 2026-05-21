@@ -30,12 +30,13 @@ version.
    resolution. Never replace the image with a tiny token, thumbnail, flat facade,
    or generic concept build when a fuller recreation is possible.
 6. Generate a blueprint with relative coordinates. For large or repetitive
-   image recreations, prefer blueprint `primitives` instead of tiny hand-written
+   image recreations, include a compact blueprint `spec` for the semantic design
+   intent and prefer blueprint `primitives` instead of tiny hand-written
    `blocks`: `box`/`fill_box`/`cuboid` are solid cuboids and
-   `hollow_box`/`shell` are outer shells. Each primitive uses
-   `from`, `to`, and `material`; `from`/`to` are inclusive relative
-   coordinates. Blockwright expands primitives into the final `blocks` list and
-   recomputes `materials`.
+   `hollow_box`/`shell` are outer shells. Each primitive uses `from`, `to`, and
+   `material`; `from`/`to` are inclusive relative coordinates. Blockwright
+   expands primitives into the final `blocks` list, recomputes `materials`, and
+   stores the `spec` for future edits.
 7. Choose the scale based on the image, user text, and site data. Do not shrink
    the idea just to fit a preset block budget; make the image-based build as
    complete and large as the player request implies.

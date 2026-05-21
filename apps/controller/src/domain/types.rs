@@ -129,9 +129,13 @@ pub struct Blueprint {
     pub name: String,
     pub description: String,
     pub size: BlueprintSize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<serde_json::Value>,
     pub materials: Vec<MaterialCount>,
     pub blocks: Vec<BlueprintBlock>,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expanded_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
