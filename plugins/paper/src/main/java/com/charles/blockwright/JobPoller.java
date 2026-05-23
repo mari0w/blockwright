@@ -1,5 +1,7 @@
 package com.charles.blockwright;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
@@ -9,6 +11,7 @@ public final class JobPoller {
     private final ControllerClient controllerClient;
     private final ActionExecutor actionExecutor;
     private BukkitTask task;
+    private volatile RunningJob runningJob;
 
     public JobPoller(BlockwrightPlugin plugin, ControllerClient controllerClient, ActionExecutor actionExecutor) {
         this.plugin = plugin;
@@ -26,9 +29,18 @@ public final class JobPoller {
             task.cancel();
             task = null;
         }
+        RunningJob active = runningJob;
+        if (active != null) {
+            active.cancel();
+            runningJob = null;
+        }
     }
 
     private void pollOnce() {
+        if (runningJob != null) {
+            return;
+        }
+
         try {
             JsonModels.NextJobResponse response = controllerClient.nextJob();
             if (response == null || response.job == null) {
@@ -52,10 +64,18 @@ public final class JobPoller {
                 return;
             }
             Location origin = defaultOrigin(job.targetPlayer);
-            report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
-            ok = report.isOk();
-            if (!ok) {
-                message = "建筑执行失败，已回传执行报告";
+            if (hasPlaceBlocks(job.actions)) {
+                if (startControlledActions(job.id, job.targetPlayer, job.summary, job.actions, origin)) {
+                    return;
+                }
+                ok = false;
+                message = "执行端正忙，建筑任务未开始。";
+            } else {
+                report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
+                ok = report.isOk();
+                if (!ok) {
+                    message = "建筑执行失败，已回传执行报告";
+                }
             }
         } catch (Exception error) {
             ok = false;
@@ -73,6 +93,39 @@ public final class JobPoller {
                 plugin.getLogger().warning("send job result failed: " + error.getMessage());
             }
         });
+    }
+
+    public boolean startControlledActions(
+            String jobId,
+            String targetPlayer,
+            String summary,
+            List<JsonModels.GameAction> actions,
+            Location origin) {
+        if (!hasPlaceBlocks(actions) || runningJob != null) {
+            return false;
+        }
+
+        JsonModels.GameJob job = new JsonModels.GameJob();
+        job.id = jobId;
+        job.targetPlayer = targetPlayer;
+        job.summary = summary;
+        job.actions = actions;
+        RunningJob next = new RunningJob(job, origin);
+        runningJob = next;
+        next.start();
+        return true;
+    }
+
+    public static boolean hasPlaceBlocks(List<JsonModels.GameAction> actions) {
+        if (actions == null) {
+            return false;
+        }
+        for (JsonModels.GameAction action : actions) {
+            if (action != null && "place_blocks".equals(action.type)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean executeLiveQueryJob(JsonModels.GameJob job) {
@@ -142,5 +195,70 @@ public final class JobPoller {
             }
         }
         return plugin.getServer().getWorlds().get(0).getSpawnLocation();
+    }
+
+    private final class RunningJob {
+        private final JsonModels.GameJob job;
+        private final Location origin;
+        private final JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
+        private int actionIndex;
+        private BukkitTask actionTask;
+
+        RunningJob(JsonModels.GameJob job, Location origin) {
+            this.job = job;
+            this.origin = origin;
+            this.report.actions = new ArrayList<>();
+        }
+
+        void start() {
+            actionTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::step, 1L, 1L);
+        }
+
+        void cancel() {
+            if (actionTask != null) {
+                actionTask.cancel();
+                actionTask = null;
+            }
+        }
+
+        private void step() {
+            try {
+                if (job.actions != null && actionIndex < job.actions.size()) {
+                    JsonModels.GameAction action = job.actions.get(actionIndex);
+                    if (action != null) {
+                        JsonModels.JobExecutionReport stepReport =
+                                actionExecutor.executeActions(List.of(action), job.targetPlayer, origin);
+                        if (stepReport != null && stepReport.actions != null) {
+                            report.actions.addAll(stepReport.actions);
+                        }
+                    }
+                    actionIndex++;
+                    if (actionIndex < job.actions.size()) {
+                        return;
+                    }
+                }
+
+                boolean ok = report.isOk();
+                finish(ok, ok ? "ok" : "建筑执行失败，已回传执行报告");
+            } catch (Exception error) {
+                plugin.getLogger().warning("chunked job execute failed: " + job.id + ", " + error.getMessage());
+                finish(false, error.getMessage());
+            }
+        }
+
+        private void finish(boolean ok, String message) {
+            cancel();
+            JsonModels.JobExecutionReport resultReport = report;
+            if (job.id != null && !job.id.isBlank()) {
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        controllerClient.sendJobResult(job.id, ok, message, resultReport);
+                    } catch (Exception error) {
+                        plugin.getLogger().warning("send job result failed: " + error.getMessage());
+                    }
+                });
+            }
+            runningJob = null;
+        }
     }
 }

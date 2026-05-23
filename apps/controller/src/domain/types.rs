@@ -177,6 +177,8 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+pub const PLACE_BLOCKS_CHUNK_SIZE: usize = 512;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameJob {
     pub id: String,

@@ -47,7 +47,6 @@ impl CodexResponseSchema {
         }
     }
 
-    #[cfg(test)]
     fn path(self) -> PathBuf {
         let file_name = match self {
             CodexResponseSchema::Plan => "plan.schema.json",
@@ -184,12 +183,17 @@ impl CodexClient {
         let started_at = std::time::Instant::now();
         let mut attempt = 1;
         let mut context_session_reset = false;
+        let schema_path = schema.map(CodexResponseSchema::path);
+        let mut disable_structured_output = false;
         let (output, last_message_path) = loop {
             let last_message_path = codex_last_message_path();
             let attempt_started_at = std::time::Instant::now();
-            // Codex CLI 0.130.0 在 gpt-5.5 + --output-schema 下会稳定 stream disconnected。
-            // controller 保留 schema label 作为本地解析语义，但不把 schema 交给 CLI。
-            let structured_output = false;
+            let schema_path_for_attempt = if disable_structured_output {
+                None
+            } else {
+                schema_path.as_deref()
+            };
+            let structured_output = schema_path_for_attempt.is_some();
             tracing::info!(
                 command = %self.config.command,
                 schema = schema_label,
@@ -211,7 +215,7 @@ impl CodexClient {
                     &args,
                     prompt,
                     &last_message_path,
-                    None,
+                    schema_path_for_attempt,
                     resume_thread_id.as_deref(),
                     session_key.is_some(),
                     image_paths,
@@ -257,6 +261,25 @@ impl CodexClient {
                         attempt += 1;
                         continue;
                     }
+                    if structured_output
+                        && attempt < CODEX_MAX_REQUEST_ATTEMPTS
+                        && codex_failure_allows_schema_fallback(&failure)
+                    {
+                        disable_structured_output = true;
+                        attempt += 1;
+                        tracing::warn!(
+                            command = %self.config.command,
+                            schema = schema_label,
+                            session_key = session_key.as_deref().unwrap_or("ephemeral"),
+                            "codex structured output failed; retrying without output schema"
+                        );
+                        self.record_progress(
+                            progress_id,
+                            "Codex JSON 输出不可用，已退回普通输出重试",
+                            None,
+                        );
+                        continue;
+                    }
                     if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
                     {
                         attempt += 1;
@@ -288,6 +311,25 @@ impl CodexClient {
                         .await?
                     {
                         attempt += 1;
+                        continue;
+                    }
+                    if structured_output
+                        && attempt < CODEX_MAX_REQUEST_ATTEMPTS
+                        && codex_failure_allows_schema_fallback(&failure)
+                    {
+                        disable_structured_output = true;
+                        attempt += 1;
+                        tracing::warn!(
+                            command = %self.config.command,
+                            schema = schema_label,
+                            session_key = session_key.as_deref().unwrap_or("ephemeral"),
+                            "codex structured output failed before process exit; retrying without output schema"
+                        );
+                        self.record_progress(
+                            progress_id,
+                            "Codex JSON 输出不可用，已退回普通输出重试",
+                            None,
+                        );
                         continue;
                     }
                     if attempt < CODEX_MAX_REQUEST_ATTEMPTS && codex_failure_is_retriable(&failure)
@@ -855,6 +897,17 @@ fn codex_failure_is_context_window_full(message: &str) -> bool {
         || lower.contains("context_length_exceeded")
 }
 
+fn codex_failure_allows_schema_fallback(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("invalid_json_schema")
+        || lower.contains("--output-schema")
+        || lower.contains("output schema")
+        || lower.contains("response_format")
+        || lower.contains("structured output")
+        || lower.contains("structured-output")
+        || lower.contains("stream disconnected before completion")
+}
+
 fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
     let line = raw.trim();
     if line.is_empty() {
@@ -1328,10 +1381,10 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn schema_requests_do_not_pass_output_schema_to_cli() {
-        let dir = temp_dir("schema-request-without-output-schema");
+    async fn schema_requests_pass_output_schema_to_local_cli() {
+        let dir = temp_dir("schema-request-with-output-schema");
         fs::create_dir_all(&dir).unwrap();
-        let script_path = dir.join("fake-codex-no-output-schema.sh");
+        let script_path = dir.join("fake-codex-with-output-schema.sh");
         let args_log = dir.join("args.log");
         fs::write(
             &script_path,
@@ -1347,8 +1400,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --output-schema)
-      echo "unexpected --output-schema" >&2
-      exit 7
+      shift 2
       ;;
     *)
       shift
@@ -1388,7 +1440,78 @@ BLOCKWRIGHT_JSON
         let args = fs::read_to_string(args_log).unwrap();
         let lines = args.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 1);
-        assert!(!lines[0].contains("--output-schema"));
+        assert!(lines[0].contains("--output-schema"));
+        assert!(lines[0].contains("plan.schema.json"));
+    }
+
+    #[tokio::test]
+    async fn structured_output_failure_retries_without_output_schema() {
+        let dir = temp_dir("schema-fallback-without-output-schema");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("fake-codex-schema-fallback.sh");
+        let args_log = dir.join("args.log");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> '{}'
+last_message=""
+schema=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-last-message)
+      last_message="$2"
+      shift 2
+      ;;
+    --output-schema)
+      schema="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat >/dev/null
+if [[ -n "$schema" ]]; then
+  printf '{{"type":"turn.failed","error":{{"message":"invalid_json_schema"}}}}\n'
+  exit 1
+fi
+if [[ -z "$last_message" ]]; then
+  exit 2
+fi
+printf '{{"type":"thread.started","thread_id":"thread-schema-fallback"}}\n'
+cat > "$last_message" <<'BLOCKWRIGHT_JSON'
+{{"reply":"好","summary":"测试","blueprint":null,"site_plan":null,"actions":[{{"type":"chat","message":"好"}}]}}
+BLOCKWRIGHT_JSON
+"#,
+                args_log.display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+
+        let client = CodexClient::new(CodexConfig {
+            enabled: true,
+            command: script_path.to_string_lossy().to_string(),
+            timeout_seconds: 5,
+        });
+
+        let output = client
+            .ask_with_schema("hello", CodexResponseSchema::Plan, None)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(output.contains("\"summary\":\"测试\""));
+        let args = fs::read_to_string(args_log).unwrap();
+        let lines = args.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("--output-schema"));
+        assert!(!lines[1].contains("--output-schema"));
     }
 
     #[tokio::test]
@@ -1560,9 +1683,7 @@ BLOCKWRIGHT_JSON
             .pointer("/$defs/blueprint/properties/primitives")
             .is_some());
         assert!(schema.pointer("/$defs/blueprint/properties/spec").is_some());
-        assert!(schema
-            .pointer("/$defs/placeBlocksAction/properties/blocks/maxItems")
-            .is_none());
+        assert!(schema.pointer("/$defs/action").is_some());
         assert!(schema
             .pointer("/$defs/blueprint/properties/materials/items/properties/count/maximum")
             .is_none());
@@ -1843,7 +1964,8 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
     }
 
     fn schema_property_may_be_optional(path: &str, property: &str) -> bool {
-        path.ends_with(".$defs.blueprint") && property == "spec"
+        let _ = (path, property);
+        false
     }
 
     fn assert_schema_omits_unsupported_keywords(value: &Value, path: &str) {
@@ -1855,6 +1977,7 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
             }
             Value::Object(fields) => {
                 for keyword in [
+                    "anyOf",
                     "oneOf",
                     "allOf",
                     "not",
@@ -1863,6 +1986,17 @@ ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","mes
                     "if",
                     "then",
                     "else",
+                    "const",
+                    "pattern",
+                    "minLength",
+                    "maxLength",
+                    "minimum",
+                    "maximum",
+                    "exclusiveMinimum",
+                    "exclusiveMaximum",
+                    "minItems",
+                    "maxItems",
+                    "uniqueItems",
                 ] {
                     assert!(
                         !fields.contains_key(keyword),

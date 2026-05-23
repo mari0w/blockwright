@@ -160,6 +160,7 @@
       z-index: 12;
       justify-content: center;
       align-items: center;
+      gap: 8px;
       touch-action: manipulation;
     }
     .messages {
@@ -329,6 +330,28 @@
     .config-open:focus-visible {
       border-color: var(--line);
       color: var(--text);
+    }
+    .language-toggle {
+      border-color: transparent;
+      background: rgba(34, 40, 46, .72);
+      color: var(--muted);
+      box-shadow: none;
+      backdrop-filter: blur(8px);
+    }
+    .language-toggle:hover,
+    .language-toggle:focus-visible {
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .language-toggle svg {
+      width: 19px;
+      height: 19px;
+    }
+    .language-toggle span {
+      margin-left: 2px;
+      font-size: 11px;
+      font-weight: 720;
+      line-height: 1;
     }
     .voice-toggle.active {
       border-color: var(--accent);
@@ -975,7 +998,15 @@
     <main>
       <div class="brand-mark" aria-label="Blockwright">Blockwright</div>
       <header class="topbar">
-        <button id="configOpen" class="icon-button config-open" type="button" title="打开设置" aria-label="打开设置">
+        <button id="languageToggle" class="icon-button language-toggle" type="button" title="Switch to English" aria-label="Switch to English">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M2 12h20"></path>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"></path>
+          </svg>
+          <span id="languageToggleLabel" aria-hidden="true">EN</span>
+        </button>
+        <button id="configOpen" class="icon-button config-open" type="button" title="打开设置" aria-label="打开设置" data-i18n-title="openSettings" data-i18n-aria-label="openSettings">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 4h-7"></path>
             <path d="M10 4H3"></path>
@@ -1010,7 +1041,7 @@
                 <path d="M7 14h10"></path>
               </svg>
             </button>
-            <textarea id="text" rows="1" wrap="off" placeholder="说你想建什么、改什么。"></textarea>
+            <textarea id="text" rows="1" wrap="off" placeholder="说你想建什么、改什么。" data-i18n-placeholder="composerPlaceholder"></textarea>
             <div id="voicePanel" class="voice-panel" hidden>
               <div id="voiceCancelZone" class="voice-cancel-zone" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
@@ -1028,8 +1059,8 @@
                 <span id="voiceHoldText">按住说话，松手发送</span>
               </button>
             </div>
-            <button id="send" class="send-button" type="submit" hidden>发送</button>
-            <button id="addToggle" class="icon-button add-toggle" type="button" title="更多" aria-label="更多" aria-expanded="false" aria-controls="addPanel">
+            <button id="send" class="send-button" type="submit" hidden data-i18n="send">发送</button>
+            <button id="addToggle" class="icon-button add-toggle" type="button" title="更多" aria-label="更多" aria-expanded="false" aria-controls="addPanel" data-i18n-title="more" data-i18n-aria-label="more">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M12 5v14"></path>
                 <path d="M5 12h14"></path>
@@ -1038,21 +1069,21 @@
           </div>
           <div id="addPanel" class="add-panel" hidden>
             <input id="cameraImage" class="sr-only" type="file" accept="image/*" capture="environment">
-            <label class="add-option" for="cameraImage" title="拍照" aria-label="拍照">
+            <label class="add-option" for="cameraImage" title="拍照" aria-label="拍照" data-i18n-title="camera" data-i18n-aria-label="camera">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M14.5 4 16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l1.5-3h5Z"></path>
                 <circle cx="12" cy="13" r="3"></circle>
               </svg>
-              <span>拍照</span>
+              <span data-i18n="camera">拍照</span>
             </label>
             <input id="libraryImages" class="sr-only" type="file" accept="image/*" multiple>
-            <label class="add-option" for="libraryImages" title="从相册选择" aria-label="从相册选择">
+            <label class="add-option" for="libraryImages" title="从相册选择" aria-label="从相册选择" data-i18n-title="library" data-i18n-aria-label="libraryLong">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2"></rect>
                 <path d="m8 13 2.5-2.5L15 15l1.5-1.5L21 18"></path>
                 <circle cx="8" cy="9" r="1.5"></circle>
               </svg>
-              <span>相册</span>
+              <span data-i18n="library">相册</span>
             </label>
           </div>
         </div>
@@ -1062,39 +1093,39 @@
   <section id="usernameGate" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="usernameGateTitle">
     <form id="usernameGateForm" class="guide-panel">
       <div class="guide-head">
-        <h2 id="usernameGateTitle">填写 Minecraft 用户名</h2>
-        <p>Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。</p>
+        <h2 id="usernameGateTitle" data-i18n="usernameGateTitle">填写 Minecraft 用户名</h2>
+        <p data-i18n="usernameGateIntro">Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。</p>
       </div>
       <label class="setup-field" for="usernameGateInput">
-        <span>Minecraft 用户名</span>
-        <input id="usernameGateInput" autocomplete="username" placeholder="例如 Steve">
+        <span data-i18n="minecraftUsername">Minecraft 用户名</span>
+        <input id="usernameGateInput" autocomplete="username" placeholder="例如 Steve" data-i18n-placeholder="usernamePlaceholder">
       </label>
       <p id="usernameGateError" class="config-status error"></p>
-      <button id="usernameGateSubmit" type="submit">进入聊天</button>
+      <button id="usernameGateSubmit" type="submit" data-i18n="enterChat">进入聊天</button>
     </form>
   </section>
   <section id="configPage" class="config-page" hidden>
     <div class="config-shell">
       <header class="config-header">
-        <button id="configBack" class="icon-button secondary-button" type="button" title="返回聊天" aria-label="返回聊天">
+        <button id="configBack" class="icon-button secondary-button" type="button" title="返回聊天" aria-label="返回聊天" data-i18n-title="backToChat" data-i18n-aria-label="backToChat">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
             <path d="m15 18-6-6 6-6"></path>
           </svg>
         </button>
         <div class="config-title">
-          <h2>设置</h2>
-          <p>聊天接入和浏览器权限都在这里处理。</p>
+          <h2 data-i18n="settings">设置</h2>
+          <p data-i18n="settingsIntro">聊天接入和浏览器权限都在这里处理。</p>
         </div>
       </header>
       <div class="config-body">
         <form id="configForm" class="config-form">
           <section class="config-section">
-            <h3>玩家</h3>
+            <h3 data-i18n="player">玩家</h3>
             <label for="username">
-              <span>Minecraft 用户名</span>
-              <input id="username" autocomplete="username" placeholder="例如 Steve">
+              <span data-i18n="minecraftUsername">Minecraft 用户名</span>
+              <input id="username" autocomplete="username" placeholder="例如 Steve" data-i18n-placeholder="usernamePlaceholder">
             </label>
-            <p>这里填游戏里的用户名，聊天和语音都会发给这个玩家。</p>
+            <p data-i18n="playerHelp">这里填游戏里的用户名，聊天和语音都会发给这个玩家。</p>
           </section>
           <section class="config-section">
             <h3>Controller</h3>
@@ -1104,53 +1135,53 @@
             </label>
           </section>
           <section class="config-section">
-            <h3>浏览器权限</h3>
+            <h3 data-i18n="browserPermissions">浏览器权限</h3>
             <div class="permission-row">
-              <p id="permissionStatus">正在检查麦克风权限...</p>
-              <button id="permissionRequest" class="secondary-button" type="button">申请麦克风权限</button>
+              <p id="permissionStatus" data-i18n="micChecking">正在检查麦克风权限...</p>
+              <button id="permissionRequest" class="secondary-button" type="button" data-i18n="requestMicPermission">申请麦克风权限</button>
             </div>
             <p id="permissionHelp"></p>
           </section>
           <section class="config-section">
-            <h3>手机 HTTPS</h3>
-            <p>controller 会自动生成本地自签根证书和局域网 HTTPS 地址。手机第一次使用前，需要先安装并信任这个根证书。</p>
-            <p>HTTPS 地址：<a id="httpsAccessUrl" href="#"></a></p>
-            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer">下载 Blockwright 本地根证书文件</a></p>
-            <p>iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。</p>
-            <p>Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。</p>
-            <p>Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。</p>
+            <h3 data-i18n="mobileHttps">手机 HTTPS</h3>
+            <p data-i18n="mobileHttpsIntro">controller 会自动生成本地自签根证书和局域网 HTTPS 地址。手机第一次使用前，需要先安装并信任这个根证书。</p>
+            <p><span data-i18n="httpsAddressLabel">HTTPS 地址：</span><a id="httpsAccessUrl" href="#"></a></p>
+            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer" data-i18n="downloadCaFile">下载 Blockwright 本地根证书文件</a></p>
+            <p data-i18n="iosCaHelp">iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。</p>
+            <p data-i18n="androidCaHelp">Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。</p>
+            <p data-i18n="androidCaReminder">Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。</p>
           </section>
           <section class="config-section">
             <h3>Element/Matrix</h3>
             <label class="config-checkbox" for="matrixEnabled">
               <input id="matrixEnabled" type="checkbox" checked>
-              <span>启用 Element/Matrix</span>
+              <span data-i18n="matrixEnabled">启用 Element/Matrix</span>
             </label>
             <label for="matrixHomeserver">
-              <span>Matrix 主服务器 URL</span>
+              <span data-i18n="matrixHomeserver">Matrix 主服务器 URL</span>
               <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
             </label>
             <label for="matrixAccessToken">
               <span>Matrix Access Token</span>
-              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token">
+              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token" data-i18n-placeholder="matrixTokenPlaceholder">
             </label>
             <label for="matrixAllowedSender">
-              <span>允许发指令的 Matrix 用户</span>
+              <span data-i18n="matrixAllowedSender">允许发指令的 Matrix 用户</span>
               <input id="matrixAllowedSender" placeholder="@user:matrix.org">
             </label>
             <label class="config-checkbox" for="matrixAllowOwn">
               <input id="matrixAllowOwn" type="checkbox" checked>
-              <span>个人 token 允许处理自己发出的消息</span>
+              <span data-i18n="matrixAllowOwn">个人 token 允许处理自己发出的消息</span>
             </label>
             <label class="config-checkbox" for="matrixAutoJoin">
               <input id="matrixAutoJoin" type="checkbox" checked>
-              <span>自动加入邀请房间</span>
+              <span data-i18n="matrixAutoJoin">自动加入邀请房间</span>
             </label>
           </section>
           <div id="configStatus" class="config-status"></div>
           <div class="config-actions">
-            <button id="configSave" type="submit">保存配置</button>
-            <button id="configClose" class="secondary-button" type="button">返回聊天</button>
+            <button id="configSave" type="submit" data-i18n="saveConfig">保存配置</button>
+            <button id="configClose" class="secondary-button" type="button" data-i18n="backToChat">返回聊天</button>
           </div>
         </form>
       </div>
@@ -1158,17 +1189,17 @@
   </section>
   <section id="httpsGuide" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="httpsGuideTitle">
     <div class="guide-panel">
-      <button id="httpsGuideClose" class="icon-button guide-close secondary-button" type="button" title="关闭" aria-label="关闭">
+      <button id="httpsGuideClose" class="icon-button guide-close secondary-button" type="button" title="关闭" aria-label="关闭" data-i18n-title="close" data-i18n-aria-label="close">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
           <path d="m18 6-12 12"></path>
           <path d="m6 6 12 12"></path>
         </svg>
       </button>
       <div class="guide-head">
-        <h2 id="httpsGuideTitle">手机语音需要 HTTPS</h2>
-        <p>当前地址不是安全地址，手机浏览器不会开放麦克风。按下面几步处理后，再回到页面申请麦克风权限。</p>
+        <h2 id="httpsGuideTitle" data-i18n="httpsGuideTitle">手机语音需要 HTTPS</h2>
+        <p data-i18n="httpsGuideIntro">当前地址不是安全地址，手机浏览器不会开放麦克风。按下面几步处理后，再回到页面申请麦克风权限。</p>
       </div>
-      <ol id="httpsGuideSteps" class="guide-steps" aria-label="HTTPS 设置步骤"></ol>
+      <ol id="httpsGuideSteps" class="guide-steps" aria-label="HTTPS 设置步骤" data-i18n-aria-label="httpsSteps"></ol>
       <div class="guide-detail">
         <h3 id="httpsGuideStepTitle"></h3>
         <p id="httpsGuideStepText"></p>
@@ -1176,7 +1207,7 @@
         <button id="httpsGuidePrimaryButton" type="button"></button>
       </div>
       <div class="guide-actions">
-        <button id="httpsGuideBack" class="secondary-button" type="button">上一步</button>
+        <button id="httpsGuideBack" class="secondary-button" type="button" data-i18n="previousStep">上一步</button>
         <button id="httpsGuideNext" type="button">下一步</button>
       </div>
     </div>
@@ -1191,6 +1222,8 @@
     const usernameGateForm = document.getElementById('usernameGateForm');
     const usernameGateInput = document.getElementById('usernameGateInput');
     const usernameGateError = document.getElementById('usernameGateError');
+    const languageToggle = document.getElementById('languageToggle');
+    const languageToggleLabel = document.getElementById('languageToggleLabel');
     const configOpen = document.getElementById('configOpen');
     const configPage = document.getElementById('configPage');
     const configBack = document.getElementById('configBack');
@@ -1238,8 +1271,297 @@
     const voiceCancelText = document.getElementById('voiceCancelText');
     const voiceHold = document.getElementById('voiceHold');
     const voiceHoldText = document.getElementById('voiceHoldText');
+    const I18N = {
+      zh: {
+        languageName: '中文',
+        languageToggleLabel: 'EN',
+        languageToggleTitle: 'Switch to English',
+        openSettings: '打开设置',
+        composerPlaceholder: '说你想建什么、改什么。',
+        send: '发送',
+        more: '更多',
+        camera: '拍照',
+        library: '相册',
+        libraryLong: '从相册选择',
+        usernameGateTitle: '填写 Minecraft 用户名',
+        usernameGateIntro: 'Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。',
+        minecraftUsername: 'Minecraft 用户名',
+        usernamePlaceholder: '例如 Steve',
+        enterChat: '进入聊天',
+        backToChat: '返回聊天',
+        settings: '设置',
+        settingsIntro: '聊天接入和浏览器权限都在这里处理。',
+        player: '玩家',
+        playerHelp: '这里填游戏里的用户名，聊天和语音都会发给这个玩家。',
+        browserPermissions: '浏览器权限',
+        requestMicPermission: '申请麦克风权限',
+        micChecking: '正在检查麦克风权限...',
+        mobileHttps: '手机 HTTPS',
+        mobileHttpsIntro: 'controller 会自动生成本地自签根证书和局域网 HTTPS 地址。手机第一次使用前，需要先安装并信任这个根证书。',
+        httpsAddressLabel: 'HTTPS 地址：',
+        downloadCaFile: '下载 Blockwright 本地根证书文件',
+        iosCaHelp: 'iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。',
+        androidCaHelp: 'Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。',
+        androidCaReminder: 'Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。',
+        matrixEnabled: '启用 Element/Matrix',
+        matrixHomeserver: 'Matrix 主服务器 URL',
+        matrixTokenPlaceholder: '留空表示保留已有 token',
+        matrixAllowedSender: '允许发指令的 Matrix 用户',
+        matrixAllowOwn: '个人 token 允许处理自己发出的消息',
+        matrixAutoJoin: '自动加入邀请房间',
+        saveConfig: '保存配置',
+        close: '关闭',
+        httpsGuideTitle: '手机语音需要 HTTPS',
+        httpsGuideIntro: '当前地址不是安全地址，手机浏览器不会开放麦克风。按下面几步处理后，再回到页面申请麦克风权限。',
+        httpsSteps: 'HTTPS 设置步骤',
+        previousStep: '上一步',
+        nextStep: '下一步',
+        done: '完成',
+        switchToText: '切换到文字输入',
+        switchToVoice: '切换到语音输入',
+        voiceHoldDefault: '按住说话，松手发送',
+        voiceCancelDefault: '上滑到这里取消',
+        voiceCancelReady: '松手取消发送',
+        voiceReleaseCancel: '松手取消',
+        voiceReleaseSend: '松手发送',
+        voiceSending: '正在发送...',
+        voiceRecognizing: '正在识别...',
+        voiceCancelled: '语音输入已取消。',
+        startRecordingHint: '按住说话时会开始录音。',
+        noSpeechTryAgain: '没有听清内容，按住再说一次。',
+        voiceKeptAfterError: '{message}，已保留语音文字。',
+        voiceNeedsHttps: '手机语音需要 HTTPS 地址',
+        voiceUnsupported: '当前浏览器不支持语音识别',
+        noSoundTryAgain: '没有听到声音，按住再说一次。',
+        noMicrophone: '没有可用麦克风。',
+        speechNetworkError: '语音识别服务暂时不可用。',
+        speechFailed: '语音识别失败。',
+        maxImages: '一次最多发送 {max} 张图片。',
+        imagesAddedLimited: '已添加 {count} 张图片，最多保留 {max} 张。',
+        imageAddedCameraOne: '已添加拍摄照片。',
+        imageAddedCameraMany: '已添加 {count} 张拍摄照片。',
+        imageAddedLibraryOne: '已从相册添加 1 张图片。',
+        imageAddedLibraryMany: '已从相册添加 {count} 张图片。',
+        imageAddedGeneric: '已添加 {count} 张图片。',
+        configTokenRequired: 'Controller Token 不能为空。',
+        matrixRequired: 'Matrix 主服务器 URL 和允许发指令的用户不能为空。',
+        savingConfig: '正在保存配置...',
+        saveFailed: '保存失败',
+        configSaved: '配置已保存。',
+        usernameRequired: '请先填写 Minecraft 用户名。',
+        usernameRequiredShort: '先填写 Minecraft 用户名。',
+        emptyMessage: '先输入内容，或点加号选择图片。',
+        sendingToBlockwright: '正在发送给 Blockwright...',
+        receivingMessage: '正在接收消息...',
+        requestFailed: '请求失败',
+        queuedStatus: '状态：操作已交给 Minecraft，正在等待执行{imageStatus}',
+        repliedStatus: '已回复{imageStatus}',
+        failedPrefix: '这次没处理成功：{message}',
+        referenceImage: '参考图片',
+        removeImage: '移除图片',
+        removeNamedImage: '移除 {name}',
+        imageFallbackName: '图片',
+        pastedImage: '粘贴图片',
+        sentImageAlt: '已发送图片',
+        sentOneImage: '发送了一张参考图片',
+        sentImages: '发送了 {count} 张参考图片',
+        imageStatusSuffix: '，图片 {count} 张',
+        restoringJobStatus: '状态：正在恢复上次任务状态...',
+        restoredRequestUnclear: '上次刷新时请求还没返回；如果没有继续处理，请重新发送。',
+        requestProgressReceiving: '正在接收消息{imageHint}...',
+        requestProgressImageHint: '，同时整理参考图片',
+        requestProgressAi: 'AI 正在处理你的请求...',
+        requestProgressReply: '正在整理回复或准备操作...',
+        requestProgressTools: '还在处理，可能正在读取工具结果...',
+        requestProgressWaiting: '还在等回复，请稍等...',
+        jobNotFound: '找不到上次任务，可能 controller 已重启或任务已清理。',
+        statusPrefix: '状态：{message}',
+        statusWithDetail: '状态：{message}（{detail}）',
+        statusUnavailable: '暂时看不到状态',
+        imageReadFailed: '{name} 读取失败',
+        micPermissionUnsupported: '当前浏览器不支持主动申请麦克风权限。',
+        micPermissionUnknown: '当前浏览器不能直接读取权限状态，可以点击按钮申请麦克风权限。',
+        micPermissionRequesting: '正在向浏览器申请麦克风权限...',
+        micPermissionGranted: '麦克风权限已允许。',
+        micPermissionGrantedReady: '麦克风权限已允许，可以按住说话。',
+        micPermissionDenied: '麦克风权限已被拒绝。',
+        micPermissionPrompt: '麦克风权限尚未授权，点击按钮申请。',
+        micPermissionMissing: '浏览器没有麦克风权限。{help}',
+        micRequestFailed: '麦克风权限申请失败。',
+        micDeviceNotFound: '没有检测到可用麦克风。',
+        micHttpsHelp: '请按弹窗引导下载并信任本地根证书，然后打开 HTTPS 地址。',
+        browserChromeHelp: '在地址栏左侧的网站信息里，把“麦克风”改为允许，然后刷新页面。',
+        browserSafariHelp: '在 Safari 的网站设置里允许当前页面使用麦克风，然后刷新页面。',
+        browserFirefoxHelp: '在地址栏左侧权限图标里允许麦克风，然后刷新页面。',
+        browserGenericHelp: '请到浏览器的网站权限设置里允许当前页面使用麦克风，然后刷新页面。',
+        httpsStepDownloadTitle: '下载证书文件',
+        httpsStepDownloadSummary: '文件名是 Blockwright-Local-Root-CA.cer',
+        httpsStepDownloadText: '点击下载证书。如果 Android 弹出 Files by Google、Google 文件或文件管理器，直接保存即可；这只是系统在选择保存位置，不是上传到 Google，也不是安装完成。iPhone/iPad 请尽量用 Safari 打开这个下载链接，否则可能只保存文件，不出现描述文件提醒。',
+        httpsStepDownloadAction: '下载证书文件',
+        httpsStepInstallTitle: '安装描述文件/证书',
+        httpsStepInstallSummary: 'Android 要手动安装 CA 证书',
+        httpsStepInstallAction: '我已安装证书',
+        httpsStepTrustTitle: '信任根证书',
+        httpsStepTrustSummary: 'iPhone 还需要单独打开完全信任',
+        httpsStepTrustAction: '我已信任证书',
+        httpsStepOpenTitle: '打开 HTTPS 地址',
+        httpsStepOpenSummary: '回到安全地址后再申请麦克风权限',
+        httpsStepOpenText: '证书信任完成后，打开下面的 HTTPS 地址。页面加载后再次点击语音按钮，浏览器就可以弹出麦克风授权。',
+        httpsStepOpenAction: '打开 HTTPS 地址',
+        certificateInstallIos: 'iPhone/iPad：请用 Safari 打开证书下载链接。下载后打开系统“设置”，顶部会出现“已下载描述文件”；如果没看到，就进入“设置 > 通用 > VPN 与设备管理/描述文件”，选择 Blockwright Local Root CA 并安装。用 Chrome 或其他浏览器保存到文件 App 时，设置里可能不会出现提醒。',
+        certificateInstallAndroid: 'Android：保存到 Files by Google、Google 文件或文件管理器后，进入设置不会自动提醒。需要手动进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 Blockwright-Local-Root-CA.cer 并确认。不同品牌菜单名字可能略有不同。',
+        certificateInstallGeneric: '下载后在系统或浏览器的证书管理里安装 Blockwright Local Root CA。保存目录由浏览器决定；如果系统没有自动安装，就手动打开 Blockwright-Local-Root-CA.cer。',
+        certificateTrustIos: 'iPhone/iPad：安装描述文件后，还必须进入“设置 > 通用 > 关于本机 > 证书信任设置”，打开 Blockwright Local Root CA 的完全信任。只安装描述文件还不够。',
+        certificateTrustAndroid: 'Android：安装为 CA 证书后通常已经信任。部分机型会要求设置锁屏密码，或提示网络可能被监控，按系统提示确认即可。',
+        certificateTrustGeneric: '安装证书后，把 Blockwright Local Root CA 设为受信任根证书，然后回到浏览器打开 HTTPS 地址。'
+      },
+      en: {
+        languageName: 'English',
+        languageToggleLabel: '中',
+        languageToggleTitle: '切换到中文',
+        openSettings: 'Open settings',
+        composerPlaceholder: 'Describe what to build or change.',
+        send: 'Send',
+        more: 'More',
+        camera: 'Camera',
+        library: 'Photos',
+        libraryLong: 'Choose from photos',
+        usernameGateTitle: 'Enter your Minecraft username',
+        usernameGateIntro: 'Blockwright sends commands to this player. Use the exact username shown in Minecraft; you can change it later in settings.',
+        minecraftUsername: 'Minecraft username',
+        usernamePlaceholder: 'For example Steve',
+        enterChat: 'Enter chat',
+        backToChat: 'Back to chat',
+        settings: 'Settings',
+        settingsIntro: 'Chat integrations and browser permissions are configured here.',
+        player: 'Player',
+        playerHelp: 'Chat and voice commands are sent to this Minecraft player.',
+        browserPermissions: 'Browser permissions',
+        requestMicPermission: 'Request microphone permission',
+        micChecking: 'Checking microphone permission...',
+        mobileHttps: 'Mobile HTTPS',
+        mobileHttpsIntro: 'The controller generates a local root certificate and LAN HTTPS address. Install and trust the certificate before using voice on a phone.',
+        httpsAddressLabel: 'HTTPS address: ',
+        downloadCaFile: 'Download Blockwright local root certificate',
+        iosCaHelp: 'On iPhone/iPad, open the certificate link in Safari. Install the downloaded profile from Settings, then enable full trust in Certificate Trust Settings.',
+        androidCaHelp: 'On Android, saving through Files by Google or the file manager only downloads the certificate. Install it manually from Security or Privacy > Encryption and credentials > Install certificate > CA certificate.',
+        androidCaReminder: 'Android usually will not prompt again after the file is saved. Manually install the CA certificate, then reopen the HTTPS address and request microphone permission.',
+        matrixEnabled: 'Enable Element/Matrix',
+        matrixHomeserver: 'Matrix homeserver URL',
+        matrixTokenPlaceholder: 'Leave blank to keep the existing token',
+        matrixAllowedSender: 'Matrix user allowed to send commands',
+        matrixAllowOwn: 'Allow a personal token to handle your own messages',
+        matrixAutoJoin: 'Auto-join invited rooms',
+        saveConfig: 'Save configuration',
+        close: 'Close',
+        httpsGuideTitle: 'Mobile voice requires HTTPS',
+        httpsGuideIntro: 'This address is not secure, so mobile browsers will not expose the microphone. Follow these steps, then return and request permission again.',
+        httpsSteps: 'HTTPS setup steps',
+        previousStep: 'Previous',
+        nextStep: 'Next',
+        done: 'Done',
+        switchToText: 'Switch to text input',
+        switchToVoice: 'Switch to voice input',
+        voiceHoldDefault: 'Hold to talk, release to send',
+        voiceCancelDefault: 'Slide up here to cancel',
+        voiceCancelReady: 'Release to cancel',
+        voiceReleaseCancel: 'Release to cancel',
+        voiceReleaseSend: 'Release to send',
+        voiceSending: 'Sending...',
+        voiceRecognizing: 'Recognizing...',
+        voiceCancelled: 'Voice input canceled.',
+        startRecordingHint: 'Recording starts while you hold the button.',
+        noSpeechTryAgain: 'No speech detected. Hold and try again.',
+        voiceKeptAfterError: '{message}; voice text was kept.',
+        voiceNeedsHttps: 'Mobile voice requires an HTTPS address',
+        voiceUnsupported: 'This browser does not support speech recognition',
+        noSoundTryAgain: 'No sound detected. Hold and try again.',
+        noMicrophone: 'No microphone is available.',
+        speechNetworkError: 'Speech recognition is temporarily unavailable.',
+        speechFailed: 'Speech recognition failed.',
+        maxImages: 'You can send up to {max} images at once.',
+        imagesAddedLimited: 'Added {count} images. Only {max} images are kept.',
+        imageAddedCameraOne: 'Added the captured photo.',
+        imageAddedCameraMany: 'Added {count} captured photos.',
+        imageAddedLibraryOne: 'Added 1 image from photos.',
+        imageAddedLibraryMany: 'Added {count} images from photos.',
+        imageAddedGeneric: 'Added {count} images.',
+        configTokenRequired: 'Controller Token is required.',
+        matrixRequired: 'Matrix homeserver URL and allowed sender are required.',
+        savingConfig: 'Saving configuration...',
+        saveFailed: 'Save failed',
+        configSaved: 'Configuration saved.',
+        usernameRequired: 'Enter your Minecraft username first.',
+        usernameRequiredShort: 'Enter your Minecraft username first.',
+        emptyMessage: 'Type a message, or use the plus button to choose images.',
+        sendingToBlockwright: 'Sending to Blockwright...',
+        receivingMessage: 'Receiving message...',
+        requestFailed: 'Request failed',
+        queuedStatus: 'Status: sent to Minecraft, waiting for execution{imageStatus}',
+        repliedStatus: 'Reply received{imageStatus}',
+        failedPrefix: 'This request failed: {message}',
+        referenceImage: 'Reference image',
+        removeImage: 'Remove image',
+        removeNamedImage: 'Remove {name}',
+        imageFallbackName: 'image',
+        pastedImage: 'Pasted image',
+        sentImageAlt: 'Sent image',
+        sentOneImage: 'Sent one reference image',
+        sentImages: 'Sent {count} reference images',
+        imageStatusSuffix: ', {count} images',
+        restoringJobStatus: 'Status: restoring the previous job...',
+        restoredRequestUnclear: 'The request had not returned before refresh. Send it again if it does not continue.',
+        requestProgressReceiving: 'Receiving message{imageHint}...',
+        requestProgressImageHint: ' and preparing reference images',
+        requestProgressAi: 'AI is processing your request...',
+        requestProgressReply: 'Preparing a reply or operation...',
+        requestProgressTools: 'Still working, possibly reading tool results...',
+        requestProgressWaiting: 'Still waiting for the reply...',
+        jobNotFound: 'The previous job was not found. The controller may have restarted or cleaned it up.',
+        statusPrefix: 'Status: {message}',
+        statusWithDetail: 'Status: {message} ({detail})',
+        statusUnavailable: 'Status is temporarily unavailable',
+        imageReadFailed: 'Failed to read {name}',
+        micPermissionUnsupported: 'This browser cannot request microphone permission directly.',
+        micPermissionUnknown: 'This browser cannot read permission state directly. Click the button to request microphone permission.',
+        micPermissionRequesting: 'Requesting microphone permission...',
+        micPermissionGranted: 'Microphone permission is allowed.',
+        micPermissionGrantedReady: 'Microphone permission is allowed. Hold to talk.',
+        micPermissionDenied: 'Microphone permission was denied.',
+        micPermissionPrompt: 'Microphone permission has not been granted. Click the button to request it.',
+        micPermissionMissing: 'The browser does not have microphone permission. {help}',
+        micRequestFailed: 'Microphone permission request failed.',
+        micDeviceNotFound: 'No microphone device was detected.',
+        micHttpsHelp: 'Follow the certificate guide, trust the local root certificate, then open the HTTPS address.',
+        browserChromeHelp: 'Use the site information icon next to the address bar, allow Microphone, then refresh.',
+        browserSafariHelp: 'Allow microphone access for this website in Safari site settings, then refresh.',
+        browserFirefoxHelp: 'Use the permission icon next to the address bar, allow Microphone, then refresh.',
+        browserGenericHelp: 'Allow microphone access in the browser site permissions, then refresh.',
+        httpsStepDownloadTitle: 'Download certificate',
+        httpsStepDownloadSummary: 'File name: Blockwright-Local-Root-CA.cer',
+        httpsStepDownloadText: 'Download the certificate. If Android opens Files by Google or a file manager, save the file there; this is only choosing a save location, not uploading to Google and not installing the certificate. On iPhone/iPad, use Safari when possible so iOS can show the downloaded profile prompt.',
+        httpsStepDownloadAction: 'Download certificate',
+        httpsStepInstallTitle: 'Install profile/certificate',
+        httpsStepInstallSummary: 'Android requires manual CA certificate installation',
+        httpsStepInstallAction: 'Certificate installed',
+        httpsStepTrustTitle: 'Trust root certificate',
+        httpsStepTrustSummary: 'iPhone also requires enabling full trust',
+        httpsStepTrustAction: 'Certificate trusted',
+        httpsStepOpenTitle: 'Open HTTPS address',
+        httpsStepOpenSummary: 'Return to the secure address before requesting microphone access',
+        httpsStepOpenText: 'After the certificate is trusted, open the HTTPS address below. When the page loads, tap the voice button again and the browser can show the microphone prompt.',
+        httpsStepOpenAction: 'Open HTTPS address',
+        certificateInstallIos: 'iPhone/iPad: open the certificate link in Safari. After download, open Settings and install the downloaded profile. If no prompt appears, go to General > VPN & Device Management/Profiles and install Blockwright Local Root CA. Other browsers may only save the file without showing the profile prompt.',
+        certificateInstallAndroid: 'Android: after saving the file through Files by Google or a file manager, install it manually from Settings > Security/Privacy > Encryption and credentials > Install certificate > CA certificate, then choose Blockwright-Local-Root-CA.cer from Downloads. Menu names vary by device.',
+        certificateInstallGeneric: 'Install Blockwright Local Root CA from the system or browser certificate manager. If the system does not install it automatically, open Blockwright-Local-Root-CA.cer manually.',
+        certificateTrustIos: 'iPhone/iPad: after installing the profile, go to Settings > General > About > Certificate Trust Settings and enable full trust for Blockwright Local Root CA. Installing the profile alone is not enough.',
+        certificateTrustAndroid: 'Android: CA certificates are usually trusted after installation. Some devices require a screen lock or show a network monitoring warning; confirm the system prompt.',
+        certificateTrustGeneric: 'After installation, mark Blockwright Local Root CA as trusted, then return to the browser and open the HTTPS address.'
+      }
+    };
+    let currentLanguage = initialLanguage();
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const voiceUnavailable = voiceUnavailableMessage();
+    let voiceUnavailable = voiceUnavailableMessage();
     let pendingImages = [];
     let nextImageId = 1;
     let activeJobPoll = null;
@@ -1257,6 +1579,55 @@
     let microphonePermissionWatcher = null;
     let httpsGuideStep = 0;
     let lastTouchEndAt = 0;
+
+    function initialLanguage() {
+      const stored = localStorage.getItem('bw.language');
+      if (stored === 'zh' || stored === 'en') {
+        return stored;
+      }
+      return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    }
+
+    function t(key, values = {}) {
+      const dictionary = I18N[currentLanguage] || I18N.zh;
+      const template = dictionary[key] || I18N.zh[key] || key;
+      return String(template).replace(/\{(\w+)\}/g, (_, name) => {
+        const value = values[name];
+        return value == null ? '' : String(value);
+      });
+    }
+
+    function applyLanguage() {
+      voiceUnavailable = voiceUnavailableMessage();
+      document.documentElement.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
+      document.querySelectorAll('[data-i18n]').forEach((node) => {
+        node.textContent = t(node.dataset.i18n);
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => {
+        node.setAttribute('placeholder', t(node.dataset.i18nPlaceholder));
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach((node) => {
+        node.setAttribute('title', t(node.dataset.i18nTitle));
+      });
+      document.querySelectorAll('[data-i18n-aria-label]').forEach((node) => {
+        node.setAttribute('aria-label', t(node.dataset.i18nAriaLabel));
+      });
+      languageToggleLabel.textContent = t('languageToggleLabel');
+      languageToggle.title = t('languageToggleTitle');
+      languageToggle.setAttribute('aria-label', t('languageToggleTitle'));
+      voiceHold.disabled = Boolean(voiceUnavailable) || voiceHold.disabled;
+      resetVoiceHoldLabel();
+      resetVoiceCancelText();
+      updateVoiceToggleLabels(!voicePanel.hidden);
+      renderHttpsGuideStep();
+    }
+
+    function setLanguage(language) {
+      currentLanguage = language === 'en' ? 'en' : 'zh';
+      localStorage.setItem('bw.language', currentLanguage);
+      applyLanguage();
+      refreshMicrophonePermission(false);
+    }
 
     document.addEventListener('gesturestart', preventViewportZoom, {passive: false});
     document.addEventListener('gesturechange', preventViewportZoom, {passive: false});
@@ -1280,6 +1651,7 @@
       lastTouchEndAt = now;
     }, {passive: false});
 
+    applyLanguage();
     setUsername(localStorage.getItem('bw.username') || '');
     controllerToken.value = localStorage.getItem('bw.controllerToken') || 'local-dev-token';
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
@@ -1349,6 +1721,9 @@
 
     configOpen.addEventListener('click', () => {
       openConfigPage();
+    });
+    languageToggle.addEventListener('click', () => {
+      setLanguage(currentLanguage === 'zh' ? 'en' : 'zh');
     });
 
     configBack.addEventListener('click', closeConfigPage);
@@ -1432,7 +1807,7 @@
       }
       const available = MAX_IMAGES - pendingImages.length;
       if (available <= 0) {
-        setStatus(`一次最多发送 ${MAX_IMAGES} 张图片。`, true);
+        setStatus(t('maxImages', {max: MAX_IMAGES}), true);
         return;
       }
       const selected = imageFiles.slice(0, available);
@@ -1445,7 +1820,7 @@
       });
       renderPreview();
       if (imageFiles.length > selected.length) {
-        setStatus(`已添加 ${selected.length} 张图片，最多保留 ${MAX_IMAGES} 张。`, true);
+        setStatus(t('imagesAddedLimited', {count: selected.length, max: MAX_IMAGES}), true);
       } else {
         setStatus(imageAddedMessage(selected.length, source), false);
       }
@@ -1453,12 +1828,12 @@
 
     function imageAddedMessage(count, source) {
       if (source === 'camera') {
-        return count === 1 ? '已添加拍摄照片。' : `已添加 ${count} 张拍摄照片。`;
+        return count === 1 ? t('imageAddedCameraOne') : t('imageAddedCameraMany', {count});
       }
       if (source === 'library') {
-        return count === 1 ? '已从相册添加 1 张图片。' : `已从相册添加 ${count} 张图片。`;
+        return count === 1 ? t('imageAddedLibraryOne') : t('imageAddedLibraryMany', {count});
       }
-      return `已添加 ${count} 张图片。`;
+      return t('imageAddedGeneric', {count});
     }
 
     function isImageFile(file) {
@@ -1535,17 +1910,17 @@
       const homeserver = matrixHomeserver.value.trim();
       const allowedSender = matrixAllowedSender.value.trim();
       if (!token) {
-        setConfigStatus('Controller Token 不能为空。', true);
+        setConfigStatus(t('configTokenRequired'), true);
         controllerToken.focus();
         return;
       }
       if (!homeserver || !allowedSender) {
-        setConfigStatus('Matrix 主服务器 URL 和允许发指令的用户不能为空。', true);
+        setConfigStatus(t('matrixRequired'), true);
         return;
       }
 
       configSave.disabled = true;
-      setConfigStatus('正在保存配置...', false);
+      setConfigStatus(t('savingConfig'), false);
       try {
         const response = await fetch('/api/chat/matrix/local-config', {
           method: 'PUT',
@@ -1565,11 +1940,11 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.message || payload.error || await response.text() || '保存失败');
+          throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
         }
-        setConfigStatus(payload.message || '配置已保存。', false);
+        setConfigStatus(payload.message || t('configSaved'), false);
       } catch (error) {
-        setConfigStatus(error.message || '保存失败。', true);
+        setConfigStatus(error.message || t('saveFailed'), true);
       } finally {
         configSave.disabled = false;
       }
@@ -1591,7 +1966,7 @@
       event.preventDefault();
       const name = setUsername(usernameGateInput.value);
       if (!name) {
-        usernameGateError.textContent = '请先填写 Minecraft 用户名。';
+        usernameGateError.textContent = t('usernameRequired');
         usernameGateInput.focus();
         return;
       }
@@ -1663,12 +2038,12 @@
         return 'unavailable';
       }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setPermissionStatus('当前浏览器不支持主动申请麦克风权限。', true, browserSettingsHelp());
+        setPermissionStatus(t('micPermissionUnsupported'), true, browserSettingsHelp());
         return 'unsupported';
       }
       if (!navigator.permissions || !navigator.permissions.query) {
         if (showFallback) {
-          setPermissionStatus('当前浏览器不能直接读取权限状态，可以点击按钮申请麦克风权限。', false, '');
+          setPermissionStatus(t('micPermissionUnknown'), false, '');
         }
         return 'prompt';
       }
@@ -1680,7 +2055,7 @@
         return status.state;
       } catch (_) {
         if (showFallback) {
-          setPermissionStatus('当前浏览器不能直接读取权限状态，可以点击按钮申请麦克风权限。', false, '');
+          setPermissionStatus(t('micPermissionUnknown'), false, '');
         }
         return 'prompt';
       }
@@ -1693,18 +2068,18 @@
         return false;
       }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        const message = '当前浏览器不支持主动申请麦克风权限。';
+        const message = t('micPermissionUnsupported');
         setPermissionStatus(message, true, browserSettingsHelp());
         setStatus(message, true);
         return false;
       }
       permissionRequest.disabled = true;
-      setPermissionStatus('正在向浏览器申请麦克风权限...', false, '');
+      setPermissionStatus(t('micPermissionRequesting'), false, '');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({audio: true});
         stream.getTracks().forEach((track) => track.stop());
         applyMicrophonePermissionState('granted');
-        setStatus('麦克风权限已允许，可以按住说话。', false);
+        setStatus(t('micPermissionGrantedReady'), false);
         return true;
       } catch (error) {
         const message = microphoneRequestErrorMessage(error);
@@ -1723,9 +2098,9 @@
         return true;
       }
       if (state === 'denied') {
-        const message = `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
+        const message = t('micPermissionMissing', {help: microphonePermissionHelp()});
         setStatus(message, true);
-        setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+        setPermissionStatus(t('micPermissionDenied'), true, microphonePermissionHelp());
         return false;
       }
       if (!shouldRequest) {
@@ -1736,11 +2111,11 @@
 
     function applyMicrophonePermissionState(state) {
       if (state === 'granted') {
-        setPermissionStatus('麦克风权限已允许。', false, '');
+        setPermissionStatus(t('micPermissionGranted'), false, '');
       } else if (state === 'denied') {
-        setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+        setPermissionStatus(t('micPermissionDenied'), true, microphonePermissionHelp());
       } else {
-        setPermissionStatus('麦克风权限尚未授权，点击按钮申请。', false, '');
+        setPermissionStatus(t('micPermissionPrompt'), false, '');
       }
     }
 
@@ -1752,20 +2127,20 @@
 
     function microphoneRequestErrorMessage(error) {
       if (!error) {
-        return '麦克风权限申请失败。';
+        return t('micRequestFailed');
       }
       if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-        return `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
+        return t('micPermissionMissing', {help: microphonePermissionHelp()});
       }
       if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        return '没有检测到可用麦克风。';
+        return t('micDeviceNotFound');
       }
-      return error.message || '麦克风权限申请失败。';
+      return error.message || t('micRequestFailed');
     }
 
     function microphonePermissionHelp() {
       if (!window.isSecureContext && !isLocalhost()) {
-        return '请按弹窗引导下载并信任本地根证书，然后打开 HTTPS 地址。';
+        return t('micHttpsHelp');
       }
       return browserSettingsHelp();
     }
@@ -1833,35 +2208,35 @@
         httpsGuidePrimaryButton.textContent = current.actionText;
       }
       httpsGuideBack.disabled = httpsGuideStep === 0;
-      httpsGuideNext.textContent = httpsGuideStep === steps.length - 1 ? '完成' : '下一步';
+      httpsGuideNext.textContent = httpsGuideStep === steps.length - 1 ? t('done') : t('nextStep');
     }
 
     function httpsGuideStepData() {
       return [
         {
-          title: '下载证书文件',
-          summary: '文件名是 Blockwright-Local-Root-CA.cer',
-          text: '点击下载证书。如果 Android 弹出 Files by Google、Google 文件或文件管理器，直接保存即可；这只是系统在选择保存位置，不是上传到 Google，也不是安装完成。iPhone/iPad 请尽量用 Safari 打开这个下载链接，否则可能只保存文件，不出现描述文件提醒。',
-          actionText: '下载证书文件',
+          title: t('httpsStepDownloadTitle'),
+          summary: t('httpsStepDownloadSummary'),
+          text: t('httpsStepDownloadText'),
+          actionText: t('httpsStepDownloadAction'),
           href: caCertificateUrl()
         },
         {
-          title: '安装描述文件/证书',
-          summary: 'Android 要手动安装 CA 证书',
+          title: t('httpsStepInstallTitle'),
+          summary: t('httpsStepInstallSummary'),
           text: certificateInstallHelp(),
-          actionText: '我已安装证书'
+          actionText: t('httpsStepInstallAction')
         },
         {
-          title: '信任根证书',
-          summary: 'iPhone 还需要单独打开完全信任',
+          title: t('httpsStepTrustTitle'),
+          summary: t('httpsStepTrustSummary'),
           text: certificateTrustHelp(),
-          actionText: '我已信任证书'
+          actionText: t('httpsStepTrustAction')
         },
         {
-          title: '打开 HTTPS 地址',
-          summary: '回到安全地址后再申请麦克风权限',
-          text: '证书信任完成后，打开下面的 HTTPS 地址。页面加载后再次点击语音按钮，浏览器就可以弹出麦克风授权。',
-          actionText: '打开 HTTPS 地址',
+          title: t('httpsStepOpenTitle'),
+          summary: t('httpsStepOpenSummary'),
+          text: t('httpsStepOpenText'),
+          actionText: t('httpsStepOpenAction'),
           href: suggestedHttpsUrl()
         }
       ];
@@ -1874,37 +2249,37 @@
     function certificateInstallHelp() {
       const agent = navigator.userAgent || '';
       if (/iPhone|iPad|iPod/i.test(agent)) {
-        return 'iPhone/iPad：请用 Safari 打开证书下载链接。下载后打开系统“设置”，顶部会出现“已下载描述文件”；如果没看到，就进入“设置 > 通用 > VPN 与设备管理/描述文件”，选择 Blockwright Local Root CA 并安装。用 Chrome 或其他浏览器保存到文件 App 时，设置里可能不会出现提醒。';
+        return t('certificateInstallIos');
       }
       if (/Android/i.test(agent)) {
-        return 'Android：保存到 Files by Google、Google 文件或文件管理器后，进入设置不会自动提醒。需要手动进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 Blockwright-Local-Root-CA.cer 并确认。不同品牌菜单名字可能略有不同。';
+        return t('certificateInstallAndroid');
       }
-      return '下载后在系统或浏览器的证书管理里安装 Blockwright Local Root CA。保存目录由浏览器决定；如果系统没有自动安装，就手动打开 Blockwright-Local-Root-CA.cer。';
+      return t('certificateInstallGeneric');
     }
 
     function certificateTrustHelp() {
       const agent = navigator.userAgent || '';
       if (/iPhone|iPad|iPod/i.test(agent)) {
-        return 'iPhone/iPad：安装描述文件后，还必须进入“设置 > 通用 > 关于本机 > 证书信任设置”，打开 Blockwright Local Root CA 的完全信任。只安装描述文件还不够。';
+        return t('certificateTrustIos');
       }
       if (/Android/i.test(agent)) {
-        return 'Android：安装为 CA 证书后通常已经信任。部分机型会要求设置锁屏密码，或提示网络可能被监控，按系统提示确认即可。';
+        return t('certificateTrustAndroid');
       }
-      return '安装证书后，把 Blockwright Local Root CA 设为受信任根证书，然后回到浏览器打开 HTTPS 地址。';
+      return t('certificateTrustGeneric');
     }
 
     function browserSettingsHelp() {
       const agent = navigator.userAgent || '';
       if (/Chrome|Edg/i.test(agent)) {
-        return '在地址栏左侧的网站信息里，把“麦克风”改为允许，然后刷新页面。';
+        return t('browserChromeHelp');
       }
       if (/Safari/i.test(agent) && !/Chrome|Chromium|Edg/i.test(agent)) {
-        return '在 Safari 的网站设置里允许当前页面使用麦克风，然后刷新页面。';
+        return t('browserSafariHelp');
       }
       if (/Firefox/i.test(agent)) {
-        return '在地址栏左侧权限图标里允许麦克风，然后刷新页面。';
+        return t('browserFirefoxHelp');
       }
-      return '请到浏览器的网站权限设置里允许当前页面使用麦克风，然后刷新页面。';
+      return t('browserGenericHelp');
     }
 
     function renderPreview() {
@@ -1915,17 +2290,17 @@
         item.className = 'preview-item';
         const img = document.createElement('img');
         img.src = entry.url;
-        img.alt = entry.file.name || '参考图片';
+        img.alt = entry.file.name || t('referenceImage');
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'remove-image';
         remove.textContent = '×';
-        remove.title = '移除图片';
-        remove.setAttribute('aria-label', `移除 ${entry.file.name || '图片'}`);
+        remove.title = t('removeImage');
+        remove.setAttribute('aria-label', t('removeNamedImage', {name: entry.file.name || t('imageFallbackName')}));
         remove.addEventListener('click', () => removeImage(entry.id));
         const name = document.createElement('div');
         name.className = 'preview-name';
-        name.textContent = entry.file.name || '粘贴图片';
+        name.textContent = entry.file.name || t('pastedImage');
         item.append(img, remove, name);
         preview.appendChild(item);
       });
@@ -2021,8 +2396,7 @@
       inputShell.classList.toggle('voice-mode', active);
       voiceToggle.classList.toggle('active', active);
       voiceToggle.setAttribute('aria-pressed', String(active));
-      voiceToggle.title = active ? '切换到文字输入' : '切换到语音输入';
-      voiceToggle.setAttribute('aria-label', voiceToggle.title);
+      updateVoiceToggleLabels(active);
       voiceToggleMic.classList.toggle('toggle-icon-hidden', active);
       voiceToggleKeyboard.classList.toggle('toggle-icon-hidden', !active);
       localStorage.setItem('bw.voiceEnabled', active ? '1' : '0');
@@ -2036,8 +2410,17 @@
       updateComposerControls();
     }
 
+    function updateVoiceToggleLabels(active) {
+      voiceToggle.title = active ? t('switchToText') : t('switchToVoice');
+      voiceToggle.setAttribute('aria-label', voiceToggle.title);
+    }
+
     function resetVoiceHoldLabel() {
-      voiceHoldText.textContent = voiceUnavailable || '按住说话，松手发送';
+      voiceHoldText.textContent = voiceUnavailable || t('voiceHoldDefault');
+    }
+
+    function resetVoiceCancelText() {
+      voiceCancelText.textContent = t('voiceCancelDefault');
     }
 
     function preventVoiceHoldSelection(event) {
@@ -2068,16 +2451,16 @@
       voicePanel.classList.remove('recording');
       voicePanel.classList.remove('cancel-ready');
       voiceHold.classList.remove('cancel-ready');
-      voiceCancelText.textContent = '上滑到这里取消';
+      resetVoiceCancelText();
     }
 
     function setVoiceCancelArmed(armed) {
       voiceCancelArmed = Boolean(armed);
       voicePanel.classList.toggle('cancel-ready', voiceCancelArmed);
       voiceHold.classList.toggle('cancel-ready', voiceCancelArmed);
-      voiceCancelText.textContent = voiceCancelArmed ? '松手取消发送' : '上滑到这里取消';
+      voiceCancelText.textContent = voiceCancelArmed ? t('voiceCancelReady') : t('voiceCancelDefault');
       if (voiceHoldActive && !voiceStopping) {
-        voiceHoldText.textContent = voiceCancelArmed ? '松手取消' : '松手发送';
+        voiceHoldText.textContent = voiceCancelArmed ? t('voiceReleaseCancel') : t('voiceReleaseSend');
       }
     }
 
@@ -2125,7 +2508,7 @@
         return;
       }
       if (!voicePressing) {
-        setStatus('按住说话时会开始录音。', false);
+        setStatus(t('startRecordingHint'), false);
         resetVoiceCancelGesture();
         return;
       }
@@ -2145,7 +2528,7 @@
         const message = voiceErrorMessage(error.error);
         setStatus(message, true);
         if (error.error === 'not-allowed' || error.error === 'service-not-allowed') {
-          setPermissionStatus('麦克风权限已被拒绝。', true, microphonePermissionHelp());
+          setPermissionStatus(t('micPermissionDenied'), true, microphonePermissionHelp());
         }
       };
       recognition.onend = () => {
@@ -2157,7 +2540,7 @@
         voiceHold.classList.remove('recording');
         if (shouldFinish) {
           voiceHold.classList.add('sending');
-          voiceHoldText.textContent = '正在发送...';
+          voiceHoldText.textContent = t('voiceSending');
           finishVoiceInput();
         } else {
           voiceHold.classList.remove('sending');
@@ -2170,7 +2553,7 @@
         voicePanel.classList.add('recording');
         voiceHold.classList.add('recording');
         voiceHold.classList.remove('sending');
-        voiceHoldText.textContent = '松手发送';
+        voiceHoldText.textContent = t('voiceReleaseSend');
         setStatus('', false);
       } catch (error) {
         recognition = null;
@@ -2180,7 +2563,7 @@
         voiceHold.classList.remove('recording');
         voiceHold.classList.remove('sending');
         resetVoiceHoldLabel();
-        setStatus(error.message || '语音识别启动失败。', true);
+        setStatus(error.message || t('speechFailed'), true);
       }
     }
 
@@ -2215,7 +2598,7 @@
       voiceHoldActive = false;
       voicePressing = false;
       voiceStopping = true;
-      voiceHoldText.textContent = '正在识别...';
+      voiceHoldText.textContent = t('voiceRecognizing');
       if (recognition) {
         recognition.stop();
       } else {
@@ -2238,7 +2621,7 @@
       voiceHold.classList.remove('recording');
       voiceHold.classList.remove('sending');
       resetVoiceHoldLabel();
-      setStatus('语音输入已取消。', false);
+      setStatus(t('voiceCancelled'), false);
     }
 
     async function finishVoiceInput() {
@@ -2252,14 +2635,14 @@
       if (!spokenText) {
         voiceHold.classList.remove('sending');
         resetVoiceHoldLabel();
-        setStatus('没有听清内容，按住再说一次。', true);
+        setStatus(t('noSpeechTryAgain'), true);
         return;
       }
 
       voiceSending = true;
       voiceHold.disabled = true;
       voiceHold.classList.add('sending');
-      voiceHoldText.textContent = '正在发送...';
+      voiceHoldText.textContent = t('voiceSending');
       try {
         text.value = spokenText;
         resizeComposer();
@@ -2267,7 +2650,7 @@
       } catch (error) {
         text.value = spokenText;
         resizeComposer();
-        setStatus(`${error.message || String(error)}，已保留语音文字。`, true);
+        setStatus(t('voiceKeptAfterError', {message: error.message || String(error)}), true);
       } finally {
         voiceSending = false;
         voiceHold.disabled = Boolean(voiceUnavailable);
@@ -2278,10 +2661,10 @@
 
     function voiceUnavailableMessage() {
       if (!window.isSecureContext && !isLocalhost()) {
-        return '手机语音需要 HTTPS 地址';
+        return t('voiceNeedsHttps');
       }
       if (!SpeechRecognitionCtor) {
-        return '当前浏览器不支持语音识别';
+        return t('voiceUnsupported');
       }
       return '';
     }
@@ -2294,15 +2677,15 @@
       switch (code) {
         case 'not-allowed':
         case 'service-not-allowed':
-          return `浏览器没有麦克风权限。${microphonePermissionHelp()}`;
+          return t('micPermissionMissing', {help: microphonePermissionHelp()});
         case 'no-speech':
-          return '没有听到声音，按住再说一次。';
+          return t('noSoundTryAgain');
         case 'audio-capture':
-          return '没有可用麦克风。';
+          return t('noMicrophone');
         case 'network':
-          return '语音识别服务暂时不可用。';
+          return t('speechNetworkError');
         default:
-          return '语音识别失败。';
+          return t('speechFailed');
       }
     }
 
@@ -2314,7 +2697,7 @@
       if (count === 0) {
         return '';
       }
-      return count === 1 ? '发送了一张参考图片' : `发送了 ${count} 张参考图片`;
+      return count === 1 ? t('sentOneImage') : t('sentImages', {count});
     }
 
     function messageTextForDisplay(value, imageCount) {
@@ -2330,7 +2713,7 @@
       if (count === 0) {
         return '';
       }
-      return `，图片 ${count} 张`;
+      return t('imageStatusSuffix', {count});
     }
 
     function createChatMessageId() {
@@ -2458,7 +2841,7 @@
       }
       item.classList.add('pending');
       item.classList.remove('error');
-      setMessageProgress(item, '状态：正在恢复上次任务状态...', false);
+      setMessageProgress(item, t('restoringJobStatus'), false);
       startJobPolling(active.jobId, item);
       return item.dataset.messageId || null;
     }
@@ -2469,7 +2852,7 @@
           return;
         }
         item.classList.remove('pending');
-        setMessageProgress(item, '上次刷新时请求还没返回；如果没有继续处理，请重新发送。', true);
+        setMessageProgress(item, t('restoredRequestUnclear'), true);
       });
     }
 
@@ -2481,19 +2864,19 @@
     async function sendCurrentMessage() {
       const name = username.value.trim();
       if (!name) {
-        setStatus('先填写 Minecraft 用户名。', true);
+        setStatus(t('usernameRequiredShort'), true);
         showUsernameGate();
         return;
       }
       if (!hasSendContent()) {
-        setStatus('先输入内容，或点加号选择图片。', true);
+        setStatus(t('emptyMessage'), true);
         return;
       }
       const voiceWasDisabled = voiceHold.disabled;
       send.disabled = true;
       voiceHold.disabled = true;
       stopJobPolling({clearSavedJob: true});
-      setStatus('正在发送给 Blockwright...', false);
+      setStatus(t('sendingToBlockwright'), false);
       let assistantMessage = null;
       let progressTimers = [];
       try {
@@ -2508,7 +2891,7 @@
           images: uploads
         };
         addMessage('user', name, messageTextForDisplay(currentText, uploads.length), imageDataUrls(uploads));
-        assistantMessage = addMessage('assistant', 'Blockwright', '正在接收消息...', []);
+        assistantMessage = addMessage('assistant', 'Blockwright', t('receivingMessage'), []);
         assistantMessage.classList.add('pending');
         persistChatHistory();
         progressTimers = startRequestProgress(assistantMessage, uploads.length);
@@ -2519,18 +2902,18 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.message || payload.error || await response.text() || '请求失败');
+          throw new Error(payload.message || payload.error || await response.text() || t('requestFailed'));
         }
         stopTimers(progressTimers);
         assistantMessage.classList.remove('pending');
         updateMessageBody(assistantMessage, payload.reply || '');
         if (payload.queued_job_id) {
-          const queuedText = `状态：操作已交给 Minecraft，正在等待执行${imageStatus(uploads.length)}`;
+          const queuedText = t('queuedStatus', {imageStatus: imageStatus(uploads.length)});
           setStatus(queuedText, false);
           setMessageProgress(assistantMessage, queuedText, false);
           startJobPolling(payload.queued_job_id, assistantMessage);
         } else {
-          setStatus(`已回复${imageStatus(uploads.length)}`, false);
+          setStatus(t('repliedStatus', {imageStatus: imageStatus(uploads.length)}), false);
           clearMessageProgress(assistantMessage);
         }
       } catch (error) {
@@ -2540,7 +2923,7 @@
         if (assistantMessage) {
           assistantMessage.classList.remove('pending');
           assistantMessage.classList.add('error');
-          updateMessageBody(assistantMessage, `这次没处理成功：${message}`);
+          updateMessageBody(assistantMessage, t('failedPrefix', {message}));
           clearMessageProgress(assistantMessage);
         }
       } finally {
@@ -2568,7 +2951,7 @@
         imageUrls.forEach((url) => {
           const img = document.createElement('img');
           img.src = url;
-          img.alt = '已发送图片';
+          img.alt = t('sentImageAlt');
           gallery.appendChild(img);
         });
         item.appendChild(gallery);
@@ -2623,13 +3006,13 @@
     }
 
     function startRequestProgress(item, imageCount) {
-      const imageHint = imageCount > 0 ? '，同时整理参考图片' : '';
+      const imageHint = imageCount > 0 ? t('requestProgressImageHint') : '';
       const phases = [
-        {delay: 0, text: `正在接收消息${imageHint}...`},
-        {delay: 900, text: 'AI 正在处理你的请求...'},
-        {delay: 2400, text: '正在整理回复或准备操作...'},
-        {delay: 7000, text: '还在处理，可能正在读取工具结果...'},
-        {delay: 15000, text: '还在等回复，请稍等...'}
+        {delay: 0, text: t('requestProgressReceiving', {imageHint})},
+        {delay: 900, text: t('requestProgressAi')},
+        {delay: 2400, text: t('requestProgressReply')},
+        {delay: 7000, text: t('requestProgressTools')},
+        {delay: 15000, text: t('requestProgressWaiting')}
       ];
       return phases.map((phase) => setTimeout(() => {
         updateMessageBody(item, phase.text);
@@ -2663,20 +3046,21 @@
         try {
           const response = await fetch(`/web/jobs/${encodeURIComponent(jobId)}/status`);
           if (response.status === 404) {
-            const message = '找不到上次任务，可能 controller 已重启或任务已清理。';
+            const message = t('jobNotFound');
             item.classList.remove('pending');
             item.classList.add('error');
             setStatus(message, true);
-            setMessageProgress(item, `状态：${message}`, true);
+            setMessageProgress(item, t('statusPrefix', {message}), true);
             stopJobPolling({clearSavedJob: true});
             return;
           }
           if (!response.ok) {
-            throw new Error('暂时看不到状态');
+            throw new Error(t('statusUnavailable'));
           }
           const payload = await response.json();
-          const detail = payload.result_message ? `（${payload.result_message}）` : '';
-          const message = `状态：${payload.message}${detail}`;
+          const message = payload.result_message
+            ? t('statusWithDetail', {message: payload.message, detail: payload.result_message})
+            : t('statusPrefix', {message: payload.message});
           const isError = payload.phase === 'failed';
           item.classList.toggle('error', isError);
           setStatus(message, isError);
@@ -2690,7 +3074,7 @@
           if (attempts >= 3) {
             const message = error.message || String(error);
             setStatus(message, true);
-            setMessageProgress(item, `状态：${message}`, true);
+            setMessageProgress(item, t('statusPrefix', {message}), true);
           }
         }
       };
@@ -2702,7 +3086,7 @@
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         const mimeType = imageMimeType(file);
-        reader.onerror = () => reject(new Error(`${file.name} 读取失败`));
+        reader.onerror = () => reject(new Error(t('imageReadFailed', {name: file.name})));
         reader.onload = () => resolve({
           file_name: file.name,
           mime_type: mimeType,

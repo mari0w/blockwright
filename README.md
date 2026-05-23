@@ -1,5 +1,7 @@
 # Blockwright
 
+[English](README.en.md) | 简体中文
+
 Blockwright 是一个本地优先的 Minecraft AI 助手。它把聊天入口、MCP 工具、蓝图管理、任务队列和构建记录放在外部 controller，把真正读取和修改 Minecraft 世界的动作留在 Fabric/Paper 执行端。
 
 项目当前面向 HMCL、Fabric 单人存档和局域网开放世界优先设计。Paper 插件保留给独立服务端场景。
@@ -103,6 +105,8 @@ RUST_LOG=info,tower_http=debug ./scripts/run-web.sh
 ```
 
 停止服务时，在运行脚本的终端按 `Ctrl+C`。
+
+Web 端右上角的地球按钮可以在中文和英文之间切换；语言偏好保存在浏览器本地，不影响 controller API、蓝图或构建记录格式。
 
 默认会同时输出本机和局域网访问地址：
 
@@ -316,6 +320,14 @@ cd plugins/paper && gradle test
 
 贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+开源协作相关文件：
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)：贡献指南和本地检查命令。
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)：社区行为准则。
+- [SUPPORT.md](SUPPORT.md)：问题反馈和支持渠道。
+- [SECURITY.md](SECURITY.md)：安全报告流程。
+- [CHANGELOG.md](CHANGELOG.md)：版本变更记录。
+
 ## 安全边界
 
 - Minecraft 执行逻辑只放在 `plugins/fabric` 和 `plugins/paper`。
@@ -340,4 +352,4 @@ cd plugins/paper && gradle test
 
 ## 许可证
 
-本仓库尚未声明开源许可证。正式公开发布前需要选择并提交 `LICENSE` 文件；未声明许可证前，外部用户默认没有复制、修改或分发授权。
+Blockwright 使用 [MIT License](LICENSE)。

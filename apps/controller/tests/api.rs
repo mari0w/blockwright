@@ -403,9 +403,16 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("bw.activeJob.v1"));
     assert!(page_body.contains("function restoreChatHistory"));
     assert!(page_body.contains("function resumeSavedJobPolling"));
-    assert!(page_body.contains("setMessageProgress(item, '状态：正在恢复上次任务状态...'"));
+    assert!(page_body.contains("restoringJobStatus"));
     assert!(page_body.contains("viewport-fit=cover"));
     assert!(page_body.contains("手机语音需要 HTTPS 地址"));
+    assert!(page_body.contains("id=\"languageToggle\""));
+    assert!(page_body.contains("bw.language"));
+    assert!(page_body.contains("Switch to English"));
+    assert!(page_body.contains("Open settings"));
+    assert!(page_body.contains("Enter your Minecraft username"));
+    assert!(page_body.contains("function applyLanguage"));
+    assert!(page_body.contains("function setLanguage"));
     assert!(page_body.contains("id=\"cameraImage\""));
     assert!(page_body.contains("capture=\"environment\""));
     assert!(page_body.contains("id=\"libraryImages\""));

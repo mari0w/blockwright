@@ -94,13 +94,19 @@ impl BuildStore {
             return Ok(None);
         };
 
-        record.status = if request.ok {
+        let report_matches =
+            report_matches_expected(&record.expected_actions, request.report.as_ref());
+        record.status = if request.ok && report_matches {
             BuildStatus::Succeeded
         } else {
             BuildStatus::Failed
         };
         record.result = request.report.clone();
-        record.message = request.message.clone();
+        record.message = if request.ok && !report_matches {
+            Some("执行报告与构建记录不一致，已标记失败。".to_string())
+        } else {
+            request.message.clone()
+        };
 
         self.save_record(record.clone()).await?;
         Ok(Some(record))
@@ -156,6 +162,37 @@ fn expected_actions(actions: &[GameAction]) -> Vec<ExpectedBuildAction> {
             _ => None,
         })
         .collect()
+}
+
+fn report_matches_expected(
+    expected_actions: &[ExpectedBuildAction],
+    report: Option<&crate::domain::types::JobExecutionReport>,
+) -> bool {
+    if expected_actions.is_empty() {
+        return true;
+    }
+    let Some(report) = report else {
+        return false;
+    };
+    let place_reports = report
+        .actions
+        .iter()
+        .filter(|action| action.action_type == "place_blocks")
+        .collect::<Vec<_>>();
+    if place_reports.len() != expected_actions.len() {
+        return false;
+    }
+
+    expected_actions
+        .iter()
+        .zip(place_reports)
+        .all(|(expected, report)| {
+            report.blueprint_id == expected.blueprint_id
+                && report.expected_count == expected.expected_count
+                && report.verified_count == expected.expected_count
+                && report.mismatch_count == 0
+                && report.skipped_limit_count == 0
+        })
 }
 
 fn material_counts(blocks: &[crate::domain::types::BlueprintBlock]) -> Vec<MaterialCount> {
@@ -245,8 +282,53 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn applies_success_result_when_report_has_mismatch() {
-        let store = BuildStore::new(temp_dir("result")).await.unwrap();
+    async fn applies_success_result_when_report_matches_expected() {
+        let store = BuildStore::new(temp_dir("success-result")).await.unwrap();
+        store
+            .register_planned(
+                "hm-job-1".to_string(),
+                "hmcl-lan".to_string(),
+                Some("Steve".to_string()),
+                "建造测试".to_string(),
+                &[place_action()],
+            )
+            .await
+            .unwrap();
+
+        let updated = store
+            .apply_result(
+                "hm-job-1",
+                &JobResultRequest {
+                    ok: true,
+                    message: Some("ok".to_string()),
+                    report: Some(JobExecutionReport {
+                        actions: vec![ActionExecutionReport {
+                            action_type: "place_blocks".to_string(),
+                            blueprint_id: Some("test-house".to_string()),
+                            expected_count: 2,
+                            placed_count: 2,
+                            skipped_existing_count: 0,
+                            skipped_limit_count: 0,
+                            skipped_player_safety_count: 0,
+                            verified_count: 2,
+                            mismatch_count: 0,
+                            mismatches: vec![],
+                        }],
+                    }),
+                    player_state: None,
+                    nearby_scan: None,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated.status, BuildStatus::Succeeded);
+    }
+
+    #[tokio::test]
+    async fn applies_failed_result_when_report_has_mismatch() {
+        let store = BuildStore::new(temp_dir("mismatch-result")).await.unwrap();
         store
             .register_planned(
                 "hm-job-1".to_string(),
@@ -292,11 +374,15 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(updated.status, BuildStatus::Succeeded);
+        assert_eq!(updated.status, BuildStatus::Failed);
+        assert_eq!(
+            updated.message.as_deref(),
+            Some("执行报告与构建记录不一致，已标记失败。")
+        );
     }
 
     #[tokio::test]
-    async fn applies_success_result_when_report_is_missing() {
+    async fn applies_failed_result_when_report_is_missing() {
         let store = BuildStore::new(temp_dir("missing-report")).await.unwrap();
         store
             .register_planned(
@@ -324,7 +410,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(updated.status, BuildStatus::Succeeded);
+        assert_eq!(updated.status, BuildStatus::Failed);
     }
 
     #[tokio::test]

@@ -175,6 +175,32 @@ public final class BlockwrightFabricMod implements ModInitializer {
             MinecraftServer server,
             ServerPlayerEntity player,
             JsonModels.MinecraftMessageResponse response) {
+        if (JobPoller.hasPlaceBlocks(response.actions)) {
+            if (jobPoller != null
+                    && jobPoller.startControlledActions(
+                            controllerClient,
+                            response.jobId,
+                            player.getName().getString(),
+                            "直接执行玩家请求",
+                            response.actions,
+                            player,
+                            null)) {
+                return;
+            }
+            player.sendMessage(Text.literal("Blockwright 正在执行另一个建筑任务，请等它完成后再试。"), false);
+            if (response.jobId != null && !response.jobId.isBlank()) {
+                CompletableFuture.runAsync(
+                        () -> sendDirectJobResult(
+                                controllerClient,
+                                response.jobId,
+                                false,
+                                "执行端正忙，建筑任务未开始。",
+                                null),
+                        REQUEST_EXECUTOR);
+            }
+            return;
+        }
+
         boolean ok = true;
         String message = "ok";
         JsonModels.JobExecutionReport report = null;

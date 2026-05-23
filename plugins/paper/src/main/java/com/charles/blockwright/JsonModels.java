@@ -79,6 +79,8 @@ public final class JsonModels {
         public String blueprintId;
         public BlockOrigin origin;
         public List<BlueprintBlock> blocks;
+        @SerializedName("clear_existing")
+        public boolean clearExisting;
     }
 
     public static final class PlayerPosition {
@@ -188,6 +190,20 @@ public final class JsonModels {
         public List<ActionExecutionReport> actions;
 
         public boolean isOk() {
+            if (actions == null) {
+                return true;
+            }
+            for (ActionExecutionReport action : actions) {
+                if (action == null || !"place_blocks".equals(action.actionType)) {
+                    continue;
+                }
+                if (action.mismatchCount > 0 || action.skippedLimitCount > 0) {
+                    return false;
+                }
+                if (action.expectedCount > 0 && action.verifiedCount != action.expectedCount) {
+                    return false;
+                }
+            }
             return true;
         }
     }
@@ -205,6 +221,8 @@ public final class JsonModels {
         public int skippedExistingCount;
         @SerializedName("skipped_limit_count")
         public int skippedLimitCount;
+        @SerializedName("skipped_player_safety_count")
+        public int skippedPlayerSafetyCount;
         @SerializedName("verified_count")
         public int verifiedCount;
         @SerializedName("mismatch_count")

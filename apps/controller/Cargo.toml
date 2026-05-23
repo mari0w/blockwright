@@ -2,12 +2,16 @@
 name = "blockwright-controller"
 version = "0.1.3"
 edition = "2021"
+description = "Local-first Minecraft AI controller for Blockwright"
+license = "MIT"
+readme = "../../README.md"
 
 [dependencies]
 axum = "0.8"
 base64 = "0.22"
 dotenvy = "0.15"
 include_dir = "0.7"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "gif"] }
 percent-encoding = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

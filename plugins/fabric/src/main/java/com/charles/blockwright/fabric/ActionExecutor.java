@@ -28,6 +28,7 @@ public final class ActionExecutor {
     private static final int PLAYER_STORAGE_SIZE = 36;
     private static final int PLAYER_SAFETY_RADIUS = 1;
     private static final int PLAYER_SAFETY_HEIGHT_BLOCKS = 3;
+    private static final int MAX_REPORTED_MISMATCHES = 64;
 
     private final MinecraftServer server;
     private final BlockwrightConfig config;
@@ -251,13 +252,21 @@ public final class ActionExecutor {
 
         int placed = 0;
         int skippedExisting = 0;
+        int skippedLimit = 0;
         int skippedPlayerSafety = 0;
+        int maxBlocks = config == null ? 0 : PlacementPolicy.normalizeMaxBlocks(config.maxBlocksPerAction);
+        int attempted = 0;
 
         for (int index = 0; index < action.blocks.size(); index++) {
             JsonModels.BlueprintBlock blockItem = action.blocks.get(index);
             if (blockItem == null) {
                 continue;
             }
+            if (maxBlocks > 0 && attempted >= maxBlocks) {
+                skippedLimit++;
+                continue;
+            }
+            attempted++;
 
             BlockState blockState = blockStateFromId(blockItem.material);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
@@ -276,13 +285,54 @@ public final class ActionExecutor {
 
         report.placedCount = placed;
         report.skippedExistingCount = skippedExisting;
-        report.skippedLimitCount = 0;
+        report.skippedLimitCount = skippedLimit;
         report.skippedPlayerSafetyCount = skippedPlayerSafety;
+        verifyPlacedBlocks(action, basePos, world, report);
         defaultPlayer.sendMessage(Text.literal(new PlacementStats(
                 placed,
                 skippedExisting,
                 skippedPlayerSafety).summary()), false);
         return report;
+    }
+
+    private void verifyPlacedBlocks(
+            JsonModels.GameAction action,
+            BlockPos basePos,
+            ServerWorld world,
+            JsonModels.ActionExecutionReport report) {
+        int verified = 0;
+        int mismatches = 0;
+        for (JsonModels.BlueprintBlock blockItem : action.blocks) {
+            if (blockItem == null) {
+                continue;
+            }
+
+            BlockState expected = blockStateFromId(blockItem.material);
+            BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
+            BlockState actual = world.getBlockState(targetPos);
+            if (actual.equals(expected)) {
+                verified++;
+                continue;
+            }
+
+            mismatches++;
+            if (report.mismatches.size() < MAX_REPORTED_MISMATCHES) {
+                JsonModels.BlockMismatch mismatch = new JsonModels.BlockMismatch();
+                mismatch.x = targetPos.getX();
+                mismatch.y = targetPos.getY();
+                mismatch.z = targetPos.getZ();
+                mismatch.expected = blockItem.material;
+                mismatch.actual = blockStateSummary(actual);
+                report.mismatches.add(mismatch);
+            }
+        }
+
+        report.verifiedCount = verified;
+        report.mismatchCount = mismatches;
+    }
+
+    private String blockStateSummary(BlockState state) {
+        return Registries.BLOCK.getId(state.getBlock()).toString();
     }
 
     private boolean isInsidePlayerSafetyZone(

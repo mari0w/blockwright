@@ -4,3 +4,5 @@ shared-token: "local-dev-token"
 connect-timeout-seconds: 5
 request-timeout-seconds: 1800
 poll-interval-ticks: 40
+protect-existing-blocks: true
+max-blocks-per-action: 0

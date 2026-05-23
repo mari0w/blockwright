@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.charles"
-version = "0.1.6"
+version = "0.1.9"
 
 repositories {
     maven("https://maven.fabricmc.net/")

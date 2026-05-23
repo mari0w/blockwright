@@ -1,11 +1,17 @@
 use crate::{
     domain::types::{
         BlockOrigin, Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, ChatAttachmentKind,
-        ChatAttachmentSource, GameAction, MaterialCount, PlayerPosition, PlayerState, WorldScan,
-        WorldScanBlock,
+        ChatAttachmentSource, ExpectedBuildAction, GameAction, MaterialCount, PlayerPosition,
+        PlayerState, WorldScan, WorldScanBlock, PLACE_BLOCKS_CHUNK_SIZE,
     },
     integrations::codex::{CodexClient, CodexResponseSchema},
-    services::{blueprint_store::BlueprintStore, build_store::BuildStore},
+    services::{
+        blueprint_store::BlueprintStore,
+        build_store::BuildStore,
+        image_blueprint::{
+            build_from_first_local_image, should_generate_image_blueprint, ImageBlueprintError,
+        },
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -20,7 +26,6 @@ const CONTEXT_BUILD_LIMIT: usize = 12;
 const CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT: usize = 32;
 const CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT: usize = 32;
 const BLUEPRINT_PRIMITIVE_MAX_BLOCKS: usize = 50_000;
-
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
     pub text: String,
@@ -193,6 +198,10 @@ impl Planner {
         blueprints: &BlueprintStore,
         builds: Option<&BuildStore>,
     ) -> PlanResult {
+        if let Some(result) = self.try_image_blueprint_plan(&input, blueprints).await {
+            return result;
+        }
+
         if !self.codex_enabled() {
             return PlanResult {
                 reply: "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。".to_string(),
@@ -211,6 +220,74 @@ impl Planner {
             summary: "AI 未生成可靠操作".to_string(),
             actions: Vec::new(),
         }
+    }
+
+    async fn try_image_blueprint_plan(
+        &self,
+        input: &PlannerInput,
+        blueprints: &BlueprintStore,
+    ) -> Option<PlanResult> {
+        if !should_generate_image_blueprint(&input.text, &input.attachments, self.codex_enabled()) {
+            return None;
+        }
+
+        let image_plan = match build_from_first_local_image(&input.text, &input.attachments)? {
+            Ok(plan) => plan,
+            Err(error @ ImageBlueprintError::Decode { .. }) if self.codex_enabled() => {
+                tracing::warn!(
+                    error = %error,
+                    "local image could not be decoded by deterministic image pipeline; falling back to codex image planning"
+                );
+                return None;
+            }
+            Err(error) => {
+                return Some(PlanResult {
+                    reply: format!("图片复刻蓝图生成失败：{error}。"),
+                    summary: "图片复刻蓝图生成失败".to_string(),
+                    actions: Vec::new(),
+                });
+            }
+        };
+        let output_width = image_plan.output_width;
+        let output_height = image_plan.output_height;
+        let block_count = image_plan.blueprint.blocks.len();
+        let source_path = image_plan.source_path.display().to_string();
+        tracing::info!(
+            source_path = %source_path,
+            original_width = image_plan.original_width,
+            original_height = image_plan.original_height,
+            output_width,
+            output_height,
+            block_count,
+            "generated deterministic image blueprint"
+        );
+
+        let Some((actions, placement_note)) = self
+            .actions_for_blueprint(input, blueprints, image_plan.blueprint, None)
+            .await
+        else {
+            return Some(PlanResult {
+                reply: "图片蓝图已经生成，但保存失败，任务没有发送到 Minecraft。".to_string(),
+                summary: "图片复刻蓝图保存失败".to_string(),
+                actions: Vec::new(),
+            });
+        };
+
+        let reply = append_placement_note(
+            format!(
+                "已把图片转成 {}x{} 的高保真方块复刻蓝图，共 {} 个方块。可见画面按像素颜色映射到 Minecraft 方块；看不到的三维背面不会在这个像素复刻层里臆造。",
+                output_width, output_height, block_count
+            ),
+            &placement_note,
+        );
+        Some(PlanResult {
+            reply,
+            summary: format!(
+                "图片复刻 {}x{}，{} 个方块",
+                output_width, output_height, block_count
+            ),
+            actions,
+        })
     }
 
     fn codex_enabled(&self) -> bool {
@@ -381,29 +458,59 @@ impl Planner {
             placement;
         let mut actions = Vec::new();
         if !pre_foundation_blocks.is_empty() {
-            actions.push(GameAction::PlaceBlocks {
-                blueprint_id: Some(format!("{}:site-foundation", blueprint.id)),
-                origin: origin.clone(),
-                blocks: pre_foundation_blocks,
-                clear_existing: true,
-            });
+            push_place_blocks_actions(
+                &mut actions,
+                format!("{}:site-foundation", blueprint.id),
+                origin.clone(),
+                pre_foundation_blocks,
+                true,
+            );
         }
         if !pre_clear_blocks.is_empty() {
-            actions.push(GameAction::PlaceBlocks {
-                blueprint_id: Some(format!("{}:site-clear", blueprint.id)),
-                origin: origin.clone(),
-                blocks: pre_clear_blocks,
-                clear_existing: true,
-            });
+            push_place_blocks_actions(
+                &mut actions,
+                format!("{}:site-clear", blueprint.id),
+                origin.clone(),
+                pre_clear_blocks,
+                true,
+            );
         }
-        actions.push(GameAction::PlaceBlocks {
-            blueprint_id: Some(blueprint.id.clone()),
+        push_place_blocks_actions(
+            &mut actions,
+            blueprint.id.clone(),
             origin,
-            blocks: blueprint.blocks.clone(),
+            blueprint.blocks.clone(),
             clear_existing,
-        });
+        );
 
         Some((actions, placement_note))
+    }
+}
+
+fn push_place_blocks_actions(
+    actions: &mut Vec<GameAction>,
+    blueprint_id: String,
+    origin: BlockOrigin,
+    blocks: Vec<BlueprintBlock>,
+    clear_existing: bool,
+) {
+    if blocks.len() <= PLACE_BLOCKS_CHUNK_SIZE {
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: Some(blueprint_id),
+            origin,
+            blocks,
+            clear_existing,
+        });
+        return;
+    }
+
+    for (index, chunk) in blocks.chunks(PLACE_BLOCKS_CHUNK_SIZE).enumerate() {
+        actions.push(GameAction::PlaceBlocks {
+            blueprint_id: Some(format!("{blueprint_id}:part-{index:04}")),
+            origin: origin.clone(),
+            blocks: chunk.to_vec(),
+            clear_existing,
+        });
     }
 }
 
@@ -1549,26 +1656,7 @@ async fn build_contexts(
                     status: format!("{:?}", record.status).to_lowercase(),
                     nearest_action_origin,
                     distance_to_target_blocks: distance_to_target_blocks.map(round_distance),
-                    actions: record
-                        .expected_actions
-                        .into_iter()
-                        .map(|action| {
-                            let block_count = action.blocks.len();
-                            BuildActionContext {
-                                blueprint_id: action.blueprint_id,
-                                origin: action.origin,
-                                expected_count: action.expected_count,
-                                materials: action.materials,
-                                block_sample_limit: CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
-                                block_sample_truncated: block_count
-                                    > CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
-                                block_sample: block_sample(
-                                    &action.blocks,
-                                    CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
-                                ),
-                            }
-                        })
-                        .collect(),
+                    actions: build_action_contexts(record.expected_actions),
                 },
                 recency_index,
             }
@@ -1592,6 +1680,108 @@ async fn build_contexts(
         .take(CONTEXT_BUILD_LIMIT)
         .map(|candidate| candidate.context)
         .collect()
+}
+
+struct BuildActionGroup {
+    blueprint_id: Option<String>,
+    origin: BlockOrigin,
+    expected_count: u32,
+    material_counts: HashMap<String, u32>,
+    block_sample: Vec<BlueprintBlock>,
+    block_count: usize,
+}
+
+fn build_action_contexts(actions: Vec<ExpectedBuildAction>) -> Vec<BuildActionContext> {
+    let mut contexts = Vec::new();
+    let mut groups = Vec::<BuildActionGroup>::new();
+
+    for action in actions {
+        let Some(base_blueprint_id) = chunk_base_blueprint_id(action.blueprint_id.as_deref())
+        else {
+            contexts.push(build_action_context(action));
+            continue;
+        };
+
+        let group_index = groups.iter().position(|group| {
+            group.blueprint_id.as_deref() == Some(base_blueprint_id.as_str())
+                && same_origin(&group.origin, &action.origin)
+        });
+        let group = match group_index {
+            Some(index) => &mut groups[index],
+            None => {
+                groups.push(BuildActionGroup {
+                    blueprint_id: Some(base_blueprint_id),
+                    origin: action.origin.clone(),
+                    expected_count: 0,
+                    material_counts: HashMap::new(),
+                    block_sample: Vec::new(),
+                    block_count: 0,
+                });
+                groups.last_mut().expect("group was just pushed")
+            }
+        };
+
+        group.expected_count = group.expected_count.saturating_add(action.expected_count);
+        group.block_count = group.block_count.saturating_add(action.blocks.len());
+        for material in action.materials {
+            *group.material_counts.entry(material.material).or_default() += material.count;
+        }
+        for block in action.blocks {
+            if group.block_sample.len() >= CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT {
+                break;
+            }
+            group.block_sample.push(block);
+        }
+    }
+
+    contexts.extend(groups.into_iter().map(build_group_context));
+    contexts
+}
+
+fn build_action_context(action: ExpectedBuildAction) -> BuildActionContext {
+    let block_count = action.blocks.len();
+    BuildActionContext {
+        blueprint_id: action.blueprint_id,
+        origin: action.origin,
+        expected_count: action.expected_count,
+        materials: action.materials,
+        block_sample_limit: CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+        block_sample_truncated: block_count > CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+        block_sample: block_sample(&action.blocks, CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT),
+    }
+}
+
+fn build_group_context(group: BuildActionGroup) -> BuildActionContext {
+    let mut materials = group
+        .material_counts
+        .into_iter()
+        .map(|(material, count)| MaterialCount { material, count })
+        .collect::<Vec<_>>();
+    materials.sort_by(|left, right| left.material.cmp(&right.material));
+
+    BuildActionContext {
+        blueprint_id: group.blueprint_id,
+        origin: group.origin,
+        expected_count: group.expected_count,
+        materials,
+        block_sample_limit: CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+        block_sample_truncated: group.block_count > CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT,
+        block_sample: group.block_sample,
+    }
+}
+
+fn chunk_base_blueprint_id(id: Option<&str>) -> Option<String> {
+    let id = id?;
+    let (base, suffix) = id.rsplit_once(":part-")?;
+    if suffix.len() == 4 && suffix.chars().all(|ch| ch.is_ascii_digit()) && !base.is_empty() {
+        Some(base.to_string())
+    } else {
+        None
+    }
+}
+
+fn same_origin(left: &BlockOrigin, right: &BlockOrigin) -> bool {
+    left.world == right.world && left.x == right.x && left.y == right.y && left.z == right.z
 }
 
 fn block_sample(blocks: &[BlueprintBlock], limit: usize) -> Vec<BlueprintBlock> {
@@ -1770,7 +1960,7 @@ fn render_plan_prompt(context: &PlanContextBundle) -> String {
 - 如果只是聊天、解释或需要追问，blueprint=null，site_plan=null，actions=[]。
 - 如果输出 blueprint，尽量同时输出 site_plan 来表达你选择的落点、清理、地基或场地融合意图；如果暂时缺少坐标，可以让 site_plan.origin=null。
 - 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
-- blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
+- blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。结构化输出要求 blueprint 里的 blocks 和 primitives 字段都出现；不用其中一个时填 []。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
 - 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
 - 复杂建筑或图片复刻可以在 blueprint 内使用 spec/primitives 减少手写 blocks：spec 保存建筑语义和后续可编辑意图；primitives 是可展开体块。box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from、to、material，from/to 是闭区间相对坐标。controller 会展开为完整 blocks、重算 materials，并保存 spec 与 expanded_hash。
 - 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图和放置语义上保持一致。
@@ -2725,10 +2915,11 @@ mod tests {
     use crate::{
         config::CodexConfig,
         domain::types::{
-            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachmentKind, ChatAttachmentSource,
-            MaterialCount, WorldScanBlock,
+            Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, ChatAttachmentKind,
+            ChatAttachmentSource, MaterialCount, WorldScanBlock,
         },
     };
+    use image::{ImageBuffer, Rgba};
     use std::{
         fs,
         os::unix::fs::PermissionsExt,
@@ -2782,8 +2973,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --output-schema)
-      echo "unexpected --output-schema" >&2
-      exit 3
+      shift 2
       ;;
     *)
       shift
@@ -3197,6 +3387,158 @@ BLOCKWRIGHT_JSON
         assert!(result.actions.is_empty());
         assert!(result.reply.contains("没有发送到 Minecraft"));
         assert!(result.reply.contains("Codex 登录状态"));
+    }
+
+    #[tokio::test]
+    async fn local_image_recreation_generates_pixel_blueprint_without_codex() {
+        let store = empty_store("local-image-pixel-blueprint").await;
+        let dir = temp_dir("local-image-pixel-blueprint-upload");
+        fs::create_dir_all(&dir).unwrap();
+        let image_path = dir.join("house.png");
+        let mut image = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(4, 2);
+        for x in 0..4 {
+            image.put_pixel(x, 0, Rgba([255, 255, 255, 255]));
+            image.put_pixel(x, 1, Rgba([30, 30, 30, 255]));
+        }
+        image.save(&image_path).unwrap();
+
+        let result = Planner::default()
+            .plan(
+                PlannerInput {
+                    text: "按 16 像素复刻这张建筑图片".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: None,
+                    nearby_scan: None,
+                    attachments: vec![ChatAttachment {
+                        kind: ChatAttachmentKind::Image,
+                        source: ChatAttachmentSource::LocalPath {
+                            path: image_path.to_string_lossy().to_string(),
+                        },
+                        file_name: Some("house.png".to_string()),
+                        mime_type: Some("image/png".to_string()),
+                    }],
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert!(result.reply.contains("16x8"));
+        assert_eq!(result.actions.len(), 1);
+        assert!(matches!(
+            result.actions[0],
+            GameAction::PlaceBlocks { ref blocks, .. } if blocks.len() == 128
+        ));
+        let saved = store.list().await;
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].size.width, 16);
+        assert_eq!(saved[0].size.height, 8);
+    }
+
+    #[test]
+    fn large_place_blocks_actions_are_chunked_for_tick_execution() {
+        let mut actions = Vec::new();
+        let origin = BlockOrigin {
+            world: Some("minecraft:overworld".to_string()),
+            x: 10,
+            y: 64,
+            z: 20,
+        };
+
+        push_place_blocks_actions(
+            &mut actions,
+            "large-image".to_string(),
+            origin.clone(),
+            test_blocks(PLACE_BLOCKS_CHUNK_SIZE + 3, "minecraft:white_concrete"),
+            false,
+        );
+
+        assert_eq!(actions.len(), 2);
+        assert!(matches!(
+            actions[0],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(ref id),
+                ref blocks,
+                ..
+            } if id == "large-image:part-0000" && blocks.len() == PLACE_BLOCKS_CHUNK_SIZE
+        ));
+        assert!(matches!(
+            actions[1],
+            GameAction::PlaceBlocks {
+                blueprint_id: Some(ref id),
+                ref blocks,
+                ..
+            } if id == "large-image:part-0001" && blocks.len() == 3
+        ));
+    }
+
+    #[tokio::test]
+    async fn codex_enabled_building_image_uses_3d_planner_not_pixel_mural() {
+        let store = empty_store("building-image-uses-codex").await;
+        let dir = temp_dir("building-image-uses-codex-upload");
+        fs::create_dir_all(&dir).unwrap();
+        let image_path = dir.join("building.png");
+        ImageBuffer::<Rgba<u8>, Vec<u8>>::new(4, 4)
+            .save(&image_path)
+            .unwrap();
+        let planner = planner_with_fake_codex(
+            "building-image-uses-codex",
+            r#"{
+  "id": "image-3d-building",
+  "name": "图片三维建筑",
+  "description": "按图片可见面复刻并补全背面的三维建筑。",
+  "size": {"width": 8, "height": 5, "depth": 6},
+  "materials": [
+    {"material": "minecraft:oak_planks", "count": 96},
+    {"material": "minecraft:glass", "count": 4}
+  ],
+  "blocks": [
+    {"x": 0, "y": 0, "z": 0, "material": "minecraft:oak_planks"},
+    {"x": 7, "y": 4, "z": 5, "material": "minecraft:oak_planks"},
+    {"x": 3, "y": 2, "z": 0, "material": "minecraft:glass"}
+  ],
+  "primitives": [
+    {"type": "hollow_box", "from": {"x": 0, "y": 0, "z": 0}, "to": {"x": 7, "y": 4, "z": 5}, "material": "minecraft:oak_planks"},
+    {"type": "box", "from": {"x": 3, "y": 2, "z": 0}, "to": {"x": 4, "y": 3, "z": 0}, "material": "minecraft:glass"}
+  ],
+  "tags": ["image_reference", "building"]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "帮我完全复刻这张建筑图片，看不到的背面自己补全".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: None,
+                    nearby_scan: None,
+                    attachments: vec![ChatAttachment {
+                        kind: ChatAttachmentKind::Image,
+                        source: ChatAttachmentSource::LocalPath {
+                            path: image_path.to_string_lossy().to_string(),
+                        },
+                        file_name: Some("building.png".to_string()),
+                        mime_type: Some("image/png".to_string()),
+                    }],
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(result.summary, "建造蓝图 image-3d-building");
+        assert!(store.get("image-3d-building").await.is_some());
+        assert!(store.list().await.iter().all(|item| {
+            item.spec
+                .as_ref()
+                .and_then(|spec| spec.get("source"))
+                .and_then(serde_json::Value::as_str)
+                != Some("image_to_pixel_blueprint")
+        }));
     }
 
     #[tokio::test]
@@ -4507,6 +4849,62 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
+    async fn context_bundle_collapses_chunked_build_actions() {
+        let blueprints = empty_store("chunked-context-blueprints").await;
+        let builds = BuildStore::new(temp_dir("chunked-context-builds"))
+            .await
+            .unwrap();
+        let origin = BlockOrigin {
+            world: Some("minecraft:overworld".to_string()),
+            x: 10,
+            y: 64,
+            z: 10,
+        };
+        builds
+            .register_planned(
+                "job-chunked-image".to_string(),
+                "local".to_string(),
+                Some("Steve".to_string()),
+                "大图复刻".to_string(),
+                &[
+                    GameAction::PlaceBlocks {
+                        blueprint_id: Some("portrait:part-0000".to_string()),
+                        origin: origin.clone(),
+                        blocks: test_blocks(4, "minecraft:white_concrete"),
+                        clear_existing: false,
+                    },
+                    GameAction::PlaceBlocks {
+                        blueprint_id: Some("portrait:part-0001".to_string()),
+                        origin,
+                        blocks: test_blocks(3, "minecraft:black_concrete"),
+                        clear_existing: false,
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+        let input = PlannerInput {
+            text: "把刚才的人像往左挪一点".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: None,
+            player_state: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
+
+        assert_eq!(context.recent_builds.len(), 1);
+        assert_eq!(context.recent_builds[0].actions.len(), 1);
+        let action = &context.recent_builds[0].actions[0];
+        assert_eq!(action.blueprint_id.as_deref(), Some("portrait"));
+        assert_eq!(action.expected_count, 7);
+        assert_eq!(action.materials.len(), 2);
+    }
+
+    #[tokio::test]
     async fn codex_site_plan_controls_origin_clearing_and_foundation() {
         let store = empty_store("codex-site-plan").await;
         let planner = planner_with_fake_plan(
@@ -4614,6 +5012,43 @@ BLOCKWRIGHT_JSON
 
         assert_eq!(plan.summary, "发放钻石镐");
         assert!(plan.blueprint.is_none());
+        assert!(matches!(
+            plan.actions[0],
+            GameAction::GiveItem {
+                ref item,
+                count: 1,
+                ..
+            } if item == "minecraft:diamond_pickaxe"
+        ));
+    }
+
+    #[test]
+    fn parses_structured_output_action_with_unused_nullable_fields() {
+        let output = r#"{
+  "reply": "可以，已经准备给你一把钻石镐。",
+  "summary": "发放钻石镐",
+  "blueprint": null,
+  "site_plan": null,
+  "actions": [
+    {
+      "type": "give_item",
+      "player": null,
+      "item": "minecraft:diamond_pickaxe",
+      "count": 1,
+      "blueprint_id": null,
+      "origin": null,
+      "blocks": [],
+      "clear_existing": null,
+      "command": null,
+      "message": null,
+      "text": null,
+      "attachments": []
+    }
+  ]
+}"#;
+
+        let plan = parse_plan_response(output).unwrap();
+
         assert!(matches!(
             plan.actions[0],
             GameAction::GiveItem {
@@ -4760,6 +5195,9 @@ BLOCKWRIGHT_JSON
     "name": "Primitive 小屋",
     "description": "用 primitives 表达的蓝图。",
     "size": {"width": 5, "height": 4, "depth": 4},
+    "spec": null,
+    "materials": [],
+    "blocks": [],
     "primitives": [
       {"type": "box", "from": {"x": 0, "y": 0, "z": 0}, "to": {"x": 4, "y": 0, "z": 3}, "material": "minecraft:stone_bricks"},
       {"type": "hollow_box", "from": {"x": 0, "y": 1, "z": 0}, "to": {"x": 4, "y": 3, "z": 3}, "material": "minecraft:oak_planks"}

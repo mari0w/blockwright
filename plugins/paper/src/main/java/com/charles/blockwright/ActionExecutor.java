@@ -17,6 +17,9 @@ import org.bukkit.inventory.PlayerInventory;
 public final class ActionExecutor {
     private static final int HOTBAR_SIZE = 9;
     private static final int PLAYER_STORAGE_SIZE = 36;
+    private static final int PLAYER_SAFETY_RADIUS = 1;
+    private static final int PLAYER_SAFETY_HEIGHT_BLOCKS = 3;
+    private static final int MAX_REPORTED_MISMATCHES = 64;
     private final BlockwrightPlugin plugin;
 
     public ActionExecutor(BlockwrightPlugin plugin) {
@@ -44,7 +47,7 @@ public final class ActionExecutor {
                     giveItem(action, defaultPlayer);
                     report.actions.add(nonBlockReport("give_item"));
                 }
-                case "place_blocks" -> report.actions.add(placeBlocks(action, fallbackOrigin));
+                case "place_blocks" -> report.actions.add(placeBlocks(action, defaultPlayer, fallbackOrigin));
                 case "chat" -> {
                     sendChat(action, defaultPlayer);
                     report.actions.add(nonBlockReport("chat"));
@@ -201,7 +204,10 @@ public final class ActionExecutor {
         }
     }
 
-    private JsonModels.ActionExecutionReport placeBlocks(JsonModels.GameAction action, Location fallbackOrigin) {
+    private JsonModels.ActionExecutionReport placeBlocks(
+            JsonModels.GameAction action,
+            String defaultPlayer,
+            Location fallbackOrigin) {
         JsonModels.ActionExecutionReport report = nonBlockReport("place_blocks");
         report.blueprintId = action.blueprintId;
         report.mismatches = new ArrayList<>();
@@ -218,18 +224,126 @@ public final class ActionExecutor {
         }
 
         int placed = 0;
+        int skippedExisting = 0;
+        int skippedLimit = 0;
+        int skippedPlayerSafety = 0;
+        int maxBlocks = maxBlocksPerAction();
+        int attempted = 0;
+        Player player = defaultPlayer == null ? null : Bukkit.getPlayerExact(defaultPlayer);
         for (JsonModels.BlueprintBlock blockItem : action.blocks) {
+            if (blockItem == null) {
+                continue;
+            }
+            if (maxBlocks > 0 && attempted >= maxBlocks) {
+                skippedLimit++;
+                continue;
+            }
+            attempted++;
+
             BlockData blockData = blockDataFromId(blockItem.material);
             Block block = world.getBlockAt(
                     origin.getBlockX() + blockItem.x,
                     origin.getBlockY() + blockItem.y,
                     origin.getBlockZ() + blockItem.z);
+            if (!blockData.getMaterial().isAir() && isInsidePlayerSafetyZone(block, player)) {
+                skippedPlayerSafety++;
+                continue;
+            }
+            if (!canPlace(block, action.clearExisting)) {
+                skippedExisting++;
+                continue;
+            }
             block.setBlockData(blockData, false);
             placed++;
         }
 
         report.placedCount = placed;
+        report.skippedExistingCount = skippedExisting;
+        report.skippedLimitCount = skippedLimit;
+        report.skippedPlayerSafetyCount = skippedPlayerSafety;
+        verifyPlacedBlocks(action, origin, world, report);
         return report;
+    }
+
+    private boolean canPlace(Block block, boolean clearExisting) {
+        return clearExisting || !protectExistingBlocks() || block.getType().isAir();
+    }
+
+    private boolean protectExistingBlocks() {
+        return plugin == null || plugin.getConfig().getBoolean("protect-existing-blocks", true);
+    }
+
+    private int maxBlocksPerAction() {
+        if (plugin == null) {
+            return 0;
+        }
+        return Math.max(plugin.getConfig().getInt("max-blocks-per-action", 0), 0);
+    }
+
+    private boolean isInsidePlayerSafetyZone(Block block, Player player) {
+        if (player == null || !block.getWorld().equals(player.getWorld())) {
+            return false;
+        }
+        Location playerLocation = player.getLocation();
+        return isWithinPlayerSafetyZone(
+                block.getX(),
+                block.getY(),
+                block.getZ(),
+                playerLocation.getBlockX(),
+                playerLocation.getBlockY(),
+                playerLocation.getBlockZ());
+    }
+
+    static boolean isWithinPlayerSafetyZone(
+            int targetX,
+            int targetY,
+            int targetZ,
+            int playerX,
+            int playerY,
+            int playerZ) {
+        return Math.abs(targetX - playerX) <= PLAYER_SAFETY_RADIUS
+                && targetY >= playerY
+                && targetY < playerY + PLAYER_SAFETY_HEIGHT_BLOCKS
+                && Math.abs(targetZ - playerZ) <= PLAYER_SAFETY_RADIUS;
+    }
+
+    private void verifyPlacedBlocks(
+            JsonModels.GameAction action,
+            Location origin,
+            World world,
+            JsonModels.ActionExecutionReport report) {
+        int verified = 0;
+        int mismatches = 0;
+        for (JsonModels.BlueprintBlock blockItem : action.blocks) {
+            if (blockItem == null) {
+                continue;
+            }
+
+            BlockData expected = blockDataFromId(blockItem.material);
+            Block block = world.getBlockAt(
+                    origin.getBlockX() + blockItem.x,
+                    origin.getBlockY() + blockItem.y,
+                    origin.getBlockZ() + blockItem.z);
+            BlockData actual = block.getBlockData();
+            if (actual.equals(expected)) {
+                verified++;
+                continue;
+            }
+
+            mismatches++;
+            if (report.mismatches.size() < MAX_REPORTED_MISMATCHES) {
+                JsonModels.BlockMismatch mismatch = new JsonModels.BlockMismatch();
+                mismatch.x = block.getX();
+                mismatch.y = block.getY();
+                mismatch.z = block.getZ();
+                mismatch.expected = blockItem.material;
+                mismatch.actual = actual.getAsString();
+                report.mismatches.add(mismatch);
+            }
+        }
+
+        report.verifiedCount = verified;
+        report.mismatchCount = mismatches;
     }
 
     private JsonModels.ActionExecutionReport nonBlockReport(String actionType) {
@@ -239,6 +353,7 @@ public final class ActionExecutor {
         report.placedCount = 0;
         report.skippedExistingCount = 0;
         report.skippedLimitCount = 0;
+        report.skippedPlayerSafetyCount = 0;
         report.verifiedCount = 0;
         report.mismatchCount = 0;
         report.mismatches = new ArrayList<>();

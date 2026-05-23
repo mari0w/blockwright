@@ -34,4 +34,37 @@ final class ActionExecutorTest {
         assertEquals(1, report.actions.size());
         assertEquals("scan_nearby_and_plan", report.actions.get(0).actionType);
     }
+
+    @Test
+    void placeBlockReportRequiresFullVerification() {
+        JsonModels.ActionExecutionReport action = new JsonModels.ActionExecutionReport();
+        action.actionType = "place_blocks";
+        action.expectedCount = 2;
+        action.verifiedCount = 1;
+        action.mismatchCount = 1;
+
+        JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
+        report.actions = List.of(action);
+
+        assertEquals(false, report.isOk());
+
+        action.verifiedCount = 2;
+        action.mismatchCount = 0;
+
+        assertEquals(true, report.isOk());
+    }
+
+    @Test
+    void placeBlockReportFailsWhenPlacementLimitSkippedBlocks() {
+        JsonModels.ActionExecutionReport action = new JsonModels.ActionExecutionReport();
+        action.actionType = "place_blocks";
+        action.expectedCount = 2;
+        action.verifiedCount = 2;
+        action.skippedLimitCount = 1;
+
+        JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
+        report.actions = List.of(action);
+
+        assertEquals(false, report.isOk());
+    }
 }

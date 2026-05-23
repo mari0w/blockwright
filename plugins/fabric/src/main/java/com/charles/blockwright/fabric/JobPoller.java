@@ -1,5 +1,6 @@
 package com.charles.blockwright.fabric;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -18,6 +19,7 @@ public final class JobPoller {
     private final Supplier<BlockwrightConfig> configSupplier;
     private final ExecutorService executor;
     private final AtomicBoolean polling = new AtomicBoolean(false);
+    private RunningJob runningJob;
     private int ticks;
 
     public JobPoller(
@@ -30,6 +32,11 @@ public final class JobPoller {
     }
 
     public void tick() {
+        if (runningJob != null) {
+            runningJob.step();
+            return;
+        }
+
         BlockwrightConfig config = configSupplier.get();
         if (!config.pollControllerJobs || server.getPlayerManager().getPlayerList().isEmpty()) {
             return;
@@ -65,7 +72,9 @@ public final class JobPoller {
                         try {
                             executeJob(controllerClient, job);
                         } finally {
-                            polling.set(false);
+                            if (runningJob == null) {
+                                polling.set(false);
+                            }
                         }
                     });
                 });
@@ -77,6 +86,28 @@ public final class JobPoller {
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
+    }
+
+    public boolean startControlledActions(
+            ControllerClient controllerClient,
+            String jobId,
+            String targetPlayer,
+            String summary,
+            List<JsonModels.GameAction> actions,
+            ServerPlayerEntity player,
+            String extraResultJobId) {
+        if (!hasPlaceBlocks(actions) || runningJob != null) {
+            return false;
+        }
+
+        JsonModels.GameJob job = new JsonModels.GameJob();
+        job.id = jobId;
+        job.targetPlayer = targetPlayer;
+        job.summary = summary;
+        job.actions = actions;
+        runningJob = new RunningJob(controllerClient, job, player, extraResultJobId);
+        runningJob.step();
+        return true;
     }
 
     private void executeJob(ControllerClient controllerClient, JsonModels.GameJob job) {
@@ -95,10 +126,25 @@ public final class JobPoller {
             if (executeScanAndPlanJob(controllerClient, job, player, 0)) {
                 return;
             }
-            report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
-            ok = report.isOk();
-            if (!ok) {
-                message = "建筑执行失败，已回传执行报告";
+            if (hasPlaceBlocks(job.actions)) {
+                if (startControlledActions(
+                        controllerClient,
+                        job.id,
+                        job.targetPlayer,
+                        job.summary,
+                        job.actions,
+                        player,
+                        null)) {
+                    return;
+                }
+                ok = false;
+                message = "执行端正忙，建筑任务未开始。";
+            } else {
+                report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
+                ok = report.isOk();
+                if (!ok) {
+                    message = "建筑执行失败，已回传执行报告";
+                }
             }
         } catch (Exception error) {
             ok = false;
@@ -112,6 +158,18 @@ public final class JobPoller {
         CompletableFuture.runAsync(
                 () -> sendJobResult(controllerClient, job.id, resultOk, resultMessage, resultReport),
                 executor);
+    }
+
+    public static boolean hasPlaceBlocks(List<JsonModels.GameAction> actions) {
+        if (actions == null) {
+            return false;
+        }
+        for (JsonModels.GameAction action : actions) {
+            if (action != null && "place_blocks".equals(action.type)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean executeLiveQueryJob(
@@ -282,6 +340,26 @@ public final class JobPoller {
         String message = "ok";
         JsonModels.JobExecutionReport report = null;
         try {
+            if (hasPlaceBlocks(response.actions)) {
+                if (startControlledActions(
+                        controllerClient,
+                        originalJobId,
+                        playerSnapshot.name(),
+                        "扫描后继续执行建筑任务",
+                        response.actions,
+                        currentPlayer,
+                        response.jobId)) {
+                    return;
+                }
+                ok = false;
+                message = "执行端正忙，建筑任务未开始。";
+                report = null;
+                if (response.jobId != null && !response.jobId.isBlank()) {
+                    sendJobResult(controllerClient, response.jobId, false, message, null);
+                }
+                sendJobResult(controllerClient, originalJobId, false, message, null);
+                return;
+            }
             report = new ActionExecutor(server, configSupplier.get()).executeActions(response.actions, currentPlayer);
             ok = report.isOk();
             if (!ok) {
@@ -344,6 +422,74 @@ public final class JobPoller {
             controllerClient.sendJobResult(jobId, request);
         } catch (Exception error) {
             LOGGER.warn("Blockwright send job result failed: {}", error.getMessage());
+        }
+    }
+
+    private final class RunningJob {
+        private final ControllerClient controllerClient;
+        private final JsonModels.GameJob job;
+        private final String extraResultJobId;
+        private final String playerName;
+        private final JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
+        private int actionIndex;
+
+        RunningJob(
+                ControllerClient controllerClient,
+                JsonModels.GameJob job,
+                ServerPlayerEntity player,
+                String extraResultJobId) {
+            this.controllerClient = controllerClient;
+            this.job = job;
+            this.extraResultJobId = extraResultJobId;
+            this.playerName = player.getName().getString();
+            this.report.actions = new ArrayList<>();
+        }
+
+        void step() {
+            ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerName);
+            if (player == null) {
+                finish(false, "玩家已离线");
+                return;
+            }
+
+            try {
+                if (job.actions != null && actionIndex < job.actions.size()) {
+                    JsonModels.GameAction action = job.actions.get(actionIndex);
+                    if (action != null) {
+                        JsonModels.JobExecutionReport stepReport =
+                                new ActionExecutor(server, configSupplier.get()).executeActions(List.of(action), player);
+                        if (stepReport != null && stepReport.actions != null) {
+                            report.actions.addAll(stepReport.actions);
+                        }
+                    }
+                    actionIndex++;
+                    if (actionIndex < job.actions.size()) {
+                        return;
+                    }
+                }
+
+                boolean ok = report.isOk();
+                finish(ok, ok ? "ok" : "建筑执行失败，已回传执行报告");
+            } catch (Exception error) {
+                LOGGER.warn("Blockwright chunked job execute failed: {}, {}", job.id, error.getMessage());
+                finish(false, rootMessage(error));
+            }
+        }
+
+        private void finish(boolean ok, String message) {
+            JsonModels.JobExecutionReport resultReport = report;
+            CompletableFuture.runAsync(
+                    () -> {
+                        if (job.id != null && !job.id.isBlank()) {
+                            sendJobResult(controllerClient, job.id, ok, message, resultReport);
+                        }
+                        if (extraResultJobId != null && !extraResultJobId.isBlank()) {
+                            sendJobResult(controllerClient, extraResultJobId, ok, message, resultReport);
+                        }
+                    },
+                    executor);
+            runningJob = null;
+            polling.set(false);
         }
     }
 }

@@ -9,13 +9,13 @@ use crate::{
     domain::types::{
         BlockOrigin, Blueprint, BlueprintBlock, BuildRecord, ChatAttachment, GameAction,
         JobResultRequest, MaterialCount, PlayerPosition, PlayerState, WorldScan,
+        PLACE_BLOCKS_CHUNK_SIZE,
     },
     services::planner::PlannerInput,
     state::AppState,
 };
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
-
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
     #[serde(default)]
@@ -744,6 +744,7 @@ async fn enqueue_controlled_actions(
     summary: String,
     actions: Vec<GameAction>,
 ) -> Result<Option<crate::domain::types::GameJob>, (i32, String)> {
+    let actions = chunk_place_block_actions(actions);
     if actions.is_empty() {
         return Ok(None);
     }
@@ -773,6 +774,33 @@ async fn enqueue_controlled_actions(
             .enqueue_with_id(job_id, server_id, target_player, summary, actions)
             .await,
     ))
+}
+
+fn chunk_place_block_actions(actions: Vec<GameAction>) -> Vec<GameAction> {
+    let mut chunked = Vec::with_capacity(actions.len());
+    for action in actions {
+        match action {
+            GameAction::PlaceBlocks {
+                blueprint_id,
+                origin,
+                blocks,
+                clear_existing,
+            } if blocks.len() > PLACE_BLOCKS_CHUNK_SIZE => {
+                for (index, block_chunk) in blocks.chunks(PLACE_BLOCKS_CHUNK_SIZE).enumerate() {
+                    chunked.push(GameAction::PlaceBlocks {
+                        blueprint_id: blueprint_id
+                            .as_ref()
+                            .map(|id| format!("{id}:part-{index:04}")),
+                        origin: origin.clone(),
+                        blocks: block_chunk.to_vec(),
+                        clear_existing,
+                    });
+                }
+            }
+            other => chunked.push(other),
+        }
+    }
+    chunked
 }
 
 struct LiveQueryResult {
@@ -1402,6 +1430,60 @@ mod tests {
                 clear_existing: true,
                 ..
             } if blueprint_id.as_deref() == Some("test-tower")
+        ));
+    }
+
+    #[tokio::test]
+    async fn place_blocks_tool_chunks_large_build_before_enqueue() {
+        let state = test_state("place-blocks-chunked").await;
+        let blocks = (0..PLACE_BLOCKS_CHUNK_SIZE + 2)
+            .map(|index| BlueprintBlock {
+                x: index as i32,
+                y: 0,
+                z: 0,
+                material: "minecraft:white_concrete".to_string(),
+            })
+            .collect::<Vec<_>>();
+
+        let result = place_blocks(
+            &state,
+            json!({
+                "target_player": "Charles",
+                "summary": "放置大图",
+                "blueprint_id": "large-mural",
+                "origin": {"world": "minecraft:overworld", "x": 10, "y": 64, "z": 20},
+                "blocks": blocks,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let job_id = result["queued_job"]["id"].as_str().unwrap();
+        let record = state.builds.get(job_id).await.unwrap();
+        assert_eq!(record.expected_actions.len(), 2);
+        assert_eq!(
+            record.expected_actions[0].blueprint_id.as_deref(),
+            Some("large-mural:part-0000")
+        );
+        assert_eq!(
+            record.expected_actions[1].blueprint_id.as_deref(),
+            Some("large-mural:part-0001")
+        );
+        assert_eq!(
+            record.expected_actions[0].expected_count,
+            PLACE_BLOCKS_CHUNK_SIZE as u32
+        );
+        assert_eq!(record.expected_actions[1].expected_count, 2);
+
+        let job = state.jobs.pop_next("hmcl-lan").await.unwrap();
+        assert_eq!(job.actions.len(), 2);
+        assert!(matches!(
+            &job.actions[0],
+            GameAction::PlaceBlocks { blocks, .. } if blocks.len() == PLACE_BLOCKS_CHUNK_SIZE
+        ));
+        assert!(matches!(
+            &job.actions[1],
+            GameAction::PlaceBlocks { blocks, .. } if blocks.len() == 2
         ));
     }
 }

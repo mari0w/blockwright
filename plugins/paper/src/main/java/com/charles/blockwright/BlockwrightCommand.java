@@ -77,6 +77,30 @@ public final class BlockwrightCommand implements CommandExecutor {
             JsonModels.MinecraftMessageResponse response,
             String playerName,
             Location origin) {
+        if (JobPoller.hasPlaceBlocks(response.actions)) {
+            JobPoller poller = plugin.jobPoller();
+            if (poller != null
+                    && poller.startControlledActions(
+                            response.jobId,
+                            playerName,
+                            "直接执行玩家请求",
+                            response.actions,
+                            origin)) {
+                return;
+            }
+            sendPlayerMessage(playerName, "Blockwright 正在执行另一个建筑任务，请等它完成后再试。");
+            if (response.jobId != null && !response.jobId.isBlank()) {
+                plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        controllerClient.sendJobResult(response.jobId, false, "执行端正忙，建筑任务未开始。", null);
+                    } catch (Exception error) {
+                        plugin.getLogger().warning("send direct job result failed: " + error.getMessage());
+                    }
+                });
+            }
+            return;
+        }
+
         boolean ok = true;
         String message = "ok";
         JsonModels.JobExecutionReport report = null;

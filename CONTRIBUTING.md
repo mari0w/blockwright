@@ -75,6 +75,8 @@ make test
 - 复杂业务分支优先写中文注释。
 - 不为“智能”提前做过重抽象；第一阶段优先跑通可验证闭环。
 - 不引入真实 token、webhook、client secret 或本地私有配置。
+- 面向玩家的 Web 文案需要同步维护中英文；新增页面文字优先接入现有语言字典。
+- 文档新增用户入口时，优先同时更新中文 README 和 `README.en.md`。
 
 ## Pull Request 要求
 

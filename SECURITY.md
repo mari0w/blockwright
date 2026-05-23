@@ -30,7 +30,3 @@ Blockwright 当前处于早期开发阶段，默认面向本地 Minecraft 和局
 - 使用强随机 `shared_token`。
 - 不把 `.env`、`config/chat.local.yaml`、`config/secrets/` 或任何真实凭证提交到 Git。
 - 不在本地 Minecraft 场景启用 webhook-only 聊天入口。
-
-## 许可证提醒
-
-仓库正式公开前应补充明确的 `LICENSE` 文件。未声明许可证前，外部用户默认没有复制、修改或分发授权。

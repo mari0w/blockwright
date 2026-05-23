@@ -13,10 +13,9 @@ public final class BlockwrightPlugin extends JavaPlugin {
         saveDefaultConfig();
         controllerClient = new ControllerClient(this);
         actionExecutor = new ActionExecutor(this);
-        registerCommand();
-
         jobPoller = new JobPoller(this, controllerClient, actionExecutor);
         jobPoller.start();
+        registerCommand();
         getLogger().info("Blockwright enabled");
     }
 
@@ -37,6 +36,10 @@ public final class BlockwrightPlugin extends JavaPlugin {
         jobPoller = new JobPoller(this, controllerClient, actionExecutor);
         jobPoller.start();
         registerCommand();
+    }
+
+    public JobPoller jobPoller() {
+        return jobPoller;
     }
 
     private void registerCommand() {

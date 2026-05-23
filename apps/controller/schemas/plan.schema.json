@@ -1,6 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "attachmentSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "url", "download_code", "picture_download_code", "path"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["url", "ding_talk_download_code", "local_path"]
+        },
+        "url": { "type": ["string", "null"] },
+        "download_code": { "type": ["string", "null"] },
+        "picture_download_code": { "type": ["string", "null"] },
+        "path": { "type": ["string", "null"] }
+      }
+    },
     "attachment": {
       "type": "object",
       "additionalProperties": false,
@@ -10,38 +25,7 @@
           "type": "string",
           "enum": ["image", "file", "audio", "video", "unknown"]
         },
-        "source": {
-          "anyOf": [
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["type", "url"],
-              "properties": {
-                "type": { "type": "string", "const": "url" },
-                "url": { "type": "string", "minLength": 1 }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["type", "download_code", "picture_download_code"],
-              "properties": {
-                "type": { "type": "string", "const": "ding_talk_download_code" },
-                "download_code": { "type": "string", "minLength": 1 },
-                "picture_download_code": { "type": ["string", "null"] }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["type", "path"],
-              "properties": {
-                "type": { "type": "string", "const": "local_path" },
-                "path": { "type": "string", "minLength": 1 }
-              }
-            }
-          ]
-        },
+        "source": { "$ref": "#/$defs/attachmentSource" },
         "file_name": { "type": ["string", "null"] },
         "mime_type": { "type": ["string", "null"] }
       }
@@ -54,10 +38,17 @@
         "x": { "type": "integer" },
         "y": { "type": "integer" },
         "z": { "type": "integer" },
-        "material": {
-          "type": "string",
-          "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
-        }
+        "material": { "type": "string" }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "z": { "type": "integer" }
       }
     },
     "blueprintPrimitive": {
@@ -69,44 +60,23 @@
           "type": "string",
           "enum": ["box", "fill_box", "cuboid", "hollow_box", "shell"]
         },
-        "from": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["x", "y", "z"],
-          "properties": {
-            "x": { "type": "integer" },
-            "y": { "type": "integer" },
-            "z": { "type": "integer" }
-          }
-        },
-        "to": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["x", "y", "z"],
-          "properties": {
-            "x": { "type": "integer" },
-            "y": { "type": "integer" },
-            "z": { "type": "integer" }
-          }
-        },
-        "material": {
-          "type": "string",
-          "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
-        }
+        "from": { "$ref": "#/$defs/point" },
+        "to": { "$ref": "#/$defs/point" },
+        "material": { "type": "string" }
       }
     },
     "blueprintSpec": {
-      "type": "object",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["format", "kind", "source", "intent", "notes", "primitives"],
       "properties": {
         "format": {
           "type": "string",
-          "const": "blockwright.blueprint_spec.v1"
+          "enum": ["blockwright.blueprint_spec.v1"]
         },
-        "kind": { "type": "string", "minLength": 1 },
-        "source": { "type": "string", "minLength": 1 },
-        "intent": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "source": { "type": "string" },
+        "intent": { "type": "string" },
         "notes": { "type": "string" },
         "primitives": {
           "type": "array",
@@ -120,156 +90,132 @@
       "required": ["world", "x", "y", "z"],
       "properties": {
         "world": { "type": ["string", "null"] },
-        "x": { "type": "integer", "minimum": -30000000, "maximum": 30000000 },
-        "y": { "type": "integer", "minimum": -64, "maximum": 320 },
-        "z": { "type": "integer", "minimum": -30000000, "maximum": 30000000 }
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "z": { "type": "integer" }
+      }
+    },
+    "nullableOrigin": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["world", "x", "y", "z"],
+      "properties": {
+        "world": { "type": ["string", "null"] },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "z": { "type": "integer" }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "depth"],
+      "properties": {
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "depth": { "type": "integer" }
+      }
+    },
+    "materialCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material", "count"],
+      "properties": {
+        "material": { "type": "string" },
+        "count": { "type": "integer" }
       }
     },
     "blueprint": {
-      "type": "object",
+      "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["id", "name", "description", "size", "materials", "tags"],
-      "anyOf": [
-        { "required": ["blocks"] },
-        { "required": ["primitives"] }
+      "required": [
+        "id",
+        "name",
+        "description",
+        "size",
+        "spec",
+        "materials",
+        "blocks",
+        "primitives",
+        "tags"
       ],
       "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"
-        },
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string", "minLength": 1 },
-        "size": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["width", "height", "depth"],
-          "properties": {
-            "width": { "type": "integer", "minimum": 1 },
-            "height": { "type": "integer", "minimum": 1 },
-            "depth": { "type": "integer", "minimum": 1 }
-          }
-        },
-        "spec": {
-          "anyOf": [
-            { "$ref": "#/$defs/blueprintSpec" },
-            { "type": "null" }
-          ]
-        },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "size": { "$ref": "#/$defs/size" },
+        "spec": { "$ref": "#/$defs/blueprintSpec" },
         "materials": {
           "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["material", "count"],
-            "properties": {
-              "material": {
-                "type": "string",
-                "pattern": "^minecraft:[a-z0-9_./-]+(\\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\\])?$"
-              },
-              "count": { "type": "integer", "minimum": 1 }
-            }
-          }
+          "items": { "$ref": "#/$defs/materialCount" }
         },
         "blocks": {
           "type": "array",
-          "minItems": 1,
           "items": { "$ref": "#/$defs/block" }
         },
         "primitives": {
           "type": "array",
-          "minItems": 1,
           "items": { "$ref": "#/$defs/blueprintPrimitive" }
         },
         "tags": {
           "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
+          "items": { "type": "string" }
         }
       }
     },
-    "giveItemAction": {
+    "action": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "player", "item", "count"],
+      "required": [
+        "type",
+        "player",
+        "item",
+        "count",
+        "blueprint_id",
+        "origin",
+        "blocks",
+        "clear_existing",
+        "command",
+        "message",
+        "text",
+        "attachments"
+      ],
       "properties": {
-        "type": { "type": "string", "const": "give_item" },
-        "player": { "type": ["string", "null"] },
-        "item": {
+        "type": {
           "type": "string",
-          "pattern": "^minecraft:[a-z0-9_./-]+$"
+          "enum": [
+            "give_item",
+            "place_blocks",
+            "run_command",
+            "chat",
+            "scan_nearby_and_plan"
+          ]
         },
-        "count": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "placeBlocksAction": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "blueprint_id", "origin", "blocks", "clear_existing"],
-      "properties": {
-        "type": { "type": "string", "const": "place_blocks" },
-        "blueprint_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 96 },
-        "origin": { "$ref": "#/$defs/origin" },
+        "player": { "type": ["string", "null"] },
+        "item": { "type": ["string", "null"] },
+        "count": { "type": ["integer", "null"] },
+        "blueprint_id": { "type": ["string", "null"] },
+        "origin": { "$ref": "#/$defs/nullableOrigin" },
         "blocks": {
           "type": "array",
-          "minItems": 1,
           "items": { "$ref": "#/$defs/block" }
         },
-        "clear_existing": { "type": "boolean" }
-      }
-    },
-    "runCommandAction": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "command"],
-      "properties": {
-        "type": { "type": "string", "const": "run_command" },
-        "command": { "type": "string", "minLength": 1, "maxLength": 160 }
-      }
-    },
-    "chatAction": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "message"],
-      "properties": {
-        "type": { "type": "string", "const": "chat" },
-        "message": { "type": "string", "minLength": 1, "maxLength": 300 }
-      }
-    },
-    "scanNearbyAndPlanAction": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["type", "text", "attachments"],
-      "properties": {
-        "type": { "type": "string", "const": "scan_nearby_and_plan" },
-        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "clear_existing": { "type": ["boolean", "null"] },
+        "command": { "type": ["string", "null"] },
+        "message": { "type": ["string", "null"] },
+        "text": { "type": ["string", "null"] },
         "attachments": {
           "type": "array",
           "items": { "$ref": "#/$defs/attachment" }
         }
       }
     },
-    "action": {
-      "anyOf": [
-        { "$ref": "#/$defs/giveItemAction" },
-        { "$ref": "#/$defs/placeBlocksAction" },
-        { "$ref": "#/$defs/runCommandAction" },
-        { "$ref": "#/$defs/chatAction" },
-        { "$ref": "#/$defs/scanNearbyAndPlanAction" }
-      ]
-    },
     "sitePlan": {
-      "type": "object",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["origin", "clear_existing", "pre_clear_blocks", "pre_foundation_blocks", "rationale"],
       "properties": {
-        "origin": {
-          "anyOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/origin" }
-          ]
-        },
+        "origin": { "$ref": "#/$defs/nullableOrigin" },
         "clear_existing": { "type": ["boolean", "null"] },
         "pre_clear_blocks": {
           "type": "array",
@@ -279,7 +225,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/block" }
         },
-        "rationale": { "type": ["string", "null"], "maxLength": 400 }
+        "rationale": { "type": ["string", "null"] }
       }
     }
   },
@@ -287,23 +233,12 @@
   "additionalProperties": false,
   "required": ["reply", "summary", "blueprint", "site_plan", "actions"],
   "properties": {
-    "reply": { "type": "string", "minLength": 1, "maxLength": 500 },
-    "summary": { "type": "string", "minLength": 1, "maxLength": 80 },
-    "blueprint": {
-      "anyOf": [
-        { "type": "null" },
-        { "$ref": "#/$defs/blueprint" }
-      ]
-    },
-    "site_plan": {
-      "anyOf": [
-        { "type": "null" },
-        { "$ref": "#/$defs/sitePlan" }
-      ]
-    },
+    "reply": { "type": "string" },
+    "summary": { "type": "string" },
+    "blueprint": { "$ref": "#/$defs/blueprint" },
+    "site_plan": { "$ref": "#/$defs/sitePlan" },
     "actions": {
       "type": "array",
-      "minItems": 0,
       "items": { "$ref": "#/$defs/action" }
     }
   }
