@@ -126,6 +126,10 @@ final class BlockwrightConfigScreen extends Screen {
     private BlockwrightConfig readConfigFromFields() {
         BlockwrightConfig next = new BlockwrightConfig();
         next.controllerUrl = controllerUrlField.getText();
+        next.autoStartController = config.autoStartController;
+        next.controllerLaunchCommand = config.controllerLaunchCommand;
+        next.controllerWorkingDirectory = config.controllerWorkingDirectory;
+        next.controllerStartupTimeoutSeconds = config.controllerStartupTimeoutSeconds;
         next.sharedToken = sharedTokenField.getText();
         next.serverId = serverIdField.getText();
         next.connectTimeoutSeconds = config.connectTimeoutSeconds;

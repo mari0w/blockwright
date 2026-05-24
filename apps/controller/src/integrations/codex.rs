@@ -47,13 +47,46 @@ impl CodexResponseSchema {
         }
     }
 
-    fn path(self) -> PathBuf {
-        let file_name = match self {
+    fn file_name(self) -> &'static str {
+        match self {
             CodexResponseSchema::Plan => "plan.schema.json",
-        };
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        }
+    }
+
+    fn packaged_content(self) -> &'static str {
+        match self {
+            CodexResponseSchema::Plan => include_str!("../../schemas/plan.schema.json"),
+        }
+    }
+
+    fn path(self) -> PathBuf {
+        let source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("schemas")
-            .join(file_name)
+            .join(self.file_name());
+        if source_path.exists() {
+            return source_path;
+        }
+
+        let runtime_dir = std::env::var_os("BLOCKWRIGHT_SCHEMA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("blockwright-controller-schemas"));
+        if let Err(error) = std::fs::create_dir_all(&runtime_dir) {
+            tracing::warn!(
+                path = %runtime_dir.display(),
+                "failed to create runtime schema directory: {error}"
+            );
+            return source_path;
+        }
+
+        let runtime_path = runtime_dir.join(self.file_name());
+        if let Err(error) = std::fs::write(&runtime_path, self.packaged_content()) {
+            tracing::warn!(
+                path = %runtime_path.display(),
+                "failed to write packaged runtime schema: {error}"
+            );
+            return source_path;
+        }
+        runtime_path
     }
 }
 

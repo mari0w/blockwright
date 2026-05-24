@@ -58,7 +58,37 @@ mods/
 ./scripts/install-hmcl-mod.sh
 ```
 
-这个脚本每次执行都会重新编译 Fabric 模组，并自动识别当前正在运行的 Minecraft `--gameDir`，覆盖安装到目标 `mods/` 目录。目标目录里之前已经有 Blockwright jar 时，也会先删除旧的 `blockwright-fabric-*.jar`，再放入本次新编译出来的 jar。
+这个脚本每次执行都会先编译 Rust controller，把当前平台的 controller 二进制打进 Fabric 模组 jar，再自动识别当前正在运行的 Minecraft `--gameDir`，覆盖安装到目标 `mods/` 目录。目标目录里之前已经有 Blockwright jar 时，也会先删除旧的 `blockwright-fabric-*.jar`，再放入本次新编译出来的单 jar。
+
+如果是面向玩家公开分发，不应该只打当前平台，而应该生成多平台 controller bundle 后打成一个 universal jar：
+
+```bash
+./scripts/build-hmcl-mod.sh --all-platforms
+```
+
+这个 universal jar 可以同时携带：
+
+```text
+macos-aarch64
+macos-x86_64
+linux-aarch64
+linux-x86_64
+windows-x86_64
+```
+
+游戏启动时，模组会根据当前系统和 CPU 架构自动选择匹配的 controller。多平台构建需要当前机器或 CI 已安装对应 Rust target 和 linker；如果已经有各平台预编译二进制，也可以整理成下面的目录后打包：
+
+```text
+target/blockwright-controller-bundle/<平台>/blockwright-controller(.exe)
+```
+
+然后执行：
+
+```bash
+./scripts/build-hmcl-mod.sh --controller-bundle-dir target/blockwright-controller-bundle
+```
+
+仓库里的 `Universal Fabric Mod` GitHub Actions 手动工作流也会按这个结构打包：macOS、Linux、Windows runner 先分别编译各自平台的 controller，最后合并成一个 `blockwright-fabric-universal` artifact。
 
 在项目根目录直接执行下面这个命令即可，它等价于自动识别目录后执行 `./scripts/install-hmcl-mod.sh auto`：
 
@@ -78,9 +108,23 @@ make HMCL_DIR=<HMCL当前游戏目录>
 ./scripts/install-hmcl-mod.sh ~/.minecraft
 ```
 
-## 启动 controller
+生成出来的 `blockwright-fabric-*.jar` 已经内置 controller。之后启动带 Blockwright 模组的游戏时，模组会先检查：
 
-在项目目录执行：
+```text
+http://127.0.0.1:8765/health
+```
+
+如果 controller 已经在运行，就直接复用；如果没有运行，就从 jar 内释放 controller 到游戏目录并自动启动 Web 服务。controller 的输出会同步写到 Minecraft 启动日志/终端，里面会直接显示本机、局域网和 HTTPS Web 地址；完整日志也会写到：
+
+```text
+.minecraft/logs/blockwright-controller.log
+```
+
+也就是说，日常使用只需要启动 HMCL/Fabric 游戏，不需要再单独开终端执行 `./scripts/run-web.sh`。
+
+## 手动启动 controller
+
+如果只想单独调试 Web 端，仍然可以在项目目录手动执行：
 
 ```bash
 cargo run -p blockwright-controller
@@ -107,8 +151,11 @@ Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 ```text
 /bw 给我一把钻石剑
 /bw 帮我盖一个木屋
+/bw web
 /bw reload
 ```
+
+`/bw web` 会在游戏聊天里输出本机 Web 地址和当前机器的局域网 Web 地址，找不到 Minecraft 启动终端日志时可以直接用它查询。
 
 ## 建筑怎么执行
 
@@ -153,6 +200,10 @@ data/builds/
 ```json
 {
   "controllerUrl": "http://127.0.0.1:8765",
+  "autoStartController": true,
+  "controllerLaunchCommand": "",
+  "controllerWorkingDirectory": "",
+  "controllerStartupTimeoutSeconds": 120,
   "serverId": "hmcl-lan",
   "sharedToken": "local-dev-token",
   "connectTimeoutSeconds": 5,
@@ -168,6 +219,8 @@ data/builds/
 ```
 
 正常本机使用不用改。只有 controller 地址或 token 改了才需要改。
+
+`autoStartController` 默认是 `true`。如果你要完全手动管理 controller，可以改成 `false` 后重启游戏。`controllerLaunchCommand` 和 `controllerWorkingDirectory` 只给特殊安装方式使用；正常安装时，模组会优先使用 jar 内置的 controller。
 
 日常配置入口统一放在 controller 的 `/web` 页面，点右上角设置图标保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
 

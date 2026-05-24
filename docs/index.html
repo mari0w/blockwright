@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright - Minecraft AI 建筑助手</title>
+  <meta name="description" content="Blockwright 是一个本地优先的 Minecraft AI 助手，使用 Rust controller、MCP 工具、蓝图记录和 Fabric/Paper 执行端完成可校验建造。">
+  <meta property="og:title" content="Blockwright - Minecraft AI 建筑助手">
+  <meta property="og:description" content="本地优先的 Minecraft AI 助手：HMCL/Fabric 优先，Rust controller 编排，MCP 工具读取真实世界状态，执行端逐块校验。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mari0w.github.io/blockwright/">
+  <meta property="og:image" content="assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --bg-soft: #111713;
+      --panel: #18201c;
+      --panel-2: #222923;
+      --text: #f3f6f0;
+      --muted: #b8c4bc;
+      --line: #354239;
+      --green: #3cc77a;
+      --green-strong: #22a861;
+      --amber: #e7b15d;
+      --blue: #6aa8f4;
+      --ink: #08100b;
+      --max: 1120px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(53, 66, 57, 0.72);
+      background: rgba(11, 14, 12, 0.86);
+      backdrop-filter: blur(18px);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: min(100% - 40px, var(--max));
+      min-height: 64px;
+      margin: 0 auto;
+      gap: 24px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .brand-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(60, 199, 122, 0.14);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-links a:hover,
+    .nav-links a:focus-visible {
+      color: var(--text);
+    }
+
+    .hero {
+      position: relative;
+      min-height: 78svh;
+      overflow: hidden;
+      background-image:
+        linear-gradient(90deg, rgba(11, 14, 12, 0.98) 0%, rgba(11, 14, 12, 0.82) 36%, rgba(11, 14, 12, 0.34) 100%),
+        linear-gradient(0deg, rgba(11, 14, 12, 1) 0%, rgba(11, 14, 12, 0.2) 35%, rgba(11, 14, 12, 0) 100%),
+        url("assets/web-settings-preview.png");
+      background-size: cover;
+      background-position: center top;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 160px;
+      background: linear-gradient(0deg, var(--bg), rgba(11, 14, 12, 0));
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(100% - 40px, var(--max));
+      min-height: 78svh;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      padding: 72px 0 96px;
+    }
+
+    .hero-copy {
+      width: min(680px, 100%);
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--green);
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 64px;
+      line-height: 1.05;
+      letter-spacing: 0;
+      text-shadow: 0 20px 36px rgba(0, 0, 0, 0.44);
+    }
+
+    .lead {
+      max-width: 640px;
+      margin: 24px 0 0;
+      color: #d2ddd5;
+      font-size: 21px;
+      line-height: 1.7;
+      text-shadow: 0 12px 30px rgba(0, 0, 0, 0.48);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 800;
+      background: rgba(24, 32, 28, 0.72);
+    }
+
+    .button.primary {
+      border-color: var(--green);
+      background: var(--green);
+      color: var(--ink);
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      transform: translateY(-1px);
+      outline: none;
+      border-color: var(--amber);
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(10, 14, 12, 0.62);
+      color: #d8e2db;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .band {
+      padding: 72px 0;
+      background: var(--bg);
+    }
+
+    .band.alt {
+      background: var(--bg-soft);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section {
+      width: min(100% - 40px, var(--max));
+      margin: 0 auto;
+    }
+
+    .section-head {
+      max-width: 760px;
+      margin-bottom: 32px;
+    }
+
+    .section-kicker {
+      margin: 0 0 10px;
+      color: var(--amber);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .section-copy {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .feature,
+    .step,
+    .config-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 22px;
+    }
+
+    .feature-mark {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 18px;
+      border-radius: 7px;
+      background: var(--green);
+    }
+
+    .feature:nth-child(2) .feature-mark,
+    .feature:nth-child(5) .feature-mark {
+      background: var(--amber);
+    }
+
+    .feature:nth-child(3) .feature-mark {
+      background: var(--blue);
+    }
+
+    .feature h3,
+    .step h3,
+    .config-item h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    .feature p,
+    .step p,
+    .config-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      counter-reset: steps;
+    }
+
+    .step {
+      counter-increment: steps;
+      background: var(--panel-2);
+    }
+
+    .step::before {
+      content: counter(steps);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      margin-bottom: 18px;
+      border-radius: 7px;
+      background: var(--amber);
+      color: var(--ink);
+      font-weight: 900;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #101511;
+      color: #e8f1ea;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .architecture img {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101411;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .config-item strong {
+      color: var(--text);
+    }
+
+    .site-footer {
+      border-top: 1px solid var(--line);
+      background: #090c0a;
+      color: var(--muted);
+      padding: 30px 0;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: min(100% - 40px, var(--max));
+      margin: 0 auto;
+      gap: 18px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 920px) {
+      .nav {
+        width: min(100% - 28px, var(--max));
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero,
+      .hero-inner {
+        min-height: 74svh;
+      }
+
+      h1 {
+        font-size: 46px;
+      }
+
+      .lead {
+        font-size: 18px;
+      }
+
+      .feature-grid,
+      .steps,
+      .config-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .hero {
+        min-height: 72svh;
+        background-position: center top;
+      }
+
+      .hero-inner {
+        width: min(100% - 28px, var(--max));
+        min-height: 72svh;
+        padding: 52px 0 76px;
+      }
+
+      h1 {
+        font-size: 38px;
+      }
+
+      h2 {
+        font-size: 28px;
+      }
+
+      .band {
+        padding: 52px 0;
+      }
+
+      .section {
+        width: min(100% - 28px, var(--max));
+      }
+
+      .feature-grid,
+      .steps,
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .button {
+        width: 100%;
+      }
+
+      .footer-inner {
+        width: min(100% - 28px, var(--max));
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="Blockwright 首页">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span>Blockwright</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">能力</a>
+        <a href="#start">使用</a>
+        <a href="#architecture">架构</a>
+        <a href="#github">GitHub 配置</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">HMCL / Fabric 优先，本地 controller 编排</p>
+          <h1 id="hero-title">Blockwright</h1>
+          <p class="lead">本地优先的 Minecraft AI 建筑助手。玩家用 `/bw` 提需求，controller 调用 Codex 与 MCP 工具读真实世界状态，再让 Fabric/Paper 执行端通过服务端世界 API 放置并逐块校验。</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/mari0w/blockwright#readme">阅读 README</a>
+            <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/HMCL_FABRIC_INSTALL.md">安装 Fabric 模组</a>
+            <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/GITHUB_PAGES.md">配置 GitHub Pages</a>
+          </div>
+          <div class="badges" aria-label="项目关键特性">
+            <span class="badge">Rust controller</span>
+            <span class="badge">MCP tools</span>
+            <span class="badge">Verified blueprints</span>
+            <span class="badge">Fabric first</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="band">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker">核心能力</p>
+          <h2>不是聊天文案伪装成建造，而是保存记录、下发动作、校验世界结果。</h2>
+          <p class="section-copy">Blockwright 把 AI 规划留在 controller，把真正读取和修改 Minecraft 世界的动作留给 Fabric/Paper 执行端，方便本地世界先跑通闭环。</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-mark" aria-hidden="true"></div>
+            <h3>游戏内自然语言</h3>
+            <p>玩家用 `/bw 给我一把钻石剑`、`/bw 帮我盖一个木屋` 直接发起请求。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-mark" aria-hidden="true"></div>
+            <h3>真实世界读取</h3>
+            <p>玩家状态、物品栏、附近方块、蓝图和构建记录通过 MCP 工具读取。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-mark" aria-hidden="true"></div>
+            <h3>蓝图相对坐标</h3>
+            <p>蓝图里保存相对坐标和方块状态，执行时才叠加玩家或任务原点。</p>
+          </article>
+          <article class="feature">
+            <div class="feature-mark" aria-hidden="true"></div>
+            <h3>逐块校验</h3>
+            <p>执行端放置后读取世界状态，报告与构建记录一致才算成功。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" class="band alt">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker">快速使用</p>
+          <h2>本地 HMCL/Fabric 世界是主安装路径。</h2>
+          <p class="section-copy">先启动 controller 的 Web 端，再安装 Fabric 模组。Paper 插件保留给独立 Paper 服务端场景。</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <h3>启动 Web 端</h3>
+            <p>在仓库根目录运行 <code>./scripts/run-web.sh</code>，默认打开 <code>http://127.0.0.1:8765/web</code>。</p>
+          </article>
+          <article class="step">
+            <h3>安装 Fabric 模组</h3>
+            <p>运行 <code>make</code> 自动构建并安装到 HMCL 当前游戏目录，也可以用 <code>make HMCL_DIR=...</code> 指定。</p>
+          </article>
+          <article class="step">
+            <h3>游戏内发送需求</h3>
+            <p>进入世界后使用 <code>/bw</code>，例如建木屋、发物品、修改已有建筑；配置入口统一在 Web 设置页。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture" class="band">
+      <div class="section architecture">
+        <div class="section-head">
+          <p class="section-kicker">架构</p>
+          <h2>controller 负责任务与工具语义，Minecraft 插件负责事实读取和世界修改。</h2>
+          <p class="section-copy">这个边界让仓库适合后续扩展聊天工具、图片转蓝图、已有建筑改造和更多 MCP 查询工具。</p>
+        </div>
+        <img src="assets/architecture-flow.svg" alt="Blockwright 架构流程图">
+      </div>
+    </section>
+
+    <section id="github" class="band alt">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker">GitHub 配置</p>
+          <h2>官网、README 和社交预览图已经按 GitHub Pages 的仓库展示方式拆好。</h2>
+          <p class="section-copy">GitHub Pages 选择 <code>main /docs</code> 发布；About 区域填写项目简介、Website 和 topics；Social preview 建议使用仓库里的预览图。</p>
+        </div>
+        <div class="config-grid">
+          <article class="config-item">
+            <h3>Pages Source</h3>
+            <p><strong>Deploy from a branch</strong>，Branch 选 <strong>main</strong>，Folder 选 <strong>/docs</strong>。</p>
+          </article>
+          <article class="config-item">
+            <h3>Website URL</h3>
+            <p>发布完成后把 <code>https://mari0w.github.io/blockwright/</code> 写入仓库 About。</p>
+          </article>
+          <article class="config-item">
+            <h3>README</h3>
+            <p>README 保留开发者快速开始、Fabric 安装、API 示例和测试命令，官网负责公开介绍。</p>
+          </article>
+          <article class="config-item">
+            <h3>Social Preview</h3>
+            <p>上传 <code>docs/assets/social-preview.png</code>，让 GitHub 分享卡片统一展示 Blockwright 品牌。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>Blockwright - local-first Minecraft AI assistant</span>
+      <span>Fabric first. Verified builds. MCP tools.</span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 if [[ ! -f .env && -f .env.example ]]; then
   cp .env.example .env
-  echo "已从 .env.example 创建本地 .env。真实密钥只写 .env，不要提交。"
+  echo "Created local .env from .env.example. Put real secrets only in .env and do not commit them."
 fi
 
 export SERVER_NAME="${SERVER_NAME:-local}"
@@ -25,14 +25,14 @@ fi
 
 https_flag="$(printf '%s' "${HTTPS_ENABLED:-}" | tr '[:upper:]' '[:lower:]')"
 
-echo "启动 Blockwright Web..."
-echo "HTTP 默认地址：http://127.0.0.1:${http_port}/web"
+echo "Starting Blockwright Web..."
+echo "Default HTTP address: http://127.0.0.1:${http_port}/web"
 if [[ "$https_flag" == "false" || "$https_flag" == "0" || "$https_flag" == "no" || "$https_flag" == "off" ]]; then
-  echo "HTTPS 已按环境变量关闭。"
+  echo "HTTPS is disabled by environment variable."
 else
-  echo "手机语音 HTTPS 默认地址：https://127.0.0.1:${https_port}/web"
+  echo "Default mobile voice HTTPS address: https://127.0.0.1:${https_port}/web"
 fi
-echo "临时换端口示例：PORT=18765 ./scripts/run-web.sh"
-echo "临时查看 HTTP 轮询细节：RUST_LOG=info,tower_http=debug ./scripts/run-web.sh"
+echo "Temporary port example: PORT=18765 ./scripts/run-web.sh"
+echo "Temporary HTTP polling debug example: RUST_LOG=info,tower_http=debug ./scripts/run-web.sh"
 
 exec cargo run -p blockwright-controller -- serve

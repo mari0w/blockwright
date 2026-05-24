@@ -108,13 +108,13 @@ async fn download_https_ca_certificate(
     let source = tokio::fs::read_to_string(&path).await.map_err(|error| {
         (
             StatusCode::NOT_FOUND,
-            format!("HTTPS 根证书还没有生成，请先重启 controller：{error}"),
+            format!("The HTTPS root certificate has not been generated yet. Restart the controller and try again: {error}"),
         )
     })?;
     let certificate = https::certificate_der_from_pem(&source).map_err(|error| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("HTTPS 根证书格式不正确，请重启 controller 后重试：{error}"),
+            format!("The HTTPS root certificate is invalid. Restart the controller and try again: {error}"),
         )
     })?;
     Ok((
@@ -136,12 +136,15 @@ async fn handle_web_message(
 ) -> Result<Json<WebChatResponse>, (StatusCode, String)> {
     let username = request.username.trim();
     if username.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "请先填写用户名。".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Enter your username first.".to_string(),
+        ));
     }
     if request.images.len() > MAX_IMAGES_PER_MESSAGE {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("一次最多上传 {MAX_IMAGES_PER_MESSAGE} 张图片。"),
+            format!("You can upload up to {MAX_IMAGES_PER_MESSAGE} images at once."),
         ));
     }
 
@@ -183,13 +186,13 @@ async fn handle_web_translate(
     if text.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "没有识别到可翻译的语音文字。".to_string(),
+            "No translatable voice text was detected.".to_string(),
         ));
     }
     if text.chars().count() > MAX_TRANSLATION_CHARS {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("语音文字太长，最多支持 {MAX_TRANSLATION_CHARS} 个字符。"),
+            format!("Voice text is too long. The limit is {MAX_TRANSLATION_CHARS} characters."),
         ));
     }
 
@@ -211,20 +214,20 @@ async fn handle_web_translate(
             tracing::warn!(error = %error, "web voice translation failed");
             (
                 StatusCode::BAD_GATEWAY,
-                "Codex 翻译失败，请稍后重试。".to_string(),
+                "Codex translation failed. Try again later.".to_string(),
             )
         })?
         .ok_or_else(|| {
             (
                 StatusCode::BAD_GATEWAY,
-                "Codex 未返回翻译结果。".to_string(),
+                "Codex did not return a translation.".to_string(),
             )
         })?;
     let translated_text = clean_translation_output(&translated);
     if translated_text.is_empty() {
         return Err((
             StatusCode::BAD_GATEWAY,
-            "Codex 返回的翻译结果为空。".to_string(),
+            "Codex returned an empty translation.".to_string(),
         ));
     }
 
@@ -342,7 +345,7 @@ fn web_job_status_response(
             },
             None => WebJobStatusResponse {
                 phase: "unknown".to_string(),
-                message: "暂时查不到这次操作的状态。".to_string(),
+                message: "This operation status is not available yet.".to_string(),
                 summary,
                 build_status,
                 result_message,
@@ -353,10 +356,10 @@ fn web_job_status_response(
 
 fn status_message(phase: JobQueuePhase) -> String {
     let message = match phase {
-        JobQueuePhase::Pending => "我已经准备好操作，正在等 Minecraft 接手。",
-        JobQueuePhase::Claimed => "Minecraft 正在处理这次操作。",
-        JobQueuePhase::Succeeded => "Minecraft 已经完成这次操作。",
-        JobQueuePhase::Failed => "Minecraft 这次没有完成执行，请查看具体原因。",
+        JobQueuePhase::Pending => "The operation is ready and waiting for Minecraft.",
+        JobQueuePhase::Claimed => "Minecraft is processing this operation.",
+        JobQueuePhase::Succeeded => "Minecraft completed this operation.",
+        JobQueuePhase::Failed => "Minecraft did not complete this operation. Check the details.",
     };
     message.to_string()
 }
@@ -365,6 +368,12 @@ fn clean_user_status_detail(message: String) -> Option<String> {
     let value = message.trim();
     if value.is_empty() || value.eq_ignore_ascii_case("ok") || value == "成功" {
         return None;
+    }
+    if let Some(player) = value
+        .strip_prefix("找不到玩家：")
+        .or_else(|| value.strip_prefix("找不到玩家:"))
+    {
+        return Some(format!("Player not found: {}", player.trim()));
     }
     Some(value.to_string())
 }
@@ -433,9 +442,9 @@ mod tests {
     fn empty_web_text_with_image_defaults_to_recreation_request() {
         let text = normalized_web_text("   ", true);
 
-        assert!(text.contains("复刻"));
-        assert!(text.contains("外形"));
-        assert!(text.contains("比例"));
+        assert!(text.contains("Recreate this image"));
+        assert!(text.contains("shape"));
+        assert!(text.contains("proportions"));
         assert!(!text.contains("参考这张图片帮我设计"));
     }
 
@@ -456,41 +465,41 @@ fn normalize_translation_language(
     match value.trim() {
         "" | "original" => Ok(TranslationLanguage {
             code: "original",
-            label: "原文",
+            label: "original text",
         }),
         "zh" | "zh-CN" | "中文" => Ok(TranslationLanguage {
             code: "zh-CN",
-            label: "中文",
+            label: "Chinese",
         }),
         "en" | "en-US" | "English" => Ok(TranslationLanguage {
             code: "en",
-            label: "英文",
+            label: "English",
         }),
         "pt" | "pt-BR" | "Português" => Ok(TranslationLanguage {
             code: "pt-BR",
-            label: "巴西葡萄牙语",
+            label: "Brazilian Portuguese",
         }),
         "hi" | "hi-IN" | "Hindi" => Ok(TranslationLanguage {
             code: "hi-IN",
-            label: "印地语",
+            label: "Hindi",
         }),
         "es" | "es-ES" | "Spanish" => Ok(TranslationLanguage {
             code: "es",
-            label: "西班牙语",
+            label: "Spanish",
         }),
         _ => Err((
             StatusCode::BAD_REQUEST,
-            "不支持这个翻译目标语言。".to_string(),
+            "This translation target language is not supported.".to_string(),
         )),
     }
 }
 
 fn build_translation_prompt(text: &str, target_language: &str) -> String {
     format!(
-        r#"你是 Blockwright 网页语音输入的翻译器。
-把 <speech_text> 里的语音识别文字翻译成{target_language}。
-只输出翻译后的文本，不要解释，不要加引号，不要 Markdown。
-如果原文已经是目标语言，只做必要的错别字和口语整理。
+        r#"You are the translator for Blockwright web voice input.
+Translate the speech recognition text in <speech_text> into {target_language}.
+Only output the translated text. Do not explain, add quotes, or use Markdown.
+If the original text is already in the target language, only clean up obvious typos and spoken-language roughness.
 
 <speech_text>
 {text}
@@ -532,7 +541,7 @@ async fn save_uploaded_images(
         tracing::error!(error = %error, path = %upload_dir.display(), "failed to create web upload dir");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "图片上传目录创建失败。".to_string(),
+            "Failed to create the image upload directory.".to_string(),
         )
     })?;
 
@@ -541,7 +550,10 @@ async fn save_uploaded_images(
         if decoded.bytes.len() > MAX_IMAGE_BYTES {
             return Err((
                 StatusCode::BAD_REQUEST,
-                format!("单张图片不能超过 {}MB。", MAX_IMAGE_BYTES / 1024 / 1024),
+                format!(
+                    "Each image must be {}MB or smaller.",
+                    MAX_IMAGE_BYTES / 1024 / 1024
+                ),
             ));
         }
         let mime_type = image
@@ -558,7 +570,7 @@ async fn save_uploaded_images(
                 tracing::error!(error = %error, path = %path.display(), "failed to save web upload");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "图片保存失败。".to_string(),
+                    "Failed to save the image.".to_string(),
                 )
             })?;
 
@@ -582,25 +594,34 @@ struct DecodedImage {
 
 fn decode_image_data_url(data_url: &str) -> Result<DecodedImage, (StatusCode, String)> {
     let Some((header, payload)) = data_url.split_once(',') else {
-        return Err((StatusCode::BAD_REQUEST, "图片数据格式不正确。".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "The image data format is invalid.".to_string(),
+        ));
     };
     let Some(meta) = header.strip_prefix("data:") else {
-        return Err((StatusCode::BAD_REQUEST, "图片数据格式不正确。".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "The image data format is invalid.".to_string(),
+        ));
     };
     let Some((mime_type, encoding)) = meta.split_once(';') else {
-        return Err((StatusCode::BAD_REQUEST, "图片数据格式不正确。".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "The image data format is invalid.".to_string(),
+        ));
     };
     if !mime_type.starts_with("image/") || encoding != "base64" {
         return Err((
             StatusCode::BAD_REQUEST,
-            "只支持 base64 图片上传。".to_string(),
+            "Only base64 image uploads are supported.".to_string(),
         ));
     }
 
     let bytes = general_purpose::STANDARD.decode(payload).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
-            "图片 base64 内容无法解析。".to_string(),
+            "The image base64 content could not be decoded.".to_string(),
         )
     })?;
 
@@ -616,9 +637,9 @@ fn normalized_web_text(text: &str, has_image: bool) -> String {
         return text.to_string();
     }
     if has_image {
-        "按这张图片复刻一个 Minecraft 建筑，尽量保持外形、比例、材质分区和关键细节。".to_string()
+        "Recreate this image as a Minecraft build. Keep the shape, proportions, material areas, and key details as much as possible.".to_string()
     } else {
-        "你好".to_string()
+        "Hello".to_string()
     }
 }
 

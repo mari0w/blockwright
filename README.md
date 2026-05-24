@@ -2,9 +2,13 @@
 
 [English](README.en.md) | 简体中文
 
+项目官网源文件：[docs/index.html](docs/index.html)；GitHub Pages 配置说明：[docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md)。
+
 Blockwright 是一个本地优先的 Minecraft AI 助手。它把聊天入口、MCP 工具、蓝图管理、任务队列和构建记录放在外部 controller，把真正读取和修改 Minecraft 世界的动作留在 Fabric/Paper 执行端。
 
 项目当前面向 HMCL、Fabric 单人存档和局域网开放世界优先设计。Paper 插件保留给独立服务端场景。
+
+![Blockwright Web 配置页](docs/assets/web-settings-preview.png)
 
 ## 核心能力
 
@@ -32,6 +36,24 @@ Blockwright 处于早期可运行阶段，已经具备本地 controller、Fabric
 - 直接暴露到公网且无需额外鉴权的生产服务。
 - 大规模公共服务器自动建造。
 - 把真实聊天工具 token、webhook 或 client secret 提交到仓库。
+
+## 官网与 GitHub Pages
+
+仓库已经准备好一个可直接发布的静态官网：
+
+```text
+docs/index.html
+```
+
+GitHub Pages 推荐在仓库设置里选择：
+
+```text
+Source: Deploy from a branch
+Branch: main
+Folder: /docs
+```
+
+发布完成后，把生成的 Pages URL 填到 GitHub 仓库 About 的 Website 字段。仓库社交预览图建议使用 [docs/assets/social-preview.png](docs/assets/social-preview.png)，具体配置清单见 [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md)。
 
 ## 架构
 
@@ -143,13 +165,27 @@ curl http://127.0.0.1:8765/health
 make
 ```
 
-这个命令会构建 Fabric 模组，自动识别当前正在运行的 Minecraft `--gameDir`，删除目标 `mods/` 目录里的旧 `blockwright-fabric-*.jar`，再安装新 jar。如果 HMCL 没有运行，会优先尝试 `/Applications/.minecraft`，再退回 `~/.minecraft`。如果要手动指定目录：
+这个命令会先编译 Rust controller，再把当前平台的 controller 二进制打进 Fabric 模组 jar，最后自动识别当前正在运行的 Minecraft `--gameDir`，删除目标 `mods/` 目录里的旧 `blockwright-fabric-*.jar`，再安装新的单 jar。如果 HMCL 没有运行，会优先尝试 `/Applications/.minecraft`，再退回 `~/.minecraft`。如果要手动指定目录：
 
 ```bash
 make HMCL_DIR=<HMCL当前游戏目录>
 ```
 
-然后启动 controller，进入原来的单人存档，正常“开放到局域网”。房主机器安装 Blockwright 模组并运行 controller 即可；加入局域网的其他玩家不需要单独安装 Blockwright，前提是当前只使用原版方块、物品和服务端命令能力。
+之后启动带 Blockwright 模组的游戏时，模组会先检查 `http://127.0.0.1:8765/health`，如果 controller 没有运行，就从 jar 内释放并启动 Web 服务，并在 Minecraft 启动日志/终端里输出 Web 地址；不需要再单独开终端跑 `./scripts/run-web.sh`。房主机器安装 Blockwright 模组即可；加入局域网的其他玩家不需要单独安装 Blockwright，前提是当前只使用原版方块、物品和服务端命令能力。
+
+面向公开分发时应该构建多平台 controller bundle，再打成一个 universal jar：
+
+```bash
+./scripts/build-hmcl-mod.sh --all-platforms
+```
+
+这个 universal jar 会同时携带 `macos-aarch64`、`macos-x86_64`、`linux-aarch64`、`linux-x86_64` 和 `windows-x86_64` 的 controller；游戏启动时按当前系统自动选择。多平台构建需要本机或 CI 准备好对应 Rust target 和 linker。如果已经有各平台预编译产物，也可以按 `target/blockwright-controller-bundle/<平台>/blockwright-controller(.exe)` 的目录结构整理后执行：
+
+```bash
+./scripts/build-hmcl-mod.sh --controller-bundle-dir target/blockwright-controller-bundle
+```
+
+仓库也提供 GitHub Actions 手动工作流 `Universal Fabric Mod`：各平台 runner 分别编译本机 controller，最后合并上传 `blockwright-fabric-universal` artifact。GitHub 官方托管 runner 当前支持 `ubuntu-24.04-arm` 和 `macos-14` 这类 arm64 标签，适合做这类多平台打包。
 
 详细安装步骤见 [docs/user/HMCL_FABRIC_INSTALL.md](docs/user/HMCL_FABRIC_INSTALL.md)。
 
@@ -160,10 +196,11 @@ make HMCL_DIR=<HMCL当前游戏目录>
 /bw 帮我盖一个木屋
 /bw 把我面前这个房子的窗户换成蓝色玻璃
 /bw reload
+/bw web
 /bw config
 ```
 
-配置入口统一放在 controller 的 Web 端，打开 `/web` 后点右上角设置图标保存 Element/Matrix 接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
+配置入口统一放在 controller 的 Web 端，打开 `/web` 后点右上角设置图标保存 Element/Matrix 接入；游戏内 `/bw web` 会显示本机和局域网 Web 地址，`/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
 
 第一次调用 Codex CLI 或本地模型处理复杂请求时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
 

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 620" role="img" aria-labelledby="title desc">
+  <title id="title">Blockwright architecture flow</title>
+  <desc id="desc">玩家和聊天工具进入 Rust controller, controller 调用 Codex CLI 与 MCP 工具, 再把任务下发给 Fabric 或 Paper 执行端。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101411"/>
+      <stop offset="0.55" stop-color="#171b18"/>
+      <stop offset="1" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#43d282"/>
+      <stop offset="1" stop-color="#1aa861"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f2c878"/>
+      <stop offset="1" stop-color="#d58b34"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7bb7ff"/>
+      <stop offset="1" stop-color="#3f7fdb"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2 L10 6 L2 10 Z" fill="#8b9890"/>
+    </marker>
+    <style>
+      .label{font:700 28px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f3f6f0;letter-spacing:0}
+      .sub{font:500 17px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#b8c3bb;letter-spacing:0}
+      .tiny{font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0a100c;letter-spacing:0}
+      .panel{fill:#1a201d;stroke:#344039;stroke-width:2}
+      .line{fill:none;stroke:#8b9890;stroke-width:4;stroke-linecap:round;marker-end:url(#arrow)}
+      .line2{fill:none;stroke:#607b6d;stroke-width:3;stroke-linecap:round;stroke-dasharray:9 10;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1180" height="620" rx="0" fill="url(#bg)"/>
+  <path d="M0 478 C180 426 292 506 430 464 C606 410 729 349 924 397 C1058 430 1122 409 1180 376 L1180 620 L0 620 Z" fill="#111813"/>
+  <g opacity="0.42">
+    <rect x="54" y="454" width="38" height="38" fill="#24382d"/>
+    <rect x="92" y="454" width="38" height="38" fill="#2f5c3e"/>
+    <rect x="130" y="454" width="38" height="38" fill="#24382d"/>
+    <rect x="92" y="416" width="38" height="38" fill="#4f8d54"/>
+    <rect x="952" y="442" width="42" height="42" fill="#59432a"/>
+    <rect x="994" y="442" width="42" height="42" fill="#6b5834"/>
+    <rect x="1036" y="442" width="42" height="42" fill="#59432a"/>
+    <rect x="994" y="400" width="42" height="42" fill="#8a6b3a"/>
+  </g>
+  <text x="54" y="78" class="label">Blockwright 执行闭环</text>
+  <text x="54" y="111" class="sub">聊天入口、AI 规划、蓝图记录和 Minecraft 世界执行分层协作</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="60" y="175" width="210" height="124" rx="8" class="panel"/>
+    <rect x="84" y="201" width="52" height="52" rx="6" fill="url(#green)"/>
+    <text x="150" y="222" class="label" font-size="23">玩家</text>
+    <text x="150" y="252" class="sub">/bw 游戏内命令</text>
+
+    <rect x="60" y="340" width="210" height="124" rx="8" class="panel"/>
+    <rect x="84" y="366" width="52" height="52" rx="6" fill="url(#blue)"/>
+    <text x="150" y="387" class="label" font-size="23">聊天工具</text>
+    <text x="150" y="417" class="sub">polling / stream</text>
+
+    <rect x="398" y="220" width="285" height="194" rx="8" class="panel"/>
+    <rect x="428" y="252" width="64" height="64" rx="7" fill="url(#amber)"/>
+    <text x="514" y="278" class="label" font-size="25">Rust controller</text>
+    <text x="514" y="313" class="sub">API / 队列 / 蓝图 / 构建记录</text>
+    <text x="430" y="359" class="sub">先保存记录，再下发同一份方块清单</text>
+
+    <rect x="803" y="132" width="260" height="116" rx="8" class="panel"/>
+    <rect x="832" y="158" width="52" height="52" rx="6" fill="url(#blue)"/>
+    <text x="900" y="181" class="label" font-size="23">Codex CLI</text>
+    <text x="900" y="211" class="sub">AI 助手与 skills</text>
+
+    <rect x="803" y="282" width="260" height="116" rx="8" class="panel"/>
+    <rect x="832" y="308" width="52" height="52" rx="6" fill="url(#green)"/>
+    <text x="900" y="331" class="label" font-size="23">MCP 工具</text>
+    <text x="900" y="361" class="sub">玩家状态 / 扫描 / 蓝图</text>
+
+    <rect x="803" y="432" width="260" height="116" rx="8" class="panel"/>
+    <rect x="832" y="458" width="52" height="52" rx="6" fill="url(#amber)"/>
+    <text x="900" y="481" class="label" font-size="23">Fabric / Paper</text>
+    <text x="900" y="511" class="sub">世界 API 放置并校验</text>
+  </g>
+
+  <path class="line" d="M270 237 C326 237 342 260 398 278"/>
+  <path class="line" d="M270 402 C326 402 342 374 398 355"/>
+  <path class="line2" d="M683 282 C733 248 757 206 803 190"/>
+  <path class="line2" d="M683 330 C733 336 757 339 803 340"/>
+  <path class="line" d="M683 378 C734 431 756 487 803 490"/>
+  <path class="line2" d="M803 520 C673 582 499 560 430 414"/>
+
+  <g transform="translate(66 526)">
+    <rect width="176" height="34" rx="7" fill="#43d282"/>
+    <text x="18" y="23" class="tiny">相对坐标蓝图</text>
+    <rect x="198" width="176" height="34" rx="7" fill="#f2c878"/>
+    <text x="216" y="23" class="tiny">逐块校验报告</text>
+    <rect x="396" width="206" height="34" rx="7" fill="#7bb7ff"/>
+    <text x="414" y="23" class="tiny">真实密钥只放本地配置</text>
+  </g>
+</svg>

@@ -135,7 +135,7 @@ async fn save_matrix_local_config(
     if token.is_empty() && !env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV) {
         return Err((
             StatusCode::BAD_REQUEST,
-            "Matrix access token 不能为空；如果已经配置过，保存时可以留空表示保留。".to_string(),
+            "Matrix access token is required. If a token is already configured, leave this field blank to keep it.".to_string(),
         ));
     }
 
@@ -155,12 +155,11 @@ async fn save_matrix_local_config(
     Ok(Json(MatrixLocalConfigResponse {
         ok: true,
         message: if poller_started {
-            "Matrix/Element 本地配置已保存，并已启动 polling。".to_string()
+            "Matrix/Element local configuration was saved and polling has started.".to_string()
         } else if request.enabled {
-            "Matrix/Element 本地配置已保存；如果已有轮询在运行，新配置会在下次重启服务后生效。"
-                .to_string()
+            "Matrix/Element local configuration was saved. If polling is already running, the new configuration takes effect after the next controller restart.".to_string()
         } else {
-            "Matrix/Element 本地配置已保存，当前为禁用状态。".to_string()
+            "Matrix/Element local configuration was saved and is currently disabled.".to_string()
         },
         tool_name: MATRIX_LOCAL_TOOL_NAME.to_string(),
         config_path: state.config.chat.config_path.display().to_string(),
@@ -400,7 +399,7 @@ fn matrix_tool_from_request(
     if homeserver_url.is_empty() || allowed_sender.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "homeserver_url 和 allowed_sender 不能为空。".to_string(),
+            "homeserver_url and allowed_sender are required.".to_string(),
         ));
     }
     if contains_line_break(homeserver_url)
@@ -409,7 +408,7 @@ fn matrix_tool_from_request(
     {
         return Err((
             StatusCode::BAD_REQUEST,
-            "Matrix 配置值不能包含换行。".to_string(),
+            "Matrix configuration values cannot contain line breaks.".to_string(),
         ));
     }
 

@@ -1,0 +1,105 @@
+name: Universal Fabric Mod
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  controller:
+    name: Controller ${{ matrix.classifier }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - classifier: macos-aarch64
+            os: macos-14
+            binary: blockwright-controller
+          - classifier: macos-x86_64
+            os: macos-13
+            binary: blockwright-controller
+          - classifier: linux-aarch64
+            os: ubuntu-24.04-arm
+            binary: blockwright-controller
+          - classifier: linux-x86_64
+            os: ubuntu-latest
+            binary: blockwright-controller
+          - classifier: windows-x86_64
+            os: windows-latest
+            binary: blockwright-controller.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build controller
+        run: cargo build -p blockwright-controller --release
+
+      - name: Stage controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "artifact/${{ matrix.classifier }}"
+          cp "target/release/${{ matrix.binary }}" "artifact/${{ matrix.classifier }}/${{ matrix.binary }}"
+
+      - name: Upload controller
+        uses: actions/upload-artifact@v4
+        with:
+          name: controller-${{ matrix.classifier }}
+          path: artifact/${{ matrix.classifier }}/${{ matrix.binary }}
+          if-no-files-found: error
+
+  universal-jar:
+    name: Package universal Fabric jar
+    needs: controller
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.12"
+
+      - name: Download controllers
+        uses: actions/download-artifact@v4
+        with:
+          path: target/controller-artifacts
+          pattern: controller-*
+
+      - name: Assemble controller bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf target/blockwright-controller-bundle
+          mkdir -p target/blockwright-controller-bundle
+          for artifact_dir in target/controller-artifacts/controller-*; do
+            classifier="$(basename "$artifact_dir" | sed 's/^controller-//')"
+            mkdir -p "target/blockwright-controller-bundle/$classifier"
+            cp "$artifact_dir"/* "target/blockwright-controller-bundle/$classifier/"
+          done
+          find target/blockwright-controller-bundle -maxdepth 2 -type f | sort
+
+      - name: Build universal Fabric jar
+        working-directory: plugins/fabric
+        run: gradle remapJar --no-daemon -PblockwrightControllerBundleDir="$GITHUB_WORKSPACE/target/blockwright-controller-bundle"
+
+      - name: Upload universal Fabric jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: blockwright-fabric-universal
+          path: plugins/fabric/build/libs/blockwright-fabric-*.jar
+          if-no-files-found: error

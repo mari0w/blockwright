@@ -32,14 +32,24 @@ public final class BlockwrightFabricMod implements ModInitializer {
 
     private static BlockwrightConfig config;
     private static JobPoller jobPoller;
+    private static Path gameDir;
 
     @Override
     public void onInitialize() {
+        gameDir = FabricLoader.getInstance().getGameDir();
         reloadConfig();
+        ControllerProcessManager.ensureStartedAsync(config, gameDir);
+        Runtime.getRuntime().addShutdownHook(new Thread(
+                ControllerProcessManager::stopIfLaunched,
+                "blockwright-controller-shutdown"));
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 CommandManager.literal("bw")
                         .then(CommandManager.literal("reload").executes(context -> reload(context.getSource())))
                         .then(CommandManager.literal("config").executes(context -> configHint(context.getSource())))
+                        .then(CommandManager.literal("web").executes(context -> webAddress(context.getSource())))
+                        .then(CommandManager.literal("url").executes(context -> webAddress(context.getSource())))
+                        .then(CommandManager.literal("address").executes(context -> webAddress(context.getSource())))
+                        .then(CommandManager.literal("lan").executes(context -> webAddress(context.getSource())))
                         .then(CommandManager.literal("ask")
                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
                                         .executes(context -> runChat(
@@ -65,12 +75,29 @@ public final class BlockwrightFabricMod implements ModInitializer {
     }
 
     private static int configHint(ServerCommandSource source) {
-        source.sendFeedback(() -> Text.literal("Blockwright 配置已迁移到 Web 端，请打开 controller 的 /web 页面配置。"), false);
+        String message = config.autoStartController
+                ? "Blockwright Web 会随模组自动启动，请打开 " + config.controllerUrl + "/web 配置；也可以用 /bw web 查看局域网地址。"
+                : "Blockwright Web 自动启动已关闭，请先手动启动 controller，再打开 "
+                        + config.controllerUrl
+                        + "/web 配置；也可以用 /bw web 查看局域网地址。";
+        source.sendFeedback(
+                () -> Text.literal(message),
+                false);
+        return 1;
+    }
+
+    private static int webAddress(ServerCommandSource source) {
+        ControllerProcessManager.ensureStartedAsync(config, gameDir);
+        for (String message : ControllerProcessManager.webAddressMessages(config.controllerUrl)) {
+            String line = message;
+            source.sendFeedback(() -> Text.literal(line), false);
+        }
         return 1;
     }
 
     private static int reload(ServerCommandSource source) {
         reloadConfig();
+        ControllerProcessManager.ensureStartedAsync(config, gameDir);
         source.sendFeedback(() -> Text.literal("Blockwright 配置已重新加载。"), false);
         return 1;
     }

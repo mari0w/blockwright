@@ -147,7 +147,7 @@ cat > "$prompt_file"
 if [[ -z "$last_message" ]]; then
   exit 2
 fi
-if ! grep -q "Blockwright 网页语音输入的翻译器" "$prompt_file" && [[ -z "$schema" ]]; then
+if ! grep -q "translator for Blockwright web voice input" "$prompt_file" && [[ -z "$schema" ]]; then
   schema="plan.schema.json"
 fi
 case "$schema" in
@@ -309,7 +309,7 @@ JSON
     fi
     ;;
   "")
-    if grep -q "Blockwright 网页语音输入的翻译器" "$prompt_file"; then
+    if grep -q "translator for Blockwright web voice input" "$prompt_file"; then
       cat > "$last_message" <<'TEXT'
 帮我建一个小木屋
 TEXT
@@ -391,6 +391,7 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         .unwrap();
     assert_eq!(page_response.status(), StatusCode::OK);
     let page_body = response_text(page_response).await;
+    assert!(page_body.contains("<html lang=\"en\">"));
     assert!(page_body.contains("voiceHold"));
     assert!(page_body.contains("id=\"voiceCancelZone\""));
     assert!(page_body.contains("上滑到这里取消"));
@@ -407,10 +408,17 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("viewport-fit=cover"));
     assert!(page_body.contains("手机语音需要 HTTPS 地址"));
     assert!(page_body.contains("id=\"languageToggle\""));
+    assert!(page_body.contains("id=\"languageEnglish\""));
+    assert!(page_body.contains("id=\"languageChinese\""));
+    assert!(page_body.contains("Choose the language used by this browser"));
+    assert!(page_body.contains("return 'en';"));
     assert!(page_body.contains("bw.language"));
+    assert!(page_body.contains("Switch to Chinese"));
     assert!(page_body.contains("Switch to English"));
     assert!(page_body.contains("Open settings"));
     assert!(page_body.contains("Enter your Minecraft username"));
+    assert!(page_body.contains("title=\"Voice input\""));
+    assert!(page_body.contains("Describe what to build or change."));
     assert!(page_body.contains("function applyLanguage"));
     assert!(page_body.contains("function setLanguage"));
     assert!(page_body.contains("id=\"cameraImage\""));
@@ -425,7 +433,7 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains(
         "grid-template-columns: var(--composer-control-height) minmax(0, 1fr) var(--composer-control-height)"
     ));
-    assert!(page_body.contains(">相册</span>"));
+    assert!(page_body.contains(">Photos</span>"));
     assert!(page_body.contains("id=\"voiceToggleKeyboard\""));
     assert!(page_body.contains(".icon-button svg[hidden]"));
     assert!(page_body.contains("rows=\"1\" wrap=\"off\""));
@@ -434,13 +442,16 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("toggle-icon-hidden"));
     assert!(page_body.contains("Minecraft 用户名"));
     assert!(page_body.contains("id=\"usernameGate\""));
+    assert!(page_body.contains(">Enter chat</button>"));
     assert!(page_body.contains("进入聊天"));
     assert!(page_body.contains("function showUsernameGate"));
     assert!(page_body.contains("class=\"brand-mark\""));
-    assert!(page_body.contains("aria-label=\"打开设置\""));
+    assert!(page_body.contains("aria-label=\"Open settings\""));
     assert!(page_body.contains("M21 4h-7"));
     assert!(page_body.contains("id=\"configPage\""));
+    assert!(page_body.contains("Request microphone permission"));
     assert!(page_body.contains("申请麦克风权限"));
+    assert!(page_body.contains("Mobile HTTPS"));
     assert!(page_body.contains("手机 HTTPS"));
     assert!(page_body.contains("/web/blockwright-local-root-ca.cer"));
     assert!(page_body.contains("下载 Blockwright 本地根证书文件"));
@@ -452,6 +463,7 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("已下载描述文件"));
     assert!(page_body.contains("证书信任设置"));
     assert!(page_body.contains("id=\"httpsGuide\""));
+    assert!(page_body.contains("HTTPS setup steps"));
     assert!(page_body.contains("HTTPS 设置步骤"));
     assert!(page_body.contains("我已安装证书"));
     assert!(page_body.contains("我已信任证书"));
@@ -469,6 +481,7 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
         "clearComposer();\n        const uploads = await Promise.all(currentImages.map((entry) => readImage(entry.file)));"
     ));
     assert!(page_body.contains("function setAddPanel"));
+    assert!(page_body.contains("Sent to Minecraft and waiting for execution"));
     assert!(page_body.contains("操作已交给 Minecraft"));
     assert!(!page_body.contains("我已经准备好方案，正在等 Minecraft 接手"));
     assert!(page_body.contains("切换到文字输入"));
@@ -945,7 +958,10 @@ async fn web_job_status_reports_queue_claim_and_result() {
         .unwrap();
     let queued_body = response_json(queued_response).await;
     assert_eq!(queued_body["phase"], "queued");
-    assert!(queued_body["message"].as_str().unwrap().contains("接手"));
+    assert!(queued_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("waiting for Minecraft"));
 
     let next_response = app
         .clone()
@@ -978,7 +994,7 @@ async fn web_job_status_reports_queue_claim_and_result() {
     assert!(running_body["message"]
         .as_str()
         .unwrap()
-        .contains("正在处理"));
+        .contains("processing this operation"));
 
     let result_response = app
         .clone()
@@ -1059,7 +1075,10 @@ async fn web_item_job_status_does_not_blame_player_wording() {
         .unwrap();
     let queued_body = response_json(queued_response).await;
     assert_eq!(queued_body["phase"], "queued");
-    assert!(queued_body["message"].as_str().unwrap().contains("接手"));
+    assert!(queued_body["message"]
+        .as_str()
+        .unwrap()
+        .contains("waiting for Minecraft"));
 
     let next_response = app
         .clone()
@@ -1089,7 +1108,7 @@ async fn web_item_job_status_does_not_blame_player_wording() {
     assert!(running_body["message"]
         .as_str()
         .unwrap()
-        .contains("正在处理"));
+        .contains("processing this operation"));
 
     let result_response = app
         .clone()
@@ -1118,11 +1137,11 @@ async fn web_item_job_status_does_not_blame_player_wording() {
     let failed_body = response_json(failed_response).await;
     let failed_message = failed_body["message"].as_str().unwrap();
     assert_eq!(failed_body["phase"], "failed");
-    assert!(failed_message.contains("没有完成执行"));
+    assert!(failed_message.contains("did not complete"));
     assert!(!failed_message.contains("发物品失败"));
     assert!(!failed_message.contains("放到世界"));
     assert!(!failed_message.contains("调整说法"));
-    assert_eq!(failed_body["result_message"], "找不到玩家：Steve");
+    assert_eq!(failed_body["result_message"], "Player not found: Steve");
 }
 
 #[tokio::test]

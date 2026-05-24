@@ -12,6 +12,10 @@ public final class BlockwrightConfig {
     private static final int MAX_REQUEST_TIMEOUT_SECONDS = 30 * 60;
 
     public String controllerUrl = "http://127.0.0.1:8765";
+    public boolean autoStartController = true;
+    public String controllerLaunchCommand = "";
+    public String controllerWorkingDirectory = "";
+    public int controllerStartupTimeoutSeconds = 120;
     public String serverId = "hmcl-lan";
     public String sharedToken = "local-dev-token";
     public int connectTimeoutSeconds = 5;
@@ -59,6 +63,17 @@ public final class BlockwrightConfig {
 
     private void normalize() {
         controllerUrl = ControllerPaths.trimTrailingSlash(controllerUrl);
+        if (controllerLaunchCommand == null) {
+            controllerLaunchCommand = "";
+        } else {
+            controllerLaunchCommand = controllerLaunchCommand.trim();
+        }
+        if (controllerWorkingDirectory == null) {
+            controllerWorkingDirectory = "";
+        } else {
+            controllerWorkingDirectory = controllerWorkingDirectory.trim();
+        }
+        controllerStartupTimeoutSeconds = normalizeBounded(controllerStartupTimeoutSeconds, 5, 600);
         if (serverId == null || serverId.isBlank()) {
             serverId = "hmcl-lan";
         }

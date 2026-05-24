@@ -2,9 +2,13 @@
 
 English | [简体中文](README.md)
 
+Website source: [docs/index.html](docs/index.html). GitHub Pages setup notes: [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md).
+
 Blockwright is a local-first Minecraft AI assistant. It keeps chat adapters, MCP tools, blueprint management, task queues, and build records in an external controller, while Fabric and Paper plugins read and modify the Minecraft world through server APIs.
 
 The project is currently optimized for HMCL, Fabric single-player worlds, and LAN-opened worlds. The Paper plugin is kept for standalone Paper server deployments.
+
+![Blockwright web settings page](docs/assets/web-settings-preview.png)
 
 ## Core Features
 
@@ -32,6 +36,24 @@ Not recommended yet:
 - Exposing the controller directly to the public internet without additional authentication.
 - Large public servers with unrestricted automatic building.
 - Committing real chat tool tokens, webhooks, client secrets, or other credentials.
+
+## Website and GitHub Pages
+
+The repository now includes a static project website:
+
+```text
+docs/index.html
+```
+
+Recommended GitHub Pages settings:
+
+```text
+Source: Deploy from a branch
+Branch: main
+Folder: /docs
+```
+
+After GitHub publishes the site, put the generated Pages URL in the repository About Website field. Use [docs/assets/social-preview.png](docs/assets/social-preview.png) as the repository social preview image. See [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md) for the full setup checklist.
 
 ## Architecture
 
@@ -116,13 +138,29 @@ Fabric is the default installation path for HMCL, single-player, and LAN-opened 
 make
 ```
 
-This builds the Fabric mod, detects the current Minecraft `--gameDir` when possible, removes old `blockwright-fabric-*.jar` files from `mods/`, and installs the new jar. If HMCL is not running, it tries `/Applications/.minecraft` first, then `~/.minecraft`.
+This builds the Rust controller first, packages the current platform's controller binary into the Fabric mod jar, detects the current Minecraft `--gameDir` when possible, removes old `blockwright-fabric-*.jar` files from `mods/`, and installs the new single jar. If HMCL is not running, it tries `/Applications/.minecraft` first, then `~/.minecraft`.
 
 Specify a game directory manually:
 
 ```bash
 make HMCL_DIR=<current HMCL game directory>
 ```
+
+On later game starts, the Fabric mod checks `http://127.0.0.1:8765/health`. If the controller is not already running, the mod extracts the packaged controller from the jar, starts the web service, and prints the Web URL in the Minecraft startup log/terminal. A separate terminal for `./scripts/run-web.sh` is no longer required.
+
+For public distribution, build a multi-platform controller bundle and package it into one universal jar:
+
+```bash
+./scripts/build-hmcl-mod.sh --all-platforms
+```
+
+The universal jar can carry `macos-aarch64`, `macos-x86_64`, `linux-aarch64`, `linux-x86_64`, and `windows-x86_64` controllers. The mod selects the matching controller at game startup. Multi-platform builds require the matching Rust targets and linkers locally or in CI. If prebuilt binaries are already available, arrange them as `target/blockwright-controller-bundle/<platform>/blockwright-controller(.exe)` and run:
+
+```bash
+./scripts/build-hmcl-mod.sh --controller-bundle-dir target/blockwright-controller-bundle
+```
+
+The repository also includes a manual GitHub Actions workflow named `Universal Fabric Mod`: each platform runner builds its native controller, then a final job merges the binaries and uploads a `blockwright-fabric-universal` artifact.
 
 See [docs/user/HMCL_FABRIC_INSTALL.md](docs/user/HMCL_FABRIC_INSTALL.md) for the full installation guide.
 
@@ -133,10 +171,11 @@ See [docs/user/HMCL_FABRIC_INSTALL.md](docs/user/HMCL_FABRIC_INSTALL.md) for the
 /bw build me a wooden cabin
 /bw replace the windows of this house with blue glass
 /bw reload
+/bw web
 /bw config
 ```
 
-Settings live in the controller web UI. `/bw config` only points users to the web settings page.
+Settings live in the controller web UI. `/bw web` prints local and LAN web addresses, and `/bw config` points users to the web settings page.
 
 ## API Examples
 

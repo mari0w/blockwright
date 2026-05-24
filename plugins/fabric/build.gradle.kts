@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.charles"
-version = "0.1.9"
+version = "0.1.11"
 
 repositories {
     maven("https://maven.fabricmc.net/")
@@ -15,6 +15,9 @@ val minecraftVersion = property("minecraft_version").toString()
 val yarnMappings = property("yarn_mappings").toString()
 val loaderVersion = property("loader_version").toString()
 val fabricVersion = property("fabric_version").toString()
+val blockwrightControllerBinary = providers.gradleProperty("blockwrightControllerBinary")
+val blockwrightControllerClassifier = providers.gradleProperty("blockwrightControllerClassifier")
+val blockwrightControllerBundleDir = providers.gradleProperty("blockwrightControllerBundleDir")
 
 dependencies {
     minecraft("com.mojang:minecraft:$minecraftVersion")
@@ -45,6 +48,32 @@ tasks.processResources {
     inputs.property("version", project.version)
     filesMatching("fabric.mod.json") {
         expand("version" to project.version)
+    }
+
+    val controllerBundlePath = blockwrightControllerBundleDir.orNull
+    if (!controllerBundlePath.isNullOrBlank()) {
+        val controllerBundle = file(controllerBundlePath)
+        inputs.dir(controllerBundle)
+        from(controllerBundle) {
+            into("blockwright/controller")
+        }
+    } else if (!blockwrightControllerBinary.orNull.isNullOrBlank()
+        && !blockwrightControllerClassifier.orNull.isNullOrBlank()
+    ) {
+        val controllerBinaryPath = blockwrightControllerBinary.get()
+        val controllerClassifier = blockwrightControllerClassifier.get()
+        inputs.file(controllerBinaryPath)
+        inputs.property("blockwrightControllerClassifier", controllerClassifier)
+        from(controllerBinaryPath) {
+            into("blockwright/controller/$controllerClassifier")
+            rename {
+                if (controllerClassifier.startsWith("windows-")) {
+                    "blockwright-controller.exe"
+                } else {
+                    "blockwright-controller"
+                }
+            }
+        }
     }
 }
 

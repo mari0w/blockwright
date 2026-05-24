@@ -64,7 +64,9 @@ async fn maybe_spawn_https_server(
     lan_ip: Option<Ipv4Addr>,
 ) {
     if env_flag_disabled("HTTPS_ENABLED") {
-        print_access_line("Blockwright HTTPS 已禁用；手机语音需要 HTTPS 才能使用".to_string());
+        print_access_line(
+            "Blockwright HTTPS is disabled. Mobile voice input requires HTTPS.".to_string(),
+        );
         return;
     }
     let https_port = std::env::var("HTTPS_PORT")
@@ -76,7 +78,7 @@ async fn maybe_spawn_https_server(
         Ok(assets) => assets,
         Err(error) => {
             print_access_line(format!(
-                "Blockwright HTTPS 证书生成失败：{error}；手机语音需要 HTTPS 才能使用"
+                "Blockwright HTTPS certificate generation failed: {error}. Mobile voice input requires HTTPS."
             ));
             return;
         }
@@ -85,7 +87,7 @@ async fn maybe_spawn_https_server(
         Ok(config) => config,
         Err(error) => {
             print_access_line(format!(
-                "Blockwright HTTPS 证书加载失败：{error}；手机语音需要 HTTPS 才能使用"
+                "Blockwright HTTPS certificate loading failed: {error}. Mobile voice input requires HTTPS."
             ));
             return;
         }
@@ -94,7 +96,7 @@ async fn maybe_spawn_https_server(
         Ok(listener) => listener,
         Err(error) => {
             print_access_line(format!(
-                "Blockwright HTTPS 监听失败：{bind_addr}（{error}）；手机语音需要 HTTPS 才能使用"
+                "Blockwright HTTPS bind failed on {bind_addr} ({error}). Mobile voice input requires HTTPS."
             ));
             return;
         }
@@ -108,25 +110,28 @@ async fn maybe_spawn_https_server(
     tokio::spawn(async move {
         let listener = https_server::TlsListener::new(listener, config);
         if let Err(error) = axum::serve(listener, app::build_app(https_state)).await {
-            tracing::warn!("Blockwright HTTPS 服务退出：{error}");
+            tracing::warn!("Blockwright HTTPS server exited: {error}");
         }
     });
 }
 
 fn log_access_urls(host: &str, port: u16, lan_ip: Option<Ipv4Addr>) {
-    print_access_line(format!("Blockwright 本机访问：http://127.0.0.1:{port}/web"));
+    print_access_line(format!(
+        "Blockwright local access: http://127.0.0.1:{port}/web"
+    ));
     match lan_ip {
         Some(ip) if lan_accessible_host(host) => {
-            print_access_line(format!("Blockwright 局域网访问：http://{ip}:{port}/web"));
+            print_access_line(format!("Blockwright LAN access: http://{ip}:{port}/web"));
         }
         Some(ip) => {
             print_access_line(format!(
-                "Blockwright 当前只监听 {host}:{port}，局域网地址 http://{ip}:{port}/web 可能无法访问；需要把 HOST 设为 0.0.0.0"
+                "Blockwright is only listening on {host}:{port}. The LAN address http://{ip}:{port}/web may be unavailable; set HOST=0.0.0.0 to expose it."
             ));
         }
         None => {
             print_access_line(
-                "Blockwright 未检测到局域网 IPv4 地址，只展示本机访问地址".to_string(),
+                "Blockwright did not detect a LAN IPv4 address; only local access is shown."
+                    .to_string(),
             );
         }
     }
@@ -140,35 +145,36 @@ fn log_https_access_urls(
     ca_cert_path: &Path,
 ) {
     print_access_line(format!(
-        "Blockwright 本机 HTTPS：https://127.0.0.1:{https_port}/web"
+        "Blockwright local HTTPS: https://127.0.0.1:{https_port}/web"
     ));
     print_access_line(format!(
-        "Blockwright 本机证书下载：{}",
+        "Blockwright local certificate download: {}",
         ca_certificate_download_url("127.0.0.1", http_port)
     ));
     match lan_ip {
         Some(ip) if lan_accessible_host(host) => {
             print_access_line(format!(
-                "Blockwright 手机 HTTPS：https://{ip}:{https_port}/web"
+                "Blockwright mobile HTTPS: https://{ip}:{https_port}/web"
             ));
             print_access_line(format!(
-                "Blockwright 手机证书下载：{}",
+                "Blockwright mobile certificate download: {}",
                 ca_certificate_download_url(&ip.to_string(), http_port)
             ));
         }
         Some(ip) => {
             print_access_line(format!(
-                "Blockwright 当前只监听 {host}:{https_port}，局域网 HTTPS https://{ip}:{https_port}/web 可能无法访问；需要把 HOST 设为 0.0.0.0"
+                "Blockwright is only listening on {host}:{https_port}. The LAN HTTPS address https://{ip}:{https_port}/web may be unavailable; set HOST=0.0.0.0 to expose it."
             ));
         }
         None => {
             print_access_line(
-                "Blockwright 未检测到局域网 IPv4 地址，只展示本机 HTTPS 地址".to_string(),
+                "Blockwright did not detect a LAN IPv4 address; only local HTTPS is shown."
+                    .to_string(),
             );
         }
     }
     print_access_line(format!(
-        "Blockwright 自签根证书文件：{}；手机访问 HTTPS 前需要先安装并信任这个证书",
+        "Blockwright self-signed root certificate: {}. Install and trust it before using HTTPS from a phone.",
         ca_cert_path.display()
     ));
 }

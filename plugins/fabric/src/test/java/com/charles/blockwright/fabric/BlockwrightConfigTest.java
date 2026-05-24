@@ -15,6 +15,10 @@ final class BlockwrightConfigTest {
         BlockwrightConfig config = BlockwrightConfig.load(path);
 
         assertEquals("http://127.0.0.1:8765", config.controllerUrl);
+        assertTrue(config.autoStartController);
+        assertEquals("", config.controllerLaunchCommand);
+        assertEquals("", config.controllerWorkingDirectory);
+        assertEquals(120, config.controllerStartupTimeoutSeconds);
         assertEquals("hmcl-lan", config.serverId);
         assertEquals(5, config.connectTimeoutSeconds);
         assertEquals(1800, config.requestTimeoutSeconds);
@@ -41,6 +45,9 @@ final class BlockwrightConfigTest {
         Files.writeString(path, """
                 {
                   "controllerUrl": "http://127.0.0.1:8765/",
+                  "controllerLaunchCommand": null,
+                  "controllerWorkingDirectory": null,
+                  "controllerStartupTimeoutSeconds": 1,
                   "serverId": "",
                   "sharedToken": null,
                   "connectTimeoutSeconds": 0,
@@ -60,6 +67,9 @@ final class BlockwrightConfigTest {
         BlockwrightConfig config = BlockwrightConfig.load(path);
 
         assertEquals("http://127.0.0.1:8765", config.controllerUrl);
+        assertEquals("", config.controllerLaunchCommand);
+        assertEquals("", config.controllerWorkingDirectory);
+        assertEquals(5, config.controllerStartupTimeoutSeconds);
         assertEquals("hmcl-lan", config.serverId);
         assertEquals("", config.sharedToken);
         assertEquals(1, config.connectTimeoutSeconds);

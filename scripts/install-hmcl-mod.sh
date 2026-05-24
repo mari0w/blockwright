@@ -85,6 +85,10 @@ install -m 0644 "$JAR_PATH" "$MODS_DIR/"
 echo "已安装 Blockwright Fabric 模组到："
 echo "$MODS_DIR/$(basename "$JAR_PATH")"
 
+echo
+echo "这个 jar 已内置 Blockwright controller。"
+echo "之后启动带 Blockwright 模组的 HMCL/Fabric 游戏时，会自动释放并启动 controller Web 服务。"
+
 if ! find "$MODS_DIR" -maxdepth 1 -type f -iname 'fabric-api*.jar' | grep -q .; then
   echo
   echo "注意：没有在 mods/ 目录里发现 Fabric API。"

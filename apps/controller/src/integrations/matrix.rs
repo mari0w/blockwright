@@ -99,7 +99,7 @@ async fn run_matrix_poller(state: AppState, tool: ChatToolConfig) {
                     homeserver = %homeserver_url,
                     access_token_env = %matrix.access_token_env,
                     error = %error,
-                    "Matrix 已启用，但 access token 无效；请在 Web 设置里重新配置或关闭 Matrix"
+                    "Matrix is enabled, but the access token is invalid. Reconfigure it in Web settings or disable Matrix."
                 );
             } else {
                 tracing::warn!(

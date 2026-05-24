@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -712,6 +712,33 @@
       width: auto;
       margin: 0;
     }
+    .language-choice {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+    .language-choice-button {
+      min-width: 0;
+      padding: 9px 10px;
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .language-choice-button:hover,
+    .language-choice-button:focus-visible {
+      border-color: rgba(232, 177, 90, .5);
+      outline: none;
+    }
+    .language-choice-button[aria-pressed="true"] {
+      border-color: var(--accent-strong);
+      background: var(--accent-strong);
+      color: #06100a;
+    }
     .config-actions {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -998,15 +1025,15 @@
     <main>
       <div class="brand-mark" aria-label="Blockwright">Blockwright</div>
       <header class="topbar">
-        <button id="languageToggle" class="icon-button language-toggle" type="button" title="Switch to English" aria-label="Switch to English">
+        <button id="languageToggle" class="icon-button language-toggle" type="button" title="Switch to Chinese" aria-label="Switch to Chinese">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M2 12h20"></path>
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"></path>
           </svg>
-          <span id="languageToggleLabel" aria-hidden="true">EN</span>
+          <span id="languageToggleLabel" aria-hidden="true">中</span>
         </button>
-        <button id="configOpen" class="icon-button config-open" type="button" title="打开设置" aria-label="打开设置" data-i18n-title="openSettings" data-i18n-aria-label="openSettings">
+        <button id="configOpen" class="icon-button config-open" type="button" title="Open settings" aria-label="Open settings" data-i18n-title="openSettings" data-i18n-aria-label="openSettings">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 4h-7"></path>
             <path d="M10 4H3"></path>
@@ -1026,7 +1053,7 @@
           <div id="preview" class="preview" hidden></div>
           <div id="status" class="status"></div>
           <div class="composer-actions">
-            <button id="voiceToggle" class="icon-button voice-toggle" type="button" title="语音输入" aria-label="语音输入">
+            <button id="voiceToggle" class="icon-button voice-toggle" type="button" title="Voice input" aria-label="Voice input">
               <svg id="voiceToggleMic" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -1041,14 +1068,14 @@
                 <path d="M7 14h10"></path>
               </svg>
             </button>
-            <textarea id="text" rows="1" wrap="off" placeholder="说你想建什么、改什么。" data-i18n-placeholder="composerPlaceholder"></textarea>
+            <textarea id="text" rows="1" wrap="off" placeholder="Describe what to build or change." data-i18n-placeholder="composerPlaceholder"></textarea>
             <div id="voicePanel" class="voice-panel" hidden>
               <div id="voiceCancelZone" class="voice-cancel-zone" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                   <path d="M18 6 6 18"></path>
                   <path d="m6 6 12 12"></path>
                 </svg>
-                <span id="voiceCancelText">上滑到这里取消</span>
+                <span id="voiceCancelText">Slide up here to cancel</span>
               </div>
               <button id="voiceHold" class="voice-hold" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
@@ -1056,11 +1083,11 @@
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                   <path d="M12 19v3"></path>
                 </svg>
-                <span id="voiceHoldText">按住说话，松手发送</span>
+                <span id="voiceHoldText">Hold to talk, release to send</span>
               </button>
             </div>
-            <button id="send" class="send-button" type="submit" hidden data-i18n="send">发送</button>
-            <button id="addToggle" class="icon-button add-toggle" type="button" title="更多" aria-label="更多" aria-expanded="false" aria-controls="addPanel" data-i18n-title="more" data-i18n-aria-label="more">
+            <button id="send" class="send-button" type="submit" hidden data-i18n="send">Send</button>
+            <button id="addToggle" class="icon-button add-toggle" type="button" title="More" aria-label="More" aria-expanded="false" aria-controls="addPanel" data-i18n-title="more" data-i18n-aria-label="more">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M12 5v14"></path>
                 <path d="M5 12h14"></path>
@@ -1069,21 +1096,21 @@
           </div>
           <div id="addPanel" class="add-panel" hidden>
             <input id="cameraImage" class="sr-only" type="file" accept="image/*" capture="environment">
-            <label class="add-option" for="cameraImage" title="拍照" aria-label="拍照" data-i18n-title="camera" data-i18n-aria-label="camera">
+            <label class="add-option" for="cameraImage" title="Camera" aria-label="Camera" data-i18n-title="camera" data-i18n-aria-label="camera">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <path d="M14.5 4 16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3l1.5-3h5Z"></path>
                 <circle cx="12" cy="13" r="3"></circle>
               </svg>
-              <span data-i18n="camera">拍照</span>
+              <span data-i18n="camera">Camera</span>
             </label>
             <input id="libraryImages" class="sr-only" type="file" accept="image/*" multiple>
-            <label class="add-option" for="libraryImages" title="从相册选择" aria-label="从相册选择" data-i18n-title="library" data-i18n-aria-label="libraryLong">
+            <label class="add-option" for="libraryImages" title="Choose from photos" aria-label="Choose from photos" data-i18n-title="library" data-i18n-aria-label="libraryLong">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2"></rect>
                 <path d="m8 13 2.5-2.5L15 15l1.5-1.5L21 18"></path>
                 <circle cx="8" cy="9" r="1.5"></circle>
               </svg>
-              <span data-i18n="library">相册</span>
+              <span data-i18n="library">Photos</span>
             </label>
           </div>
         </div>
@@ -1093,39 +1120,47 @@
   <section id="usernameGate" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="usernameGateTitle">
     <form id="usernameGateForm" class="guide-panel">
       <div class="guide-head">
-        <h2 id="usernameGateTitle" data-i18n="usernameGateTitle">填写 Minecraft 用户名</h2>
-        <p data-i18n="usernameGateIntro">Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。</p>
+        <h2 id="usernameGateTitle" data-i18n="usernameGateTitle">Enter your Minecraft username</h2>
+        <p data-i18n="usernameGateIntro">Blockwright sends commands to this player. Use the exact username shown in Minecraft; you can change it later in settings.</p>
       </div>
       <label class="setup-field" for="usernameGateInput">
-        <span data-i18n="minecraftUsername">Minecraft 用户名</span>
-        <input id="usernameGateInput" autocomplete="username" placeholder="例如 Steve" data-i18n-placeholder="usernamePlaceholder">
+        <span data-i18n="minecraftUsername">Minecraft username</span>
+        <input id="usernameGateInput" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
       </label>
       <p id="usernameGateError" class="config-status error"></p>
-      <button id="usernameGateSubmit" type="submit" data-i18n="enterChat">进入聊天</button>
+      <button id="usernameGateSubmit" type="submit" data-i18n="enterChat">Enter chat</button>
     </form>
   </section>
   <section id="configPage" class="config-page" hidden>
     <div class="config-shell">
       <header class="config-header">
-        <button id="configBack" class="icon-button secondary-button" type="button" title="返回聊天" aria-label="返回聊天" data-i18n-title="backToChat" data-i18n-aria-label="backToChat">
+        <button id="configBack" class="icon-button secondary-button" type="button" title="Back to chat" aria-label="Back to chat" data-i18n-title="backToChat" data-i18n-aria-label="backToChat">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
             <path d="m15 18-6-6 6-6"></path>
           </svg>
         </button>
         <div class="config-title">
-          <h2 data-i18n="settings">设置</h2>
-          <p data-i18n="settingsIntro">聊天接入和浏览器权限都在这里处理。</p>
+          <h2 data-i18n="settings">Settings</h2>
+          <p data-i18n="settingsIntro">Chat integrations and browser permissions are configured here.</p>
         </div>
       </header>
       <div class="config-body">
         <form id="configForm" class="config-form">
           <section class="config-section">
-            <h3 data-i18n="player">玩家</h3>
+            <h3 data-i18n="language">Language</h3>
+            <div class="language-choice" role="group" aria-label="Language" data-i18n-aria-label="language">
+              <button id="languageEnglish" class="language-choice-button" type="button" data-language="en" data-i18n="languageEnglish">English</button>
+              <button id="languageChinese" class="language-choice-button" type="button" data-language="zh" data-i18n="languageChinese">中文</button>
+            </div>
+            <p data-i18n="languageHelp">Choose the language used by this browser. New browsers open in English by default.</p>
+          </section>
+          <section class="config-section">
+            <h3 data-i18n="player">Player</h3>
             <label for="username">
-              <span data-i18n="minecraftUsername">Minecraft 用户名</span>
-              <input id="username" autocomplete="username" placeholder="例如 Steve" data-i18n-placeholder="usernamePlaceholder">
+              <span data-i18n="minecraftUsername">Minecraft username</span>
+              <input id="username" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
             </label>
-            <p data-i18n="playerHelp">这里填游戏里的用户名，聊天和语音都会发给这个玩家。</p>
+            <p data-i18n="playerHelp">Chat and voice commands are sent to this Minecraft player.</p>
           </section>
           <section class="config-section">
             <h3>Controller</h3>
@@ -1135,53 +1170,53 @@
             </label>
           </section>
           <section class="config-section">
-            <h3 data-i18n="browserPermissions">浏览器权限</h3>
+            <h3 data-i18n="browserPermissions">Browser permissions</h3>
             <div class="permission-row">
-              <p id="permissionStatus" data-i18n="micChecking">正在检查麦克风权限...</p>
-              <button id="permissionRequest" class="secondary-button" type="button" data-i18n="requestMicPermission">申请麦克风权限</button>
+              <p id="permissionStatus" data-i18n="micChecking">Checking microphone permission...</p>
+              <button id="permissionRequest" class="secondary-button" type="button" data-i18n="requestMicPermission">Request microphone permission</button>
             </div>
             <p id="permissionHelp"></p>
           </section>
           <section class="config-section">
-            <h3 data-i18n="mobileHttps">手机 HTTPS</h3>
-            <p data-i18n="mobileHttpsIntro">controller 会自动生成本地自签根证书和局域网 HTTPS 地址。手机第一次使用前，需要先安装并信任这个根证书。</p>
-            <p><span data-i18n="httpsAddressLabel">HTTPS 地址：</span><a id="httpsAccessUrl" href="#"></a></p>
-            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer" data-i18n="downloadCaFile">下载 Blockwright 本地根证书文件</a></p>
-            <p data-i18n="iosCaHelp">iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。</p>
-            <p data-i18n="androidCaHelp">Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。</p>
-            <p data-i18n="androidCaReminder">Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。</p>
+            <h3 data-i18n="mobileHttps">Mobile HTTPS</h3>
+            <p data-i18n="mobileHttpsIntro">The controller generates a local root certificate and LAN HTTPS address. Install and trust the certificate before using voice on a phone.</p>
+            <p><span data-i18n="httpsAddressLabel">HTTPS address: </span><a id="httpsAccessUrl" href="#"></a></p>
+            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer" data-i18n="downloadCaFile">Download Blockwright local root certificate</a></p>
+            <p data-i18n="iosCaHelp">On iPhone/iPad, open the certificate link in Safari. Install the downloaded profile from Settings, then enable full trust in Certificate Trust Settings.</p>
+            <p data-i18n="androidCaHelp">On Android, saving through Files by Google or the file manager only downloads the certificate. Install it manually from Security or Privacy &gt; Encryption and credentials &gt; Install certificate &gt; CA certificate.</p>
+            <p data-i18n="androidCaReminder">Android usually will not prompt again after the file is saved. Manually install the CA certificate, then reopen the HTTPS address and request microphone permission.</p>
           </section>
           <section class="config-section">
             <h3>Element/Matrix</h3>
             <label class="config-checkbox" for="matrixEnabled">
               <input id="matrixEnabled" type="checkbox" checked>
-              <span data-i18n="matrixEnabled">启用 Element/Matrix</span>
+              <span data-i18n="matrixEnabled">Enable Element/Matrix</span>
             </label>
             <label for="matrixHomeserver">
-              <span data-i18n="matrixHomeserver">Matrix 主服务器 URL</span>
+              <span data-i18n="matrixHomeserver">Matrix homeserver URL</span>
               <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
             </label>
             <label for="matrixAccessToken">
               <span>Matrix Access Token</span>
-              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="留空表示保留已有 token" data-i18n-placeholder="matrixTokenPlaceholder">
+              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="Leave blank to keep the existing token" data-i18n-placeholder="matrixTokenPlaceholder">
             </label>
             <label for="matrixAllowedSender">
-              <span data-i18n="matrixAllowedSender">允许发指令的 Matrix 用户</span>
+              <span data-i18n="matrixAllowedSender">Matrix user allowed to send commands</span>
               <input id="matrixAllowedSender" placeholder="@user:matrix.org">
             </label>
             <label class="config-checkbox" for="matrixAllowOwn">
               <input id="matrixAllowOwn" type="checkbox" checked>
-              <span data-i18n="matrixAllowOwn">个人 token 允许处理自己发出的消息</span>
+              <span data-i18n="matrixAllowOwn">Allow a personal token to handle your own messages</span>
             </label>
             <label class="config-checkbox" for="matrixAutoJoin">
               <input id="matrixAutoJoin" type="checkbox" checked>
-              <span data-i18n="matrixAutoJoin">自动加入邀请房间</span>
+              <span data-i18n="matrixAutoJoin">Auto-join invited rooms</span>
             </label>
           </section>
           <div id="configStatus" class="config-status"></div>
           <div class="config-actions">
-            <button id="configSave" type="submit" data-i18n="saveConfig">保存配置</button>
-            <button id="configClose" class="secondary-button" type="button" data-i18n="backToChat">返回聊天</button>
+            <button id="configSave" type="submit" data-i18n="saveConfig">Save configuration</button>
+            <button id="configClose" class="secondary-button" type="button" data-i18n="backToChat">Back to chat</button>
           </div>
         </form>
       </div>
@@ -1189,17 +1224,17 @@
   </section>
   <section id="httpsGuide" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="httpsGuideTitle">
     <div class="guide-panel">
-      <button id="httpsGuideClose" class="icon-button guide-close secondary-button" type="button" title="关闭" aria-label="关闭" data-i18n-title="close" data-i18n-aria-label="close">
+      <button id="httpsGuideClose" class="icon-button guide-close secondary-button" type="button" title="Close" aria-label="Close" data-i18n-title="close" data-i18n-aria-label="close">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
           <path d="m18 6-12 12"></path>
           <path d="m6 6 12 12"></path>
         </svg>
       </button>
       <div class="guide-head">
-        <h2 id="httpsGuideTitle" data-i18n="httpsGuideTitle">手机语音需要 HTTPS</h2>
-        <p data-i18n="httpsGuideIntro">当前地址不是安全地址，手机浏览器不会开放麦克风。按下面几步处理后，再回到页面申请麦克风权限。</p>
+        <h2 id="httpsGuideTitle" data-i18n="httpsGuideTitle">Mobile voice requires HTTPS</h2>
+        <p data-i18n="httpsGuideIntro">This address is not secure, so mobile browsers will not expose the microphone. Follow these steps, then return and request permission again.</p>
       </div>
-      <ol id="httpsGuideSteps" class="guide-steps" aria-label="HTTPS 设置步骤" data-i18n-aria-label="httpsSteps"></ol>
+      <ol id="httpsGuideSteps" class="guide-steps" aria-label="HTTPS setup steps" data-i18n-aria-label="httpsSteps"></ol>
       <div class="guide-detail">
         <h3 id="httpsGuideStepTitle"></h3>
         <p id="httpsGuideStepText"></p>
@@ -1207,8 +1242,8 @@
         <button id="httpsGuidePrimaryButton" type="button"></button>
       </div>
       <div class="guide-actions">
-        <button id="httpsGuideBack" class="secondary-button" type="button" data-i18n="previousStep">上一步</button>
-        <button id="httpsGuideNext" type="button">下一步</button>
+        <button id="httpsGuideBack" class="secondary-button" type="button" data-i18n="previousStep">Previous</button>
+        <button id="httpsGuideNext" type="button">Next</button>
       </div>
     </div>
   </section>
@@ -1224,6 +1259,7 @@
     const usernameGateError = document.getElementById('usernameGateError');
     const languageToggle = document.getElementById('languageToggle');
     const languageToggleLabel = document.getElementById('languageToggleLabel');
+    const languageButtons = [...document.querySelectorAll('[data-language]')];
     const configOpen = document.getElementById('configOpen');
     const configPage = document.getElementById('configPage');
     const configBack = document.getElementById('configBack');
@@ -1276,6 +1312,10 @@
         languageName: '中文',
         languageToggleLabel: 'EN',
         languageToggleTitle: 'Switch to English',
+        language: '显示语言',
+        languageEnglish: 'English',
+        languageChinese: '中文',
+        languageHelp: '选择这个浏览器使用的页面语言。新的浏览器默认打开英文。',
         openSettings: '打开设置',
         composerPlaceholder: '说你想建什么、改什么。',
         send: '发送',
@@ -1368,6 +1408,11 @@
         imageStatusSuffix: '，图片 {count} 张',
         restoringJobStatus: '状态：正在恢复上次任务状态...',
         restoredRequestUnclear: '上次刷新时请求还没返回；如果没有继续处理，请重新发送。',
+        jobPhaseQueued: '操作已交给 Minecraft，正在等待执行',
+        jobPhaseRunning: 'Minecraft 正在处理这次操作',
+        jobPhaseSucceeded: 'Minecraft 已经完成这次操作',
+        jobPhaseFailed: 'Minecraft 这次没有完成执行，请查看具体原因',
+        jobPhaseUnknown: '暂时查不到这次操作的状态',
         requestProgressReceiving: '正在接收消息{imageHint}...',
         requestProgressImageHint: '，同时整理参考图片',
         requestProgressAi: 'AI 正在处理你的请求...',
@@ -1418,7 +1463,11 @@
       en: {
         languageName: 'English',
         languageToggleLabel: '中',
-        languageToggleTitle: '切换到中文',
+        languageToggleTitle: 'Switch to Chinese',
+        language: 'Language',
+        languageEnglish: 'English',
+        languageChinese: 'Chinese',
+        languageHelp: 'Choose the language used by this browser. New browsers open in English by default.',
         openSettings: 'Open settings',
         composerPlaceholder: 'Describe what to build or change.',
         send: 'Send',
@@ -1511,6 +1560,11 @@
         imageStatusSuffix: ', {count} images',
         restoringJobStatus: 'Status: restoring the previous job...',
         restoredRequestUnclear: 'The request had not returned before refresh. Send it again if it does not continue.',
+        jobPhaseQueued: 'Sent to Minecraft and waiting for execution',
+        jobPhaseRunning: 'Minecraft is processing this operation',
+        jobPhaseSucceeded: 'Minecraft completed this operation',
+        jobPhaseFailed: 'Minecraft did not complete this operation. Check the details',
+        jobPhaseUnknown: 'This operation status is not available yet',
         requestProgressReceiving: 'Receiving message{imageHint}...',
         requestProgressImageHint: ' and preparing reference images',
         requestProgressAi: 'AI is processing your request...',
@@ -1585,7 +1639,7 @@
       if (stored === 'zh' || stored === 'en') {
         return stored;
       }
-      return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+      return 'en';
     }
 
     function t(key, values = {}) {
@@ -1615,6 +1669,9 @@
       languageToggleLabel.textContent = t('languageToggleLabel');
       languageToggle.title = t('languageToggleTitle');
       languageToggle.setAttribute('aria-label', t('languageToggleTitle'));
+      languageButtons.forEach((button) => {
+        button.setAttribute('aria-pressed', button.dataset.language === currentLanguage ? 'true' : 'false');
+      });
       voiceHold.disabled = Boolean(voiceUnavailable) || voiceHold.disabled;
       resetVoiceHoldLabel();
       resetVoiceCancelText();
@@ -1724,6 +1781,9 @@
     });
     languageToggle.addEventListener('click', () => {
       setLanguage(currentLanguage === 'zh' ? 'en' : 'zh');
+    });
+    languageButtons.forEach((button) => {
+      button.addEventListener('click', () => setLanguage(button.dataset.language));
     });
 
     configBack.addEventListener('click', closeConfigPage);
@@ -1942,7 +2002,7 @@
         if (!response.ok) {
           throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
         }
-        setConfigStatus(payload.message || t('configSaved'), false);
+        setConfigStatus(t('configSaved'), false);
       } catch (error) {
         setConfigStatus(error.message || t('saveFailed'), true);
       } finally {
@@ -3058,9 +3118,10 @@
             throw new Error(t('statusUnavailable'));
           }
           const payload = await response.json();
+          const statusText = jobPhaseMessage(payload);
           const message = payload.result_message
-            ? t('statusWithDetail', {message: payload.message, detail: payload.result_message})
-            : t('statusPrefix', {message: payload.message});
+            ? t('statusWithDetail', {message: statusText, detail: payload.result_message})
+            : t('statusPrefix', {message: statusText});
           const isError = payload.phase === 'failed';
           item.classList.toggle('error', isError);
           setStatus(message, isError);
@@ -3080,6 +3141,21 @@
       };
       poll();
       activeJobPoll = setInterval(poll, 2000);
+    }
+
+    function jobPhaseMessage(payload) {
+      switch (payload?.phase) {
+        case 'queued':
+          return t('jobPhaseQueued');
+        case 'running':
+          return t('jobPhaseRunning');
+        case 'succeeded':
+          return t('jobPhaseSucceeded');
+        case 'failed':
+          return t('jobPhaseFailed');
+        default:
+          return payload?.message || t('jobPhaseUnknown');
+      }
     }
 
     function readImage(file) {

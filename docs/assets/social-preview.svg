@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Blockwright social preview</title>
+  <desc id="desc">Blockwright 本地优先 Minecraft AI 建筑助手的 GitHub 社交预览图。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0e0c"/>
+      <stop offset="0.52" stop-color="#161b17"/>
+      <stop offset="1" stop-color="#0e1410"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#48d789"/>
+      <stop offset="1" stop-color="#1ca862"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd07a"/>
+      <stop offset="1" stop-color="#df9037"/>
+    </linearGradient>
+    <clipPath id="screenClip">
+      <rect x="670" y="95" width="414" height="356" rx="8"/>
+    </clipPath>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000" flood-opacity="0.42"/>
+    </filter>
+    <style>
+      .eyebrow{font:700 28px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#48d789;letter-spacing:0}
+      .title{font:800 82px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f3f6f0;letter-spacing:0}
+      .subtitle{font:600 34px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#c5d0c8;letter-spacing:0}
+      .small{font:700 22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0b100c;letter-spacing:0}
+      .muted{font:700 23px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#d4ded7;letter-spacing:0}
+    </style>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <path d="M0 470 C150 405 270 520 424 462 C603 396 745 330 964 394 C1078 427 1140 392 1200 350 L1200 630 L0 630 Z" fill="#111813"/>
+  <g opacity="0.7">
+    <rect x="78" y="434" width="54" height="54" fill="#273d30"/>
+    <rect x="132" y="434" width="54" height="54" fill="#356746"/>
+    <rect x="186" y="434" width="54" height="54" fill="#273d30"/>
+    <rect x="132" y="380" width="54" height="54" fill="#4f8d54"/>
+    <rect x="240" y="434" width="54" height="54" fill="#70512d"/>
+    <rect x="294" y="434" width="54" height="54" fill="#8a6835"/>
+    <rect x="294" y="380" width="54" height="54" fill="#b08843"/>
+  </g>
+  <text x="78" y="132" class="eyebrow">Minecraft AI assistant</text>
+  <text x="78" y="226" class="title">Blockwright</text>
+  <text x="82" y="289" class="subtitle">本地优先的 Minecraft AI 建筑助手</text>
+  <text x="82" y="341" class="subtitle">Fabric 执行端 + Rust controller</text>
+  <text x="82" y="389" class="subtitle">MCP 工具 + 可校验蓝图</text>
+  <g transform="translate(82 432)">
+    <rect width="148" height="48" rx="8" fill="url(#green)"/>
+    <text x="22" y="32" class="small">HMCL / Fabric</text>
+    <rect x="166" width="112" height="48" rx="8" fill="url(#amber)"/>
+    <text x="188" y="32" class="small">Codex</text>
+    <rect x="296" width="158" height="48" rx="8" fill="#2b3330"/>
+    <text x="318" y="32" class="muted">Blueprints</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="640" y="65" width="476" height="438" rx="8" fill="#202824" stroke="#3a4740" stroke-width="3"/>
+    <rect x="660" y="86" width="436" height="382" rx="8" fill="#0b0f0d"/>
+    <image href="web-settings-preview.png" x="626" y="80" width="560" height="382" preserveAspectRatio="xMidYMid slice" clip-path="url(#screenClip)"/>
+    <rect x="688" y="486" width="380" height="10" rx="5" fill="#36413b"/>
+  </g>
+  <text x="78" y="568" class="muted">Local-first. Verified builds. Real world block APIs.</text>
+</svg>
