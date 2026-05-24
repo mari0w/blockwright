@@ -1,12 +1,12 @@
 # Blockwright
 
-English | [简体中文](README.md)
+English | [简体中文](README.zh-CN.md)
 
 Website source: [docs/index.html](docs/index.html). GitHub Pages setup notes: [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md).
 
-Blockwright is a local-first Minecraft AI assistant. It keeps chat adapters, MCP tools, blueprint management, task queues, and build records in an external controller, while Fabric and Paper plugins read and modify the Minecraft world through server APIs.
+Blockwright is a Minecraft Java Edition automation framework. It keeps chat adapters, MCP tools, blueprint management, task queues, and build records in an external controller, while Fabric and Paper plugins read and modify the Minecraft world through server APIs.
 
-The project is currently optimized for HMCL, Fabric single-player worlds, and LAN-opened worlds. The Paper plugin is kept for standalone Paper server deployments.
+The project currently targets Minecraft Java Edition worlds through Fabric and Paper. Fabric is the primary path for local single-player and LAN-opened worlds; Paper is kept for standalone server deployments.
 
 ![Blockwright web settings page](docs/assets/web-settings-preview.png)
 
@@ -27,7 +27,7 @@ Blockwright is an early but runnable project. It already includes the Rust contr
 
 Good current use cases:
 
-- Local AI building experiments in HMCL/Fabric worlds.
+- Local build automation experiments in Minecraft Java Edition worlds.
 - Developer testing of the controller, Minecraft execution plugins, and blueprint model.
 - Iterative work on chat integrations, image-to-blueprint, and existing-build edits.
 
@@ -39,7 +39,7 @@ Not recommended yet:
 
 ## Website and GitHub Pages
 
-The repository now includes a static project website:
+The repository now includes a static project website. It defaults to English and includes an English/Chinese language switch:
 
 ```text
 docs/index.html

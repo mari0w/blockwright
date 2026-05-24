@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Blockwright social preview</title>
-  <desc id="desc">GitHub social preview for Blockwright, a Minecraft Java Edition automation framework.</desc>
+  <desc id="desc">Blockwright 面向 Minecraft Java 版自动化框架的 GitHub 社交预览图。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0b0e0c"/>
@@ -42,9 +42,9 @@
   </g>
   <text x="78" y="132" class="eyebrow">Minecraft Java Edition</text>
   <text x="78" y="226" class="title">Blockwright</text>
-  <text x="82" y="289" class="subtitle">Automation framework</text>
-  <text x="82" y="341" class="subtitle">Rust controller + MCP tools</text>
-  <text x="82" y="389" class="subtitle">Fabric/Paper verification</text>
+  <text x="82" y="289" class="subtitle">Minecraft Java 版自动化框架</text>
+  <text x="82" y="341" class="subtitle">Rust controller + MCP 工具</text>
+  <text x="82" y="389" class="subtitle">Fabric/Paper 构建校验</text>
   <g transform="translate(82 432)">
     <rect width="148" height="48" rx="8" fill="url(#green)"/>
     <text x="22" y="32" class="small">HMCL / Fabric</text>

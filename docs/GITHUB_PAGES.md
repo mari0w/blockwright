@@ -1,60 +1,64 @@
-# GitHub Pages 配置说明
+# GitHub Pages Setup
 
-这份说明用于把 Blockwright 仓库配置成“有官网、有 README、有配图”的 GitHub 项目页。仓库已经准备好静态站点入口：
+[English](GITHUB_PAGES.md) | [简体中文](GITHUB_PAGES.zh-CN.md)
+
+These notes configure Blockwright as a GitHub project with a website, README, and preview image. The repository already includes a static site entrypoint:
 
 ```text
 docs/index.html
 ```
 
-## 仓库 About 区域
+## Repository About
 
-建议在 GitHub 仓库右侧 About 里填写：
+Use the following values in the repository About panel:
 
-- Description：`Local-first Minecraft AI assistant for HMCL/Fabric worlds, powered by a Rust controller, MCP tools, and verified blueprints.`
-- Website：发布 Pages 后填写 `https://mari0w.github.io/blockwright/`，如果绑定了自定义域名就填自定义域名。
-- Topics：`minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `hmcl`
+- Description: `Minecraft Java Edition automation framework with a Rust controller, MCP tools, blueprint records, and Fabric/Paper build verification.`
+- Website: after Pages is published, use `https://mari0w.github.io/blockwright/`; if you later bind a custom domain, use that domain instead.
+- Topics: `minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `hmcl`
 
-## Pages 发布
+## Pages Publishing
 
-在 GitHub 仓库页面进入：
+Open the repository page on GitHub and go to:
 
 ```text
 Settings -> Pages
 ```
 
-推荐配置：
+Recommended settings:
 
-- Source：`Deploy from a branch`
-- Branch：`main`
-- Folder：`/docs`
+- Source: `Deploy from a branch`
+- Branch: `main`
+- Folder: `/docs`
 
-保存后等待 GitHub Pages 构建完成。按当前 GitHub remote `mari0w/blockwright` 推断，默认地址通常是：
+After saving, wait for the GitHub Pages build to finish. Based on the current GitHub remote `mari0w/blockwright`, the default URL is usually:
 
 ```text
 https://mari0w.github.io/blockwright/
 ```
 
-如果以后要使用自定义域名，再在 Pages 里填域名，并在仓库添加 `docs/CNAME`。现在没有明确域名，所以仓库里不预置 CNAME，避免发布到错误地址。
+If you later use a custom domain, configure it in Pages and add `docs/CNAME`. The repository does not include a CNAME file yet because no final custom domain is configured.
 
-## README 与官网分工
+## README and Website Roles
 
-- `README.md`：给 GitHub 访问者快速判断项目是什么、怎么跑、怎么安装 Fabric 模组、开发者怎么测试。
-- `docs/index.html`：面向公开展示的项目官网，解释价值、使用路径、架构和 GitHub 配置。
-- `docs/user/HMCL_FABRIC_INSTALL.md`：保留详细安装步骤，README 和官网都链接到这里。
-- `docs/ARCHITECTURE.md`、`docs/MCP.md`：给开发者和后续接入者阅读。
+- `README.md`: English default overview for GitHub visitors, with quick start, Fabric installation, API examples, and test commands.
+- `README.zh-CN.md`: Chinese README for Chinese readers.
+- `docs/index.html`: public project website for GitHub Pages, defaulting to English with an English/Chinese language switch.
+- `docs/user/HMCL_FABRIC_INSTALL.md`: detailed installation guide, linked from both README and the website.
+- `docs/ARCHITECTURE.md` and `docs/MCP.md`: developer-facing architecture and MCP documentation.
 
-## 配图
+## Images
 
-当前准备了三类图片：
+The repository currently includes three main website assets:
 
-- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用在 README 和官网 hero 背景。
-- `docs/assets/architecture-flow.svg`：官网架构图，解释 controller、Codex/MCP 和 Fabric/Paper 执行端之间的关系。
-- `docs/assets/social-preview.png`：推荐上传到 GitHub 仓库 Settings 的 Social preview；源文件是 `docs/assets/social-preview.svg`。
+- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot used by the README and website hero.
+- `docs/assets/architecture-flow.svg`: English architecture diagram for the default website language.
+- `docs/assets/architecture-flow.zh-CN.svg`: Chinese architecture diagram used when the website language is switched to Chinese.
+- `docs/assets/social-preview.png`: recommended image for GitHub repository Social preview; the source file is `docs/assets/social-preview.svg`.
 
-后续如果有 Minecraft 内实际建筑完成截图，建议新增：
+When real in-game build screenshots are available, add:
 
 ```text
 docs/assets/minecraft-build-preview.png
 ```
 
-然后替换官网 hero 背景或新增案例区域。这样官网会从“控制台展示”升级成“游戏内结果展示”。
+Then use it in the hero or a case-study section so the website can show actual Minecraft build results instead of only the control UI.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 620" role="img" aria-labelledby="title desc">
   <title id="title">Blockwright architecture flow</title>
-  <desc id="desc">Players and chat tools enter the Rust controller, which calls Codex CLI and MCP tools before dispatching tasks to Fabric or Paper execution plugins.</desc>
+  <desc id="desc">玩家和聊天工具进入 Rust controller, controller 调用 Codex CLI 与 MCP 工具, 再把任务下发给 Fabric 或 Paper 执行端。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101411"/>
@@ -46,40 +46,40 @@
     <rect x="1036" y="442" width="42" height="42" fill="#59432a"/>
     <rect x="994" y="400" width="42" height="42" fill="#8a6b3a"/>
   </g>
-  <text x="54" y="78" class="label">Blockwright Execution Loop</text>
-  <text x="54" y="111" class="sub">Chat entrypoints, AI planning, blueprint records, and Minecraft execution</text>
+  <text x="54" y="78" class="label">Blockwright 执行闭环</text>
+  <text x="54" y="111" class="sub">聊天入口、AI 规划、蓝图记录和 Minecraft 世界执行分层协作</text>
 
   <g filter="url(#softShadow)">
     <rect x="60" y="175" width="210" height="124" rx="8" class="panel"/>
     <rect x="84" y="201" width="52" height="52" rx="6" fill="url(#green)"/>
-    <text x="150" y="222" class="label" font-size="23">Player</text>
-    <text x="150" y="252" class="sub">/bw in-game command</text>
+    <text x="150" y="222" class="label" font-size="23">玩家</text>
+    <text x="150" y="252" class="sub">/bw 游戏内命令</text>
 
     <rect x="60" y="340" width="210" height="124" rx="8" class="panel"/>
     <rect x="84" y="366" width="52" height="52" rx="6" fill="url(#blue)"/>
-    <text x="150" y="387" class="label" font-size="23">Chat tools</text>
+    <text x="150" y="387" class="label" font-size="23">聊天工具</text>
     <text x="150" y="417" class="sub">polling / stream</text>
 
     <rect x="398" y="220" width="285" height="194" rx="8" class="panel"/>
     <rect x="428" y="252" width="64" height="64" rx="7" fill="url(#amber)"/>
     <text x="514" y="278" class="label" font-size="25">Rust controller</text>
-    <text x="514" y="313" class="sub">API / queue / blueprints / build records</text>
-    <text x="430" y="359" class="sub">Save the record, then dispatch the same block list</text>
+    <text x="514" y="313" class="sub">API / 队列 / 蓝图 / 构建记录</text>
+    <text x="430" y="359" class="sub">先保存记录，再下发同一份方块清单</text>
 
     <rect x="803" y="132" width="260" height="116" rx="8" class="panel"/>
     <rect x="832" y="158" width="52" height="52" rx="6" fill="url(#blue)"/>
     <text x="900" y="181" class="label" font-size="23">Codex CLI</text>
-    <text x="900" y="211" class="sub">AI assistant and skills</text>
+    <text x="900" y="211" class="sub">AI 助手与 skills</text>
 
     <rect x="803" y="282" width="260" height="116" rx="8" class="panel"/>
     <rect x="832" y="308" width="52" height="52" rx="6" fill="url(#green)"/>
-    <text x="900" y="331" class="label" font-size="23">MCP tools</text>
-    <text x="900" y="361" class="sub">Player state / scans / blueprints</text>
+    <text x="900" y="331" class="label" font-size="23">MCP 工具</text>
+    <text x="900" y="361" class="sub">玩家状态 / 扫描 / 蓝图</text>
 
     <rect x="803" y="432" width="260" height="116" rx="8" class="panel"/>
     <rect x="832" y="458" width="52" height="52" rx="6" fill="url(#amber)"/>
     <text x="900" y="481" class="label" font-size="23">Fabric / Paper</text>
-    <text x="900" y="511" class="sub">World API placement and verification</text>
+    <text x="900" y="511" class="sub">世界 API 放置并校验</text>
   </g>
 
   <path class="line" d="M270 237 C326 237 342 260 398 278"/>
@@ -91,10 +91,10 @@
 
   <g transform="translate(66 526)">
     <rect width="176" height="34" rx="7" fill="#43d282"/>
-    <text x="18" y="23" class="tiny">Relative blueprints</text>
+    <text x="18" y="23" class="tiny">相对坐标蓝图</text>
     <rect x="198" width="176" height="34" rx="7" fill="#f2c878"/>
-    <text x="216" y="23" class="tiny">Verification report</text>
+    <text x="216" y="23" class="tiny">逐块校验报告</text>
     <rect x="396" width="206" height="34" rx="7" fill="#7bb7ff"/>
-    <text x="414" y="23" class="tiny">Secrets stay local</text>
+    <text x="414" y="23" class="tiny">真实密钥只放本地配置</text>
   </g>
 </svg>
