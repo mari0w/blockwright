@@ -275,6 +275,7 @@ mod tests {
             .codex
             .command
             .contains("model_reasoning_effort=medium"));
+        assert!(config.codex.command.contains("--skip-git-repo-check"));
         assert!(!config.codex.command.contains("--ignore-user-config"));
     }
 

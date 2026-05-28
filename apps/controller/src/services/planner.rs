@@ -183,6 +183,47 @@ pub struct Planner {
     codex: Option<CodexClient>,
 }
 
+fn codex_failure_reply(error: &str) -> String {
+    let detail = if error.contains("No such file or directory") || error.contains("os error 2") {
+        "具体原因：controller 启动环境找不到 codex 命令。"
+    } else {
+        "请管理员检查 Codex 登录状态、模型权限、网络连接或 CLI 版本。"
+    };
+    codex_failure_reply_with_log_hint(error, detail, controller_log_hint().as_deref())
+}
+
+fn codex_failure_reply_with_log_hint(error: &str, detail: &str, log_path: Option<&str>) -> String {
+    let trace_hint = extract_codex_trace_id(error)
+        .map(|trace_id| format!("日志关键字：codex_trace_id={trace_id}。"))
+        .unwrap_or_default();
+    let log_hint = match log_path {
+        Some(path) if !path.is_empty() => format!("详细日志：{path}。"),
+        _ => "详细日志：controller 控制台；HMCL 自动启动时也会写入 Minecraft logs/blockwright-controller.log。".to_string(),
+    };
+    format!("AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}")
+}
+
+fn extract_codex_trace_id(error: &str) -> Option<&str> {
+    let start = error.find("codex_trace_id=")? + "codex_trace_id=".len();
+    let rest = &error[start..];
+    let end = rest
+        .find(|ch: char| !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')))
+        .unwrap_or(rest.len());
+    let trace_id = &rest[..end];
+    if trace_id.is_empty() {
+        None
+    } else {
+        Some(trace_id)
+    }
+}
+
+fn controller_log_hint() -> Option<String> {
+    std::env::var("BLOCKWRIGHT_CONTROLLER_LOG_PATH")
+        .ok()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+}
+
 impl Planner {
     pub fn new(codex: CodexClient) -> Self {
         Self { codex: Some(codex) }
@@ -345,8 +386,7 @@ impl Planner {
             Err(error) => {
                 tracing::warn!(error = %error, "codex unified planning failed");
                 return Some(PlanResult {
-                    reply: "AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。请管理员检查 Codex 登录状态、模型权限、网络连接或 CLI 版本。"
-                        .to_string(),
+                    reply: codex_failure_reply(&error.to_string()),
                     summary: "AI 助手调用失败".to_string(),
                     actions: Vec::new(),
                 });
@@ -3387,6 +3427,28 @@ BLOCKWRIGHT_JSON
         assert!(result.actions.is_empty());
         assert!(result.reply.contains("没有发送到 Minecraft"));
         assert!(result.reply.contains("Codex 登录状态"));
+        assert!(result.reply.contains("详细日志"));
+    }
+
+    #[test]
+    fn codex_not_found_failure_mentions_missing_command() {
+        let reply = codex_failure_reply("No such file or directory (os error 2)");
+
+        assert!(reply.contains("没有发送到 Minecraft"));
+        assert!(reply.contains("找不到 codex 命令"));
+        assert!(reply.contains("详细日志"));
+    }
+
+    #[test]
+    fn codex_failure_reply_includes_trace_id_and_log_path() {
+        let reply = codex_failure_reply_with_log_hint(
+            "codex_trace_id=codex-123-456: failed",
+            "请管理员检查 Codex 登录状态、模型权限、网络连接或 CLI 版本。",
+            Some("/tmp/blockwright-controller.log"),
+        );
+
+        assert!(reply.contains("codex_trace_id=codex-123-456"));
+        assert!(reply.contains("/tmp/blockwright-controller.log"));
     }
 
     #[tokio::test]

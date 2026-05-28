@@ -1,9 +1,12 @@
 use std::{
     collections::HashMap,
-    io,
+    env, fs, io,
     path::{Path, PathBuf},
     process::{ExitStatus, Output, Stdio},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -19,6 +22,7 @@ use crate::{config::CodexConfig, services::progress::ProgressStore};
 
 const CODEX_PROGRESS_INTERVAL_SECONDS: u64 = 10;
 const CODEX_MAX_REQUEST_ATTEMPTS: u32 = 2;
+static NEXT_CODEX_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct CodexClient {
@@ -192,9 +196,11 @@ impl CodexClient {
             None
         };
         let schema_label = schema.map(CodexResponseSchema::label).unwrap_or("none");
+        let trace_id = codex_trace_id();
         self.record_progress(progress_id, schema_start_phase(schema_label), None);
         let (program, args) = command_parts(&self.config.command)?;
         tracing::info!(
+            trace_id = %trace_id,
             command = %self.config.command,
             schema = schema_label,
             session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -204,6 +210,7 @@ impl CodexClient {
             "starting codex cli request"
         );
         tracing::info!(
+            trace_id = %trace_id,
             runtime_home = self
                 .runtime_home
                 .as_deref()
@@ -228,6 +235,7 @@ impl CodexClient {
             };
             let structured_output = schema_path_for_attempt.is_some();
             tracing::info!(
+                trace_id = %trace_id,
                 command = %self.config.command,
                 schema = schema_label,
                 session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -239,12 +247,13 @@ impl CodexClient {
                 attempt_started_at,
                 self.config.timeout_seconds,
                 &self.config.command,
+                &trace_id,
                 schema_label,
                 session_key.as_deref().unwrap_or("ephemeral"),
                 self.progress.clone(),
                 progress_id.map(str::to_string),
                 run_codex_exec(
-                    program,
+                    &program,
                     &args,
                     prompt,
                     &last_message_path,
@@ -254,6 +263,7 @@ impl CodexClient {
                     image_paths,
                     self.runtime_home.as_deref().map(PathBuf::as_path),
                     &self.config.command,
+                    &trace_id,
                     schema_label,
                     session_key.as_deref().unwrap_or("ephemeral"),
                     self.progress.clone(),
@@ -271,6 +281,7 @@ impl CodexClient {
                     let failure =
                         codex_failure_message(output.status, &output.stderr, &output.stdout);
                     tracing::warn!(
+                        trace_id = %trace_id,
                         command = %self.config.command,
                         schema = schema_label,
                         session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -301,6 +312,7 @@ impl CodexClient {
                         disable_structured_output = true;
                         attempt += 1;
                         tracing::warn!(
+                            trace_id = %trace_id,
                             command = %self.config.command,
                             schema = schema_label,
                             session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -318,12 +330,13 @@ impl CodexClient {
                         attempt += 1;
                         continue;
                     }
-                    return Err(failure.into());
+                    return Err(codex_failure_with_trace(&trace_id, &failure).into());
                 }
                 Err(error) => {
                     let _ = tokio::fs::remove_file(&last_message_path).await;
                     let failure = error.to_string();
                     tracing::warn!(
+                        trace_id = %trace_id,
                         command = %self.config.command,
                         schema = schema_label,
                         session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -353,6 +366,7 @@ impl CodexClient {
                         disable_structured_output = true;
                         attempt += 1;
                         tracing::warn!(
+                            trace_id = %trace_id,
                             command = %self.config.command,
                             schema = schema_label,
                             session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -370,7 +384,7 @@ impl CodexClient {
                         attempt += 1;
                         continue;
                     }
-                    return Err(error);
+                    return Err(codex_failure_with_trace(&trace_id, &failure).into());
                 }
             }
         };
@@ -392,6 +406,7 @@ impl CodexClient {
         ) {
             self.sessions.set(session_key, thread_id.as_str()).await?;
             tracing::info!(
+                trace_id = %trace_id,
                 session_key = %session_key,
                 thread_id = %thread_id,
                 "saved codex session for speaker"
@@ -399,6 +414,7 @@ impl CodexClient {
         }
 
         tracing::info!(
+            trace_id = %trace_id,
             command = %self.config.command,
             schema = schema_label,
             session_key = session_key.as_deref().unwrap_or("ephemeral"),
@@ -530,6 +546,7 @@ async fn run_codex_exec_with_progress(
     started_at: std::time::Instant,
     timeout_seconds: u64,
     command: &str,
+    trace_id: &str,
     schema_label: &str,
     session_key: &str,
     progress: Option<ProgressStore>,
@@ -553,6 +570,7 @@ async fn run_codex_exec_with_progress(
                 let elapsed_seconds = started_at.elapsed().as_secs();
                 let remaining_seconds = timeout_seconds.saturating_sub(elapsed_seconds);
                 tracing::info!(
+                    trace_id = %trace_id,
                     command = %command,
                     schema = schema_label,
                     session_key = session_key,
@@ -577,21 +595,21 @@ async fn run_codex_exec_with_progress(
 
 fn command_parts(
     command: &str,
-) -> Result<(&str, Vec<&str>), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(String, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
     let mut parts = command.split_whitespace();
     let program = parts
         .next()
         .ok_or_else(|| "codex command cannot be empty".to_string())?;
-    let mut args: Vec<&str> = parts.collect();
-    if args.first() == Some(&"exec") {
+    let mut args: Vec<String> = parts.map(str::to_string).collect();
+    if args.first().map(String::as_str) == Some("exec") {
         args.remove(0);
     }
-    Ok((program, args))
+    Ok((program.to_string(), args))
 }
 
 async fn run_codex_exec(
     program: &str,
-    args: &[&str],
+    args: &[String],
     prompt: &str,
     last_message_path: &PathBuf,
     schema_path: Option<&Path>,
@@ -600,13 +618,18 @@ async fn run_codex_exec(
     image_paths: &[PathBuf],
     runtime_home: Option<&Path>,
     command_for_log: &str,
+    trace_id: &str,
     schema_label: &str,
     session_key: &str,
     progress: Option<ProgressStore>,
     progress_id: Option<String>,
     structured_output: bool,
 ) -> std::io::Result<Output> {
-    let mut command = Command::new(program);
+    let resolved_program = resolve_command_program(program, Some(trace_id));
+    let mut command = Command::new(&resolved_program.program);
+    if let Some(path_dir) = resolved_program.path_dir.as_deref() {
+        prepend_command_path(&mut command, path_dir);
+    }
     if let Some(runtime_home) = runtime_home {
         command.env("CODEX_HOME", runtime_home);
     }
@@ -647,6 +670,7 @@ async fn run_codex_exec(
     let (terminal_error_tx, mut terminal_error_rx) = mpsc::unbounded_channel();
     let stdout_context = CodexEventLogContext {
         command: command_for_log.to_string(),
+        trace_id: trace_id.to_string(),
         schema_label: schema_label.to_string(),
         session_key: session_key.to_string(),
         progress,
@@ -656,6 +680,7 @@ async fn run_codex_exec(
     };
     let stderr_context = CodexEventLogContext {
         command: command_for_log.to_string(),
+        trace_id: trace_id.to_string(),
         schema_label: schema_label.to_string(),
         session_key: session_key.to_string(),
         progress: stdout_context.progress.clone(),
@@ -697,8 +722,140 @@ async fn run_codex_exec(
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedCommandProgram {
+    program: String,
+    path_dir: Option<PathBuf>,
+}
+
+fn resolve_command_program(program: &str, trace_id: Option<&str>) -> ResolvedCommandProgram {
+    if program_contains_path_separator(program) {
+        let path = PathBuf::from(program);
+        return ResolvedCommandProgram {
+            program: program.to_string(),
+            path_dir: executable_parent_dir(&path),
+        };
+    }
+
+    if executable_exists_on_path(program) {
+        return ResolvedCommandProgram {
+            program: program.to_string(),
+            path_dir: None,
+        };
+    }
+
+    if program != "codex" {
+        return ResolvedCommandProgram {
+            program: program.to_string(),
+            path_dir: None,
+        };
+    }
+
+    for path in candidate_codex_paths() {
+        if is_executable_file(&path) {
+            tracing::info!(
+                trace_id = trace_id.unwrap_or(""),
+                codex_path = %path.display(),
+                "resolved codex cli outside current PATH"
+            );
+            return ResolvedCommandProgram {
+                program: path.display().to_string(),
+                path_dir: executable_parent_dir(&path),
+            };
+        }
+    }
+
+    ResolvedCommandProgram {
+        program: program.to_string(),
+        path_dir: None,
+    }
+}
+
+fn candidate_codex_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        paths.push(home.join(".nvm").join("current").join("bin").join("codex"));
+        paths.extend(nvm_codex_paths(&home));
+        paths.push(home.join(".npm-global").join("bin").join("codex"));
+        paths.push(home.join(".local").join("bin").join("codex"));
+    }
+    paths.push(PathBuf::from("/opt/homebrew/bin/codex"));
+    paths.push(PathBuf::from("/usr/local/bin/codex"));
+    paths
+}
+
+fn nvm_codex_paths(home: &Path) -> Vec<PathBuf> {
+    let versions_dir = home.join(".nvm").join("versions").join("node");
+    let mut paths = fs::read_dir(versions_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path().join("bin").join("codex"))
+        .collect::<Vec<_>>();
+    paths.sort_by(|left, right| nvm_node_version_key(right).cmp(&nvm_node_version_key(left)));
+    paths
+}
+
+fn nvm_node_version_key(codex_path: &Path) -> Vec<u64> {
+    codex_path
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .trim_start_matches('v')
+        .split('.')
+        .map(|part| part.parse::<u64>().unwrap_or(0))
+        .collect()
+}
+
+fn executable_exists_on_path(program: &str) -> bool {
+    env::var_os("PATH")
+        .map(|path| env::split_paths(&path).any(|dir| is_executable_file(&dir.join(program))))
+        .unwrap_or(false)
+}
+
+fn executable_parent_dir(path: &Path) -> Option<PathBuf> {
+    path.parent().map(Path::to_path_buf)
+}
+
+fn prepend_command_path(command: &mut Command, path_dir: &Path) {
+    let existing = env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![path_dir.to_path_buf()];
+    paths.extend(env::split_paths(&existing));
+    if let Ok(joined) = env::join_paths(paths) {
+        command.env("PATH", joined);
+    }
+}
+
+fn program_contains_path_separator(program: &str) -> bool {
+    program.contains('/') || program.contains('\\')
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    is_executable(path)
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::metadata(path)
+        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
 struct CodexEventLogContext {
     command: String,
+    trace_id: String,
     schema_label: String,
     session_key: String,
     progress: Option<ProgressStore>,
@@ -771,6 +928,7 @@ fn log_codex_stderr_diagnostic(line: &[u8], context: &CodexEventLogContext) {
     };
 
     tracing::warn!(
+        trace_id = %context.trace_id,
         command = %context.command,
         schema = %context.schema_label,
         session_key = %context.session_key,
@@ -800,6 +958,7 @@ fn log_codex_json_event(line: &[u8], context: &CodexEventLogContext) {
     };
 
     tracing::info!(
+        trace_id = %context.trace_id,
         command = %context.command,
         schema = %context.schema_label,
         session_key = %context.session_key,
@@ -956,7 +1115,9 @@ fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
         || lower.contains("untrusted")
         || lower.contains("unknown issuer")
         || lower.contains("self signed");
-    let category = if lower.contains("failed to connect to websocket") {
+    let category = if lower.contains("not inside a trusted directory") {
+        "trusted_directory"
+    } else if lower.contains("failed to connect to websocket") {
         "websocket_connect"
     } else if lower.contains("falling back to http") {
         "http_fallback"
@@ -975,10 +1136,10 @@ fn codex_stderr_diagnostic(raw: &str) -> Option<String> {
         "connect"
     } else if lower.contains("operation not permitted") {
         "permission"
-    } else if lower.contains("proxy")
-        || lower.contains("socks")
+    } else if lower.contains("socks")
         || lower.contains("port 1080")
         || lower.contains("port 1087")
+        || lower.contains("proxy") && has_failure_signal
     {
         "proxy"
     } else if tls_or_certificate && has_failure_signal {
@@ -1134,13 +1295,27 @@ fn normalize_session_key(key: &str) -> String {
     key.trim().to_lowercase()
 }
 
+fn codex_trace_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let sequence = NEXT_CODEX_RUNTIME_ID.fetch_add(1, Ordering::Relaxed);
+    format!("codex-{}-{nanos}-{sequence}", std::process::id())
+}
+
+fn codex_failure_with_trace(trace_id: &str, failure: &str) -> String {
+    format!("codex_trace_id={trace_id}: {failure}")
+}
+
 fn codex_last_message_path() -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
+    let sequence = NEXT_CODEX_RUNTIME_ID.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "blockwright-codex-last-message-{}-{nanos}.txt",
+        "blockwright-codex-last-message-{}-{nanos}-{sequence}.txt",
         std::process::id()
     ))
 }
@@ -1257,6 +1432,12 @@ mod tests {
             "blockwright-codex-{name}-{}-{number}",
             std::process::id()
         ))
+    }
+
+    fn make_executable(path: &Path) {
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).unwrap();
     }
 
     #[tokio::test]
@@ -1691,6 +1872,42 @@ BLOCKWRIGHT_JSON
     }
 
     #[test]
+    fn resolve_command_program_keeps_absolute_parent_on_path() {
+        let dir = temp_dir("resolve-absolute-codex");
+        fs::create_dir_all(&dir).unwrap();
+        let script_path = dir.join("codex");
+        fs::write(&script_path, "#!/usr/bin/env bash\n").unwrap();
+        make_executable(&script_path);
+
+        let resolved = resolve_command_program(script_path.to_str().unwrap(), Some("test-trace"));
+
+        assert_eq!(resolved.program, script_path.to_string_lossy());
+        assert_eq!(resolved.path_dir, Some(dir));
+    }
+
+    #[test]
+    fn nvm_codex_paths_prefers_newer_node_versions() {
+        let home = temp_dir("nvm-codex-paths");
+        for version in ["v9.0.0", "v22.19.0", "v20.10.1"] {
+            let path = home
+                .join(".nvm")
+                .join("versions")
+                .join("node")
+                .join(version)
+                .join("bin")
+                .join("codex");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "").unwrap();
+        }
+
+        let paths = nvm_codex_paths(&home);
+
+        assert!(paths[0].to_string_lossy().contains("v22.19.0"));
+        assert!(paths[1].to_string_lossy().contains("v20.10.1"));
+        assert!(paths[2].to_string_lossy().contains("v9.0.0"));
+    }
+
+    #[test]
     fn response_schema_files_are_packaged_with_controller_source() {
         assert!(CodexResponseSchema::Plan.path().exists());
     }
@@ -1844,6 +2061,16 @@ BLOCKWRIGHT_JSON
         assert!(diagnostic.contains("127.0.0.1"));
         assert!(diagnostic.contains("1087"));
         assert!(!diagnostic.contains("secret"));
+    }
+
+    #[test]
+    fn stderr_diagnostic_keeps_trusted_directory_failure() {
+        let line = "Not inside a trusted directory and --skip-git-repo-check was not specified.";
+
+        let diagnostic = codex_stderr_diagnostic(line).unwrap();
+
+        assert!(diagnostic.contains("trusted_directory"));
+        assert!(diagnostic.contains("--skip-git-repo-check"));
     }
 
     #[test]

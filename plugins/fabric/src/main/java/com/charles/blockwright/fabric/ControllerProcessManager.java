@@ -106,7 +106,7 @@ final class ControllerProcessManager {
             if (spec.workingDirectory() != null) {
                 builder.directory(spec.workingDirectory().toFile());
             }
-            applyControllerEnvironment(config, builder.environment());
+            applyControllerEnvironment(config, builder.environment(), logPath);
             builder.redirectErrorStream(true);
 
             launchedProcess = builder.start();
@@ -269,9 +269,10 @@ final class ControllerProcessManager {
         return Optional.empty();
     }
 
-    private static void applyControllerEnvironment(BlockwrightConfig config, Map<String, String> env) {
+    private static void applyControllerEnvironment(BlockwrightConfig config, Map<String, String> env, Path logPath) {
         env.putIfAbsent("SERVER_NAME", "local");
         env.putIfAbsent("BLOCKWRIGHT_AUTOSTART", "1");
+        env.putIfAbsent("BLOCKWRIGHT_CONTROLLER_LOG_PATH", logPath.toString());
         controllerPort(config.controllerUrl).ifPresent(port -> env.putIfAbsent("PORT", Integer.toString(port)));
     }
 
@@ -462,6 +463,25 @@ final class ControllerProcessManager {
 
     static List<String> webAddressMessages(String controllerUrl) {
         return webAddressMessages(controllerUrl, primaryLanIpv4());
+    }
+
+    static List<String> startupHintMessages(BlockwrightConfig config) {
+        String controllerUrl = config == null ? "http://127.0.0.1:8765" : config.controllerUrl;
+        boolean autoStart = config == null || config.autoStartController;
+        return startupHintMessages(controllerUrl, autoStart, primaryLanIpv4());
+    }
+
+    static List<String> startupHintMessages(String controllerUrl, boolean autoStart, Optional<String> lanIp) {
+        List<String> messages = new ArrayList<>();
+        if (autoStart) {
+            messages.add("Blockwright Web 已随游戏自动启动；如果地址暂时打不开，请等几秒。");
+        } else {
+            messages.add("Blockwright Web 自动启动已关闭；请先手动启动 controller。");
+        }
+        messages.addAll(webAddressMessages(controllerUrl, lanIp));
+        messages.add("排查日志：Minecraft logs/blockwright-controller.log。");
+        messages.add("以后可输入 /bw web 再次查看 Web 地址。");
+        return messages;
     }
 
     static List<String> webAddressMessages(String controllerUrl, Optional<String> lanIp) {

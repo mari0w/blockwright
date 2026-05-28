@@ -10,6 +10,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
@@ -66,12 +67,22 @@ public final class BlockwrightFabricMod implements ModInitializer {
                                         StringArgumentType.getString(context, "message"))))));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> jobPoller =
                 new JobPoller(server, () -> config, REQUEST_EXECUTOR));
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ControllerProcessManager.ensureStartedAsync(config, gameDir);
+            sendStartupHint(handler.getPlayer());
+        });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (jobPoller != null) {
                 jobPoller.tick();
             }
         });
         LOGGER.info("Blockwright Fabric mod initialized");
+    }
+
+    private static void sendStartupHint(ServerPlayerEntity player) {
+        for (String message : ControllerProcessManager.startupHintMessages(config)) {
+            player.sendMessage(Text.literal(message), false);
+        }
     }
 
     private static int configHint(ServerCommandSource source) {
