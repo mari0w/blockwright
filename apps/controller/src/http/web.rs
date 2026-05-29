@@ -197,7 +197,7 @@ async fn handle_web_translate(
     }
 
     let target_language = normalize_translation_language(&request.target_language)?;
-    if target_language.code == "original" || !state.codex.enabled() {
+    if target_language.code == "original" || !state.llm.enabled() {
         return Ok(Json(WebTranslateResponse {
             translated_text: text.to_string(),
             target_language: target_language.code.to_string(),
@@ -207,27 +207,27 @@ async fn handle_web_translate(
 
     let prompt = build_translation_prompt(text, target_language.label);
     let translated = state
-        .codex
+        .llm
         .ask(&prompt)
         .await
         .map_err(|error| {
             tracing::warn!(error = %error, "web voice translation failed");
             (
                 StatusCode::BAD_GATEWAY,
-                "Codex translation failed. Try again later.".to_string(),
+                "AI translation failed. Try again later.".to_string(),
             )
         })?
         .ok_or_else(|| {
             (
                 StatusCode::BAD_GATEWAY,
-                "Codex did not return a translation.".to_string(),
+                "AI did not return a translation.".to_string(),
             )
         })?;
     let translated_text = clean_translation_output(&translated);
     if translated_text.is_empty() {
         return Err((
             StatusCode::BAD_GATEWAY,
-            "Codex returned an empty translation.".to_string(),
+            "AI returned an empty translation.".to_string(),
         ));
     }
 
@@ -376,82 +376,6 @@ fn clean_user_status_detail(message: String) -> Option<String> {
         return Some(format!("Player not found: {}", player.trim()));
     }
     Some(value.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::types::{BlockOrigin, BlueprintBlock, GameJob};
-
-    #[test]
-    fn non_build_queue_jobs_do_not_read_stale_build_records() {
-        let status = JobQueueStatus {
-            phase: JobQueuePhase::Succeeded,
-            job: Some(GameJob {
-                id: "hm-job-1".to_string(),
-                server_id: "hmcl-lan".to_string(),
-                target_player: Some("Steve".to_string()),
-                summary: "发放红砖".to_string(),
-                actions: vec![GameAction::GiveItem {
-                    player: Some("Steve".to_string()),
-                    item: "minecraft:red_concrete".to_string(),
-                    count: 64,
-                }],
-            }),
-            message: Some("ok".to_string()),
-            result: None,
-        };
-
-        assert!(!should_read_build_record(Some(&status)));
-    }
-
-    #[test]
-    fn build_queue_jobs_still_read_build_records() {
-        let status = JobQueueStatus {
-            phase: JobQueuePhase::Claimed,
-            job: Some(GameJob {
-                id: "hm-job-1".to_string(),
-                server_id: "hmcl-lan".to_string(),
-                target_player: Some("Steve".to_string()),
-                summary: "建造".to_string(),
-                actions: vec![GameAction::PlaceBlocks {
-                    blueprint_id: Some("test".to_string()),
-                    origin: BlockOrigin {
-                        world: Some("minecraft:overworld".to_string()),
-                        x: 0,
-                        y: 64,
-                        z: 0,
-                    },
-                    blocks: vec![BlueprintBlock {
-                        x: 0,
-                        y: 0,
-                        z: 0,
-                        material: "minecraft:stone".to_string(),
-                    }],
-                    clear_existing: false,
-                }],
-            }),
-            message: None,
-            result: None,
-        };
-
-        assert!(should_read_build_record(Some(&status)));
-    }
-
-    #[test]
-    fn empty_web_text_with_image_defaults_to_recreation_request() {
-        let text = normalized_web_text("   ", true);
-
-        assert!(text.contains("Recreate this image"));
-        assert!(text.contains("shape"));
-        assert!(text.contains("proportions"));
-        assert!(!text.contains("参考这张图片帮我设计"));
-    }
-
-    #[test]
-    fn non_empty_web_text_is_preserved() {
-        assert_eq!(normalized_web_text("  照这个做  ", true), "照这个做");
-    }
 }
 
 struct TranslationLanguage {
@@ -714,4 +638,80 @@ fn timestamp_millis() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::types::{BlockOrigin, BlueprintBlock, GameJob};
+
+    #[test]
+    fn non_build_queue_jobs_do_not_read_stale_build_records() {
+        let status = JobQueueStatus {
+            phase: JobQueuePhase::Succeeded,
+            job: Some(GameJob {
+                id: "hm-job-1".to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: "发放红砖".to_string(),
+                actions: vec![GameAction::GiveItem {
+                    player: Some("Steve".to_string()),
+                    item: "minecraft:red_concrete".to_string(),
+                    count: 64,
+                }],
+            }),
+            message: Some("ok".to_string()),
+            result: None,
+        };
+
+        assert!(!should_read_build_record(Some(&status)));
+    }
+
+    #[test]
+    fn build_queue_jobs_still_read_build_records() {
+        let status = JobQueueStatus {
+            phase: JobQueuePhase::Claimed,
+            job: Some(GameJob {
+                id: "hm-job-1".to_string(),
+                server_id: "hmcl-lan".to_string(),
+                target_player: Some("Steve".to_string()),
+                summary: "建造".to_string(),
+                actions: vec![GameAction::PlaceBlocks {
+                    blueprint_id: Some("test".to_string()),
+                    origin: BlockOrigin {
+                        world: Some("minecraft:overworld".to_string()),
+                        x: 0,
+                        y: 64,
+                        z: 0,
+                    },
+                    blocks: vec![BlueprintBlock {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        material: "minecraft:stone".to_string(),
+                    }],
+                    clear_existing: false,
+                }],
+            }),
+            message: None,
+            result: None,
+        };
+
+        assert!(should_read_build_record(Some(&status)));
+    }
+
+    #[test]
+    fn empty_web_text_with_image_defaults_to_recreation_request() {
+        let text = normalized_web_text("   ", true);
+
+        assert!(text.contains("Recreate this image"));
+        assert!(text.contains("shape"));
+        assert!(text.contains("proportions"));
+        assert!(!text.contains("参考这张图片帮我设计"));
+    }
+
+    #[test]
+    fn non_empty_web_text_is_preserved() {
+        assert_eq!(normalized_web_text("  照这个做  ", true), "照这个做");
+    }
 }

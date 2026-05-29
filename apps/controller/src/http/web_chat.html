@@ -712,6 +712,13 @@
       width: auto;
       margin: 0;
     }
+    .provider-fields {
+      display: grid;
+      gap: 12px;
+    }
+    .provider-fields[hidden] {
+      display: none;
+    }
     .language-choice {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1170,6 +1177,39 @@
             </label>
           </section>
           <section class="config-section">
+            <h3 data-i18n="llmSettings">AI model</h3>
+            <label for="llmProvider">
+              <span data-i18n="llmProvider">Model mode</span>
+              <select id="llmProvider">
+                <option value="codex_cli">Codex CLI</option>
+                <option value="openai">OpenAI API</option>
+                <option value="deepseek">DeepSeek API</option>
+                <option value="doubao">Doubao API</option>
+                <option value="gemini">Gemini API</option>
+              </select>
+            </label>
+            <p id="llmCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
+            <div id="llmApiFields" class="provider-fields" hidden>
+              <label for="llmModel">
+                <span data-i18n="llmModel">Model</span>
+                <input id="llmModel" placeholder="gpt-4.1">
+              </label>
+              <label for="llmBaseUrl">
+                <span data-i18n="llmBaseUrl">Base URL</span>
+                <input id="llmBaseUrl" placeholder="https://api.openai.com/v1">
+              </label>
+              <label for="llmApiKey">
+                <span data-i18n="llmApiKey">API Key</span>
+                <input id="llmApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the existing key" data-i18n-placeholder="llmKeyPlaceholder">
+              </label>
+              <label class="config-checkbox" for="llmSupportsImages">
+                <input id="llmSupportsImages" type="checkbox">
+                <span data-i18n="llmSupportsImages">This model accepts image input</span>
+              </label>
+              <p id="llmApiHint"></p>
+            </div>
+          </section>
+          <section class="config-section">
             <h3 data-i18n="browserPermissions">Browser permissions</h3>
             <div class="permission-row">
               <p id="permissionStatus" data-i18n="micChecking">Checking microphone permission...</p>
@@ -1252,6 +1292,14 @@
     const CHAT_HISTORY_KEY = 'bw.chatHistory.v1';
     const ACTIVE_JOB_KEY = 'bw.activeJob.v1';
     const MAX_CHAT_HISTORY_ITEMS = 80;
+    const LLM_PROVIDER_DEFAULTS = {
+      codex_cli: {model: '', base_url: '', supports_images: true, key_placeholder: ''},
+      openai: {model: 'gpt-4.1', base_url: 'https://api.openai.com/v1', supports_images: true, key_placeholder: 'OPENAI_API_KEY'},
+      deepseek: {model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com', supports_images: false, key_placeholder: 'DEEPSEEK_API_KEY'},
+      doubao: {model: 'doubao-seed-2-0-lite-260215', base_url: 'https://ark.cn-beijing.volces.com/api/v3', supports_images: true, key_placeholder: 'ARK_API_KEY'},
+      gemini: {model: 'gemini-2.5-flash', base_url: 'https://generativelanguage.googleapis.com/v1beta', supports_images: true, key_placeholder: 'GEMINI_API_KEY'}
+    };
+    const API_LLM_PROVIDERS = ['openai', 'deepseek', 'doubao', 'gemini'];
     const username = document.getElementById('username');
     const usernameGate = document.getElementById('usernameGate');
     const usernameGateForm = document.getElementById('usernameGateForm');
@@ -1282,6 +1330,16 @@
     const httpsGuideBack = document.getElementById('httpsGuideBack');
     const httpsGuideNext = document.getElementById('httpsGuideNext');
     const controllerToken = document.getElementById('controllerToken');
+    const llmProvider = document.getElementById('llmProvider');
+    const llmCodexHint = document.getElementById('llmCodexHint');
+    const llmApiFields = document.getElementById('llmApiFields');
+    const llmModel = document.getElementById('llmModel');
+    const llmBaseUrl = document.getElementById('llmBaseUrl');
+    const llmApiKey = document.getElementById('llmApiKey');
+    const llmSupportsImages = document.getElementById('llmSupportsImages');
+    const llmApiHint = document.getElementById('llmApiHint');
+    const llmProviderConfigCache = {};
+    let lastLlmProvider = 'codex_cli';
     const matrixEnabled = document.getElementById('matrixEnabled');
     const matrixHomeserver = document.getElementById('matrixHomeserver');
     const matrixAccessToken = document.getElementById('matrixAccessToken');
@@ -1331,6 +1389,17 @@
         backToChat: '返回聊天',
         settings: '设置',
         settingsIntro: '聊天接入和浏览器权限都在这里处理。',
+        llmSettings: 'AI 模型',
+        llmProvider: '模型模式',
+        llmCodexHelp: 'Codex CLI 使用 controller 上配置的命令，这个模式不需要在这里填写 API Key。',
+        llmModel: '模型名',
+        llmBaseUrl: 'Base URL',
+        llmApiKey: 'API Key',
+        llmKeyPlaceholder: '留空表示保留已有 key',
+        llmSupportsImages: '这个模型支持图片输入',
+        llmApiHint: '当前模式会把规划请求发送到 {provider}，密钥保存到本地 .env，不会写入仓库配置。',
+        llmConfigRequired: '请填写模型名和 Base URL。',
+        llmConfigSaved: '大模型配置已保存。',
         player: '玩家',
         playerHelp: '这里填游戏里的用户名，聊天和语音都会发给这个玩家。',
         browserPermissions: '浏览器权限',
@@ -1483,6 +1552,17 @@
         backToChat: 'Back to chat',
         settings: 'Settings',
         settingsIntro: 'Chat integrations and browser permissions are configured here.',
+        llmSettings: 'AI model',
+        llmProvider: 'Model mode',
+        llmCodexHelp: 'Codex CLI uses the command configured on the controller. API keys are not needed for this mode.',
+        llmModel: 'Model',
+        llmBaseUrl: 'Base URL',
+        llmApiKey: 'API Key',
+        llmKeyPlaceholder: 'Leave blank to keep the existing key',
+        llmSupportsImages: 'This model accepts image input',
+        llmApiHint: 'Planning requests will be sent to {provider}. The key is saved in the local .env file, not in repo config.',
+        llmConfigRequired: 'Enter the model and Base URL.',
+        llmConfigSaved: 'LLM configuration saved.',
         player: 'Player',
         playerHelp: 'Chat and voice commands are sent to this Minecraft player.',
         browserPermissions: 'Browser permissions',
@@ -1677,6 +1757,7 @@
       resetVoiceCancelText();
       updateVoiceToggleLabels(!voicePanel.hidden);
       renderHttpsGuideStep();
+      updateLlmProviderFields();
     }
 
     function setLanguage(language) {
@@ -1711,6 +1792,12 @@
     applyLanguage();
     setUsername(localStorage.getItem('bw.username') || '');
     controllerToken.value = localStorage.getItem('bw.controllerToken') || 'local-dev-token';
+    llmProvider.value = normalizeLlmProvider(localStorage.getItem('bw.llmProvider') || 'codex_cli');
+    lastLlmProvider = llmProvider.value;
+    llmModel.value = localStorage.getItem('bw.llmModel') || '';
+    llmBaseUrl.value = localStorage.getItem('bw.llmBaseUrl') || '';
+    llmSupportsImages.checked = localStorage.getItem('bw.llmSupportsImages') === '1';
+    applyLlmDefaults(localStorage.getItem('bw.llmProvider') || 'codex_cli');
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
     matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
     matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') !== '0';
@@ -1723,6 +1810,9 @@
     });
     [
       [controllerToken, 'bw.controllerToken'],
+      [llmProvider, 'bw.llmProvider'],
+      [llmModel, 'bw.llmModel'],
+      [llmBaseUrl, 'bw.llmBaseUrl'],
       [matrixHomeserver, 'bw.matrixHomeserver'],
       [matrixAllowedSender, 'bw.matrixAllowedSender']
     ].forEach(([input, key]) => {
@@ -1730,11 +1820,13 @@
     });
     [
       [matrixEnabled, 'bw.matrixEnabled'],
+      [llmSupportsImages, 'bw.llmSupportsImages'],
       [matrixAllowOwn, 'bw.matrixAllowOwn'],
       [matrixAutoJoin, 'bw.matrixAutoJoin']
     ].forEach(([input, key]) => {
       input.addEventListener('change', () => localStorage.setItem(key, input.checked ? '1' : '0'));
     });
+    loadLlmConfig();
     renderHttpsAccessInfo();
     setVoicePanel(!voiceUnavailable && localStorage.getItem('bw.voiceEnabled') === '1');
     restoreChatHistory();
@@ -1784,6 +1876,11 @@
     });
     languageButtons.forEach((button) => {
       button.addEventListener('click', () => setLanguage(button.dataset.language));
+    });
+    llmProvider.addEventListener('change', () => {
+      rememberCurrentLlmProviderFields(lastLlmProvider);
+      lastLlmProvider = normalizeLlmProvider(llmProvider.value);
+      applyLlmDefaults(lastLlmProvider, true);
     });
 
     configBack.addEventListener('click', closeConfigPage);
@@ -1964,6 +2061,167 @@
       return [...byKey.values()];
     }
 
+    async function loadLlmConfig() {
+      const token = controllerToken.value.trim();
+      if (!token) {
+        updateLlmProviderFields();
+        return;
+      }
+      try {
+        const response = await fetch('/api/llm/config', {
+          headers: {'x-blockwright-token': token}
+        });
+        if (!response.ok) {
+          updateLlmProviderFields();
+          return;
+        }
+        const payload = await response.json();
+        applyLlmConfig(payload);
+      } catch (_) {
+        updateLlmProviderFields();
+      }
+    }
+
+    function applyLlmConfig(payload) {
+      cacheLlmProviderConfigs(payload);
+      const provider = normalizeLlmProvider(payload.provider);
+      llmProvider.value = provider;
+      lastLlmProvider = provider;
+      applyLlmDefaults(provider, true);
+      const api = llmProviderConfigCache[provider];
+      if (api && provider !== 'codex_cli') {
+        llmModel.value = api.model || llmModel.value;
+        llmBaseUrl.value = api.base_url || llmBaseUrl.value;
+        llmSupportsImages.checked = Boolean(api.supports_images);
+      }
+      persistLlmLocalState();
+      updateLlmProviderFields();
+    }
+
+    function applyLlmDefaults(provider, overwrite) {
+      provider = normalizeLlmProvider(provider);
+      llmProvider.value = provider;
+      const defaults = llmProviderSettings(provider);
+      if (provider !== 'codex_cli' && (overwrite || !llmModel.value.trim())) {
+        llmModel.value = defaults.model || '';
+      }
+      if (provider !== 'codex_cli' && (overwrite || !llmBaseUrl.value.trim())) {
+        llmBaseUrl.value = defaults.base_url || '';
+      }
+      if (overwrite || localStorage.getItem('bw.llmSupportsImages') === null) {
+        llmSupportsImages.checked = Boolean(defaults.supports_images);
+      }
+      updateLlmProviderFields();
+      persistLlmLocalState();
+    }
+
+    function updateLlmProviderFields() {
+      const provider = normalizeLlmProvider(llmProvider.value);
+      const isApi = provider !== 'codex_cli';
+      llmApiFields.hidden = !isApi;
+      llmCodexHint.hidden = isApi;
+      if (!isApi) {
+        llmApiHint.textContent = '';
+        return;
+      }
+      const settings = llmProviderSettings(provider);
+      llmApiKey.placeholder = settings.api_key_configured
+        ? t('llmKeyPlaceholder')
+        : (settings.api_key_env || settings.key_placeholder || t('llmKeyPlaceholder'));
+      llmApiHint.textContent = t('llmApiHint', {provider: llmProviderLabel(provider)});
+    }
+
+    function persistLlmLocalState() {
+      rememberCurrentLlmProviderFields(llmProvider.value);
+      localStorage.setItem('bw.llmProvider', normalizeLlmProvider(llmProvider.value));
+      localStorage.setItem('bw.llmModel', llmModel.value);
+      localStorage.setItem('bw.llmBaseUrl', llmBaseUrl.value);
+      localStorage.setItem('bw.llmSupportsImages', llmSupportsImages.checked ? '1' : '0');
+    }
+
+    function cacheLlmProviderConfigs(payload) {
+      API_LLM_PROVIDERS.forEach((provider) => {
+        if (payload && payload[provider]) {
+          llmProviderConfigCache[provider] = {
+            ...llmProviderConfigCache[provider],
+            ...payload[provider]
+          };
+        }
+      });
+    }
+
+    function rememberCurrentLlmProviderFields(provider) {
+      provider = normalizeLlmProvider(provider);
+      if (provider === 'codex_cli') {
+        return;
+      }
+      llmProviderConfigCache[provider] = {
+        ...llmProviderSettings(provider),
+        model: llmModel.value.trim(),
+        base_url: llmBaseUrl.value.trim(),
+        supports_images: llmSupportsImages.checked
+      };
+    }
+
+    function llmProviderSettings(provider) {
+      provider = normalizeLlmProvider(provider);
+      return {
+        ...(LLM_PROVIDER_DEFAULTS[provider] || LLM_PROVIDER_DEFAULTS.codex_cli),
+        ...(llmProviderConfigCache[provider] || {})
+      };
+    }
+
+    function normalizeLlmProvider(provider) {
+      return ['codex_cli', 'openai', 'deepseek', 'doubao', 'gemini'].includes(provider) ? provider : 'codex_cli';
+    }
+
+    function llmProviderLabel(provider) {
+      if (provider === 'openai') {
+        return 'OpenAI API';
+      }
+      if (provider === 'deepseek') {
+        return 'DeepSeek API';
+      }
+      if (provider === 'doubao') {
+        return 'Doubao API';
+      }
+      if (provider === 'gemini') {
+        return 'Gemini API';
+      }
+      return 'Codex CLI';
+    }
+
+    async function saveLlmConfig(token) {
+      const provider = normalizeLlmProvider(llmProvider.value);
+      if (provider !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
+        throw new Error(t('llmConfigRequired'));
+      }
+      const body = {provider};
+      if (provider !== 'codex_cli') {
+        body[provider] = {
+          model: llmModel.value.trim(),
+          base_url: llmBaseUrl.value.trim(),
+          api_key: llmApiKey.value.trim(),
+          supports_images: llmSupportsImages.checked
+        };
+      }
+      const response = await fetch('/api/llm/config', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-blockwright-token': token
+        },
+        body: JSON.stringify(body)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
+      }
+      llmApiKey.value = '';
+      applyLlmConfig(payload);
+      return payload;
+    }
+
     async function saveWebConfig(event) {
       event.preventDefault();
       const token = controllerToken.value.trim();
@@ -1974,7 +2232,12 @@
         controllerToken.focus();
         return;
       }
-      if (!homeserver || !allowedSender) {
+      if (normalizeLlmProvider(llmProvider.value) !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
+        setConfigStatus(t('llmConfigRequired'), true);
+        return;
+      }
+      const shouldSaveMatrix = homeserver || allowedSender || matrixAccessToken.value.trim();
+      if (shouldSaveMatrix && (!homeserver || !allowedSender)) {
         setConfigStatus(t('matrixRequired'), true);
         return;
       }
@@ -1982,27 +2245,30 @@
       configSave.disabled = true;
       setConfigStatus(t('savingConfig'), false);
       try {
-        const response = await fetch('/api/chat/matrix/local-config', {
-          method: 'PUT',
-          headers: {
-            'content-type': 'application/json',
-            'x-blockwright-token': token
-          },
-          body: JSON.stringify({
-            enabled: matrixEnabled.checked,
-            homeserver_url: homeserver,
-            access_token: matrixAccessToken.value.trim(),
-            allowed_sender: allowedSender,
-            allow_own_user_messages: matrixAllowOwn.checked,
-            auto_join_invites: matrixAutoJoin.checked,
-            default_target_player: username.value.trim() || null
-          })
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
+        await saveLlmConfig(token);
+        if (shouldSaveMatrix) {
+          const response = await fetch('/api/chat/matrix/local-config', {
+            method: 'PUT',
+            headers: {
+              'content-type': 'application/json',
+              'x-blockwright-token': token
+            },
+            body: JSON.stringify({
+              enabled: matrixEnabled.checked,
+              homeserver_url: homeserver,
+              access_token: matrixAccessToken.value.trim(),
+              allowed_sender: allowedSender,
+              allow_own_user_messages: matrixAllowOwn.checked,
+              auto_join_invites: matrixAutoJoin.checked,
+              default_target_player: username.value.trim() || null
+            })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
+          }
         }
-        setConfigStatus(t('configSaved'), false);
+        setConfigStatus(`${t('llmConfigSaved')} ${t('configSaved')}`, false);
       } catch (error) {
         setConfigStatus(error.message || t('saveFailed'), true);
       } finally {

@@ -142,9 +142,7 @@ pub async fn serve_stdio_proxy(
 }
 
 async fn handle_request(state: &AppState, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
-    let Some(id) = request.id else {
-        return None;
-    };
+    let id = request.id?;
 
     let result = match request.method.as_str() {
         "initialize" => Ok(initialize_result()),
@@ -376,6 +374,8 @@ async fn handle_tools_call(state: &AppState, params: Value) -> Result<Value, (i3
                 "environment": state.config.server.environment,
                 "codex_enabled": state.codex.enabled(),
                 "codex_timeout_seconds": state.config.codex.timeout_seconds,
+                "llm_enabled": state.llm.enabled(),
+                "llm_provider": state.llm.provider().label(),
             }),
             "blockwright_get_player_state" => get_player_state(state, arguments).await?,
             "blockwright_scan_nearby_blocks" => scan_nearby_blocks(state, arguments).await?,
@@ -1189,8 +1189,8 @@ mod tests {
 
     use crate::{
         config::{
-            AppConfig, ChatConfig, CodexConfig, MinecraftConfig, SecurityConfig, ServerConfig,
-            StorageConfig,
+            AppConfig, ChatConfig, CodexConfig, LlmConfig, MinecraftConfig, SecurityConfig,
+            ServerConfig, StorageConfig,
         },
         domain::types::{BlueprintBlock, BlueprintSize, BuildStatus},
         state::AppState,
@@ -1229,6 +1229,10 @@ mod tests {
                 enabled: false,
                 command: "codex".to_string(),
                 timeout_seconds: 1800,
+            },
+            llm: LlmConfig {
+                config_path: temp_dir(name).join("llm.local.yaml"),
+                env_path: temp_dir(name).join(".env"),
             },
             chat: ChatConfig {
                 config_path: temp_dir(name).join("chat.local.yaml"),

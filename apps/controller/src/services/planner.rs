@@ -4,7 +4,7 @@ use crate::{
         ChatAttachmentSource, ExpectedBuildAction, GameAction, MaterialCount, PlayerPosition,
         PlayerState, WorldScan, WorldScanBlock, PLACE_BLOCKS_CHUNK_SIZE,
     },
-    integrations::codex::{CodexClient, CodexResponseSchema},
+    integrations::{codex::CodexResponseSchema, llm::LlmClient},
     services::{
         blueprint_store::BlueprintStore,
         build_store::BuildStore,
@@ -180,21 +180,23 @@ struct ContextHistoryPolicy {
 
 #[derive(Clone, Default)]
 pub struct Planner {
-    codex: Option<CodexClient>,
+    llm: Option<LlmClient>,
 }
 
 fn codex_failure_reply(error: &str) -> String {
     let detail = if error.contains("No such file or directory") || error.contains("os error 2") {
         "具体原因：controller 启动环境找不到 codex 命令。"
+    } else if error.contains("LLM API") || error.contains("missing API key") {
+        "具体原因：大模型 API 配置不可用，请检查提供商、模型名、Base URL 和 API Key。"
     } else {
-        "请管理员检查 Codex 登录状态、模型权限、网络连接或 CLI 版本。"
+        "请管理员检查大模型配置、模型权限、网络连接、Codex 登录状态或 CLI 版本。"
     };
     codex_failure_reply_with_log_hint(error, detail, controller_log_hint().as_deref())
 }
 
 fn codex_failure_reply_with_log_hint(error: &str, detail: &str, log_path: Option<&str>) -> String {
-    let trace_hint = extract_codex_trace_id(error)
-        .map(|trace_id| format!("日志关键字：codex_trace_id={trace_id}。"))
+    let trace_hint = extract_ai_trace_id(error)
+        .map(|(key, trace_id)| format!("日志关键字：{key}={trace_id}。"))
         .unwrap_or_default();
     let log_hint = match log_path {
         Some(path) if !path.is_empty() => format!("详细日志：{path}。"),
@@ -203,8 +205,17 @@ fn codex_failure_reply_with_log_hint(error: &str, detail: &str, log_path: Option
     format!("AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}")
 }
 
-fn extract_codex_trace_id(error: &str) -> Option<&str> {
-    let start = error.find("codex_trace_id=")? + "codex_trace_id=".len();
+fn extract_ai_trace_id(error: &str) -> Option<(&'static str, &str)> {
+    extract_prefixed_trace_id(error, "codex_trace_id=")
+        .map(|trace_id| ("codex_trace_id", trace_id))
+        .or_else(|| {
+            extract_prefixed_trace_id(error, "llm_trace_id=")
+                .map(|trace_id| ("llm_trace_id", trace_id))
+        })
+}
+
+fn extract_prefixed_trace_id<'a>(error: &'a str, prefix: &str) -> Option<&'a str> {
+    let start = error.find(prefix)? + prefix.len();
     let rest = &error[start..];
     let end = rest
         .find(|ch: char| !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')))
@@ -225,8 +236,10 @@ fn controller_log_hint() -> Option<String> {
 }
 
 impl Planner {
-    pub fn new(codex: CodexClient) -> Self {
-        Self { codex: Some(codex) }
+    pub fn new(llm: impl Into<LlmClient>) -> Self {
+        Self {
+            llm: Some(llm.into()),
+        }
     }
 
     pub async fn plan(&self, input: PlannerInput, blueprints: &BlueprintStore) -> PlanResult {
@@ -243,7 +256,7 @@ impl Planner {
             return result;
         }
 
-        if !self.codex_enabled() {
+        if !self.ai_enabled() {
             return PlanResult {
                 reply: "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。".to_string(),
                 summary: "AI 助手未启用".to_string(),
@@ -268,16 +281,18 @@ impl Planner {
         input: &PlannerInput,
         blueprints: &BlueprintStore,
     ) -> Option<PlanResult> {
-        if !should_generate_image_blueprint(&input.text, &input.attachments, self.codex_enabled()) {
+        let image_input_available = self.image_input_available();
+        if !should_generate_image_blueprint(&input.text, &input.attachments, image_input_available)
+        {
             return None;
         }
 
         let image_plan = match build_from_first_local_image(&input.text, &input.attachments)? {
             Ok(plan) => plan,
-            Err(error @ ImageBlueprintError::Decode { .. }) if self.codex_enabled() => {
+            Err(error @ ImageBlueprintError::Decode { .. }) if image_input_available => {
                 tracing::warn!(
                     error = %error,
-                    "local image could not be decoded by deterministic image pipeline; falling back to codex image planning"
+                    "local image could not be decoded by deterministic image pipeline; falling back to AI image planning"
                 );
                 return None;
             }
@@ -331,10 +346,14 @@ impl Planner {
         })
     }
 
-    fn codex_enabled(&self) -> bool {
-        self.codex
+    fn ai_enabled(&self) -> bool {
+        self.llm.as_ref().map(LlmClient::enabled).unwrap_or(false)
+    }
+
+    fn image_input_available(&self) -> bool {
+        self.llm
             .as_ref()
-            .map(CodexClient::enabled)
+            .map(LlmClient::image_input_available)
             .unwrap_or(false)
     }
 
@@ -344,8 +363,8 @@ impl Planner {
         blueprints: &BlueprintStore,
         builds: Option<&BuildStore>,
     ) -> Option<PlanResult> {
-        let codex = self.codex.as_ref()?;
-        if !codex.enabled() {
+        let llm = self.llm.as_ref()?;
+        if !llm.enabled() {
             return None;
         }
 
@@ -370,7 +389,7 @@ impl Planner {
             local_image_count = image_paths.len(),
             "codex unified planner prompt prepared"
         );
-        let output = match codex
+        let output = match llm
             .ask_with_schema_and_progress_and_images(
                 &prompt,
                 CodexResponseSchema::Plan,
@@ -401,7 +420,7 @@ impl Planner {
             Some(plan) => plan,
             None => {
                 tracing::warn!("codex unified planning returned invalid json");
-                match repair_invalid_codex_plan(codex, input, &context, &output).await {
+                match repair_invalid_codex_plan(llm, input, &context, &output).await {
                     Some(plan) => plan,
                     None => return Some(invalid_codex_plan_fallback(input).await),
                 }
@@ -412,7 +431,7 @@ impl Planner {
                 issues = ?issues,
                 "codex image recreation blueprint did not pass minimum quality gate"
             );
-            match repair_low_quality_image_plan(codex, input, &context, &plan, &issues).await {
+            match repair_low_quality_image_plan(llm, input, &context, &plan, &issues).await {
                 Some(repaired)
                     if image_recreation_quality_issues(input, repaired.blueprint.as_ref())
                         .is_none() =>
@@ -2733,7 +2752,7 @@ fn extract_json_object_candidates(output: &str) -> Vec<&str> {
 }
 
 async fn repair_invalid_codex_plan(
-    codex: &CodexClient,
+    llm: &LlmClient,
     input: &PlannerInput,
     context: &PlanContextBundle,
     invalid_output: &str,
@@ -2763,7 +2782,7 @@ context_bundle：
         invalid_output = invalid_output
     );
     let image_paths = local_image_attachment_paths(&input.attachments);
-    let output = match codex
+    let output = match llm
         .ask_with_schema_and_progress_and_images(
             &prompt,
             CodexResponseSchema::Plan,
@@ -2791,7 +2810,7 @@ context_bundle：
 }
 
 async fn repair_low_quality_image_plan(
-    codex: &CodexClient,
+    llm: &LlmClient,
     input: &PlannerInput,
     context: &PlanContextBundle,
     original_plan: &CodexPlan,
@@ -2828,7 +2847,7 @@ context_bundle：
         original_plan_json = original_plan_json
     );
     let image_paths = local_image_attachment_paths(&input.attachments);
-    let output = match codex
+    let output = match llm
         .ask_with_schema_and_progress_and_images(
             &prompt,
             CodexResponseSchema::Plan,
@@ -2953,11 +2972,14 @@ fn looks_like_new_build_request(text: &str) -> bool {
 mod tests {
     use super::*;
     use crate::{
-        config::CodexConfig,
+        config::{
+            write_llm_runtime_config, CodexConfig, LlmConfig, LlmProviderKind, LlmRuntimeConfig,
+        },
         domain::types::{
             Blueprint, BlueprintBlock, BlueprintSize, ChatAttachment, ChatAttachmentKind,
             ChatAttachmentSource, MaterialCount, WorldScanBlock,
         },
+        integrations::{codex::CodexClient, llm::LlmClient},
     };
     use image::{ImageBuffer, Rgba};
     use std::{
@@ -3600,6 +3622,80 @@ BLOCKWRIGHT_JSON
                 .and_then(|spec| spec.get("source"))
                 .and_then(serde_json::Value::as_str)
                 != Some("image_to_pixel_blueprint")
+        }));
+    }
+
+    #[tokio::test]
+    async fn text_only_api_without_codex_keeps_local_image_blueprint_fallback() {
+        let store = empty_store("text-only-api-image-fallback").await;
+        let dir = temp_dir("text-only-api-image-fallback");
+        fs::create_dir_all(&dir).unwrap();
+        let image_path = dir.join("building.png");
+        let mut image = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(4, 4);
+        for y in 0..4 {
+            for x in 0..4 {
+                image.put_pixel(
+                    x,
+                    y,
+                    if x == y {
+                        Rgba([220, 220, 220, 255])
+                    } else {
+                        Rgba([90, 120, 160, 255])
+                    },
+                );
+            }
+        }
+        image.save(&image_path).unwrap();
+        let llm_path = dir.join("llm.local.yaml");
+        let mut runtime = LlmRuntimeConfig {
+            provider: LlmProviderKind::DeepSeek,
+            ..LlmRuntimeConfig::default()
+        };
+        runtime.deepseek.supports_images = false;
+        write_llm_runtime_config(&llm_path, &runtime).unwrap();
+        let planner = Planner::new(LlmClient::new(
+            CodexClient::new(CodexConfig {
+                enabled: false,
+                command: "codex".to_string(),
+                timeout_seconds: 5,
+            }),
+            LlmConfig {
+                config_path: llm_path,
+                env_path: dir.join(".env"),
+            },
+        ));
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "帮我根据这张建筑图建一个房子".to_string(),
+                    player: Some("Steve".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: None,
+                    nearby_scan: None,
+                    attachments: vec![ChatAttachment {
+                        kind: ChatAttachmentKind::Image,
+                        source: ChatAttachmentSource::LocalPath {
+                            path: image_path.to_string_lossy().to_string(),
+                        },
+                        file_name: Some("building.png".to_string()),
+                        mime_type: Some("image/png".to_string()),
+                    }],
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert!(result.summary.starts_with("图片复刻"));
+        assert!(!result.actions.is_empty());
+        assert!(store.list().await.iter().any(|item| {
+            item.spec
+                .as_ref()
+                .and_then(|spec| spec.get("source"))
+                .and_then(serde_json::Value::as_str)
+                == Some("image_to_pixel_blueprint")
         }));
     }
 

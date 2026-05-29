@@ -3,6 +3,7 @@ pub mod blueprints;
 pub mod builds;
 pub mod chat;
 pub mod health;
+pub mod llm;
 pub mod mcp_bridge;
 pub mod minecraft;
 pub mod robot;
@@ -18,6 +19,7 @@ pub fn router() -> Router<AppState> {
         .merge(minecraft::router())
         .merge(robot::router())
         .merge(chat::router())
+        .merge(llm::router())
         .merge(builds::router())
         .merge(blueprints::router())
         .merge(mcp_bridge::router())

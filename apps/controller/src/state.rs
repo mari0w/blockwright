@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     config::{self, AppConfig, ChatRuntimeConfig},
-    integrations::{codex::CodexClient, codex_home::prepare_project_codex_home},
+    integrations::{codex::CodexClient, codex_home::prepare_project_codex_home, llm::LlmClient},
     services::{
         blueprint_store::BlueprintStore, build_store::BuildStore, job_queue::JobQueue,
         planner::Planner, progress::ProgressStore,
@@ -18,6 +18,7 @@ pub struct AppState {
     pub progress: ProgressStore,
     pub planner: Planner,
     pub codex: CodexClient,
+    pub llm: LlmClient,
     pub chat: ChatRuntimeConfig,
 }
 
@@ -48,15 +49,17 @@ impl AppState {
             codex_home,
         )
         .with_progress(progress.clone());
+        let llm = LlmClient::new(codex.clone(), config.llm.clone()).with_progress(progress.clone());
 
         Ok(Self {
             codex: codex.clone(),
+            llm: llm.clone(),
             config,
             blueprints,
             builds,
             jobs: JobQueue::default(),
             progress,
-            planner: Planner::new(codex),
+            planner: Planner::new(llm),
             chat,
         })
     }

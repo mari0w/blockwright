@@ -45,10 +45,14 @@ pub enum CodexResponseSchema {
 }
 
 impl CodexResponseSchema {
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             CodexResponseSchema::Plan => "plan",
         }
+    }
+
+    pub fn json_schema(self) -> &'static str {
+        self.packaged_content()
     }
 
     fn file_name(self) -> &'static str {
@@ -244,32 +248,34 @@ impl CodexClient {
                 "starting codex cli request attempt"
             );
             let result = run_codex_exec_with_progress(
-                attempt_started_at,
-                self.config.timeout_seconds,
-                &self.config.command,
-                &trace_id,
-                schema_label,
-                session_key.as_deref().unwrap_or("ephemeral"),
-                self.progress.clone(),
-                progress_id.map(str::to_string),
-                run_codex_exec(
-                    &program,
-                    &args,
-                    prompt,
-                    &last_message_path,
-                    schema_path_for_attempt,
-                    resume_thread_id.as_deref(),
-                    session_key.is_some(),
-                    image_paths,
-                    self.runtime_home.as_deref().map(PathBuf::as_path),
-                    &self.config.command,
-                    &trace_id,
+                CodexProgressContext {
+                    started_at: attempt_started_at,
+                    timeout_seconds: self.config.timeout_seconds,
+                    command: &self.config.command,
+                    trace_id: &trace_id,
                     schema_label,
-                    session_key.as_deref().unwrap_or("ephemeral"),
-                    self.progress.clone(),
-                    progress_id.map(str::to_string),
+                    session_key: session_key.as_deref().unwrap_or("ephemeral"),
+                    progress: self.progress.clone(),
+                    progress_id: progress_id.map(str::to_string),
+                },
+                run_codex_exec(CodexExecRequest {
+                    program: &program,
+                    args: &args,
+                    prompt,
+                    last_message_path: &last_message_path,
+                    schema_path: schema_path_for_attempt,
+                    resume_thread_id: resume_thread_id.as_deref(),
+                    persist_session: session_key.is_some(),
+                    image_paths,
+                    runtime_home: self.runtime_home.as_deref().map(PathBuf::as_path),
+                    command_for_log: &self.config.command,
+                    trace_id: &trace_id,
+                    schema_label,
+                    session_key: session_key.as_deref().unwrap_or("ephemeral"),
+                    progress: self.progress.clone(),
+                    progress_id: progress_id.map(str::to_string),
                     structured_output,
-                ),
+                }),
             )
             .await;
 
@@ -542,18 +548,22 @@ impl CodexSessionStore {
     }
 }
 
-async fn run_codex_exec_with_progress(
+struct CodexProgressContext<'a> {
     started_at: std::time::Instant,
     timeout_seconds: u64,
-    command: &str,
-    trace_id: &str,
-    schema_label: &str,
-    session_key: &str,
+    command: &'a str,
+    trace_id: &'a str,
+    schema_label: &'a str,
+    session_key: &'a str,
     progress: Option<ProgressStore>,
     progress_id: Option<String>,
+}
+
+async fn run_codex_exec_with_progress(
+    context: CodexProgressContext<'_>,
     exec: impl std::future::Future<Output = std::io::Result<std::process::Output>>,
 ) -> Result<std::process::Output, Box<dyn std::error::Error + Send + Sync>> {
-    let timeout_duration = Duration::from_secs(timeout_seconds);
+    let timeout_duration = Duration::from_secs(context.timeout_seconds);
     let deadline = sleep(timeout_duration);
     let next_progress = sleep(Duration::from_secs(CODEX_PROGRESS_INTERVAL_SECONDS));
     tokio::pin!(deadline);
@@ -564,21 +574,21 @@ async fn run_codex_exec_with_progress(
         tokio::select! {
             result = &mut exec => return result.map_err(Into::into),
             _ = &mut deadline => {
-                return Err(format!("codex command timed out after {timeout_seconds} seconds").into());
+                return Err(format!("codex command timed out after {} seconds", context.timeout_seconds).into());
             }
             _ = &mut next_progress => {
-                let elapsed_seconds = started_at.elapsed().as_secs();
-                let remaining_seconds = timeout_seconds.saturating_sub(elapsed_seconds);
+                let elapsed_seconds = context.started_at.elapsed().as_secs();
+                let remaining_seconds = context.timeout_seconds.saturating_sub(elapsed_seconds);
                 tracing::info!(
-                    trace_id = %trace_id,
-                    command = %command,
-                    schema = schema_label,
-                    session_key = session_key,
+                    trace_id = %context.trace_id,
+                    command = %context.command,
+                    schema = context.schema_label,
+                    session_key = context.session_key,
                     elapsed_seconds,
                     remaining_seconds,
                     "codex cli request still running"
                 );
-                if let (Some(progress), Some(progress_id)) = (progress.as_ref(), progress_id.as_deref()) {
+                if let (Some(progress), Some(progress_id)) = (context.progress.as_ref(), context.progress_id.as_deref()) {
                     progress.record(
                         progress_id,
                         "Codex 仍在处理，本次请求还没有返回",
@@ -607,49 +617,51 @@ fn command_parts(
     Ok((program.to_string(), args))
 }
 
-async fn run_codex_exec(
-    program: &str,
-    args: &[String],
-    prompt: &str,
-    last_message_path: &PathBuf,
-    schema_path: Option<&Path>,
-    resume_thread_id: Option<&str>,
+struct CodexExecRequest<'a> {
+    program: &'a str,
+    args: &'a [String],
+    prompt: &'a str,
+    last_message_path: &'a Path,
+    schema_path: Option<&'a Path>,
+    resume_thread_id: Option<&'a str>,
     persist_session: bool,
-    image_paths: &[PathBuf],
-    runtime_home: Option<&Path>,
-    command_for_log: &str,
-    trace_id: &str,
-    schema_label: &str,
-    session_key: &str,
+    image_paths: &'a [PathBuf],
+    runtime_home: Option<&'a Path>,
+    command_for_log: &'a str,
+    trace_id: &'a str,
+    schema_label: &'a str,
+    session_key: &'a str,
     progress: Option<ProgressStore>,
     progress_id: Option<String>,
     structured_output: bool,
-) -> std::io::Result<Output> {
-    let resolved_program = resolve_command_program(program, Some(trace_id));
+}
+
+async fn run_codex_exec(request: CodexExecRequest<'_>) -> std::io::Result<Output> {
+    let resolved_program = resolve_command_program(request.program, Some(request.trace_id));
     let mut command = Command::new(&resolved_program.program);
     if let Some(path_dir) = resolved_program.path_dir.as_deref() {
         prepend_command_path(&mut command, path_dir);
     }
-    if let Some(runtime_home) = runtime_home {
+    if let Some(runtime_home) = request.runtime_home {
         command.env("CODEX_HOME", runtime_home);
     }
-    command.arg("exec").args(args);
-    if !persist_session {
+    command.arg("exec").args(request.args);
+    if !request.persist_session {
         command.arg("--ephemeral");
     }
     command.arg("--json");
-    if let Some(schema_path) = schema_path {
+    if let Some(schema_path) = request.schema_path {
         command.arg("--output-schema").arg(schema_path);
     }
-    for image_path in image_paths {
+    for image_path in request.image_paths {
         command.arg("--image").arg(image_path);
     }
-    if let Some(thread_id) = resume_thread_id {
+    if let Some(thread_id) = request.resume_thread_id {
         command.arg("resume").arg(thread_id);
     }
     command
         .arg("--output-last-message")
-        .arg(last_message_path)
+        .arg(request.last_message_path)
         .arg("-")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -658,31 +670,33 @@ async fn run_codex_exec(
 
     let mut child = command.spawn()?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(prompt.as_bytes()).await?;
+        stdin.write_all(request.prompt.as_bytes()).await?;
     }
 
-    let stdout = child.stdout.take().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::Other, "failed to capture codex stdout pipe")
-    })?;
-    let stderr = child.stderr.take().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::Other, "failed to capture codex stderr pipe")
-    })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("failed to capture codex stdout pipe"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("failed to capture codex stderr pipe"))?;
     let (terminal_error_tx, mut terminal_error_rx) = mpsc::unbounded_channel();
     let stdout_context = CodexEventLogContext {
-        command: command_for_log.to_string(),
-        trace_id: trace_id.to_string(),
-        schema_label: schema_label.to_string(),
-        session_key: session_key.to_string(),
-        progress,
-        progress_id,
+        command: request.command_for_log.to_string(),
+        trace_id: request.trace_id.to_string(),
+        schema_label: request.schema_label.to_string(),
+        session_key: request.session_key.to_string(),
+        progress: request.progress,
+        progress_id: request.progress_id,
         terminal_error_tx: Some(terminal_error_tx),
-        early_terminal_reconnect: structured_output,
+        early_terminal_reconnect: request.structured_output,
     };
     let stderr_context = CodexEventLogContext {
-        command: command_for_log.to_string(),
-        trace_id: trace_id.to_string(),
-        schema_label: schema_label.to_string(),
-        session_key: session_key.to_string(),
+        command: request.command_for_log.to_string(),
+        trace_id: request.trace_id.to_string(),
+        schema_label: request.schema_label.to_string(),
+        session_key: request.session_key.to_string(),
         progress: stdout_context.progress.clone(),
         progress_id: stdout_context.progress_id.clone(),
         terminal_error_tx: None,
@@ -704,16 +718,16 @@ async fn run_codex_exec(
                 let _ = child.wait().await;
                 let _ = stdout_task.await;
                 let _ = stderr_task.await;
-                return Err(io::Error::new(io::ErrorKind::Other, terminal_error));
+                return Err(io::Error::other(terminal_error));
             }
         }
     };
     let stdout = stdout_task
         .await
-        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))??;
+        .map_err(|error| io::Error::other(error.to_string()))??;
     let stderr = stderr_task
         .await
-        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))??;
+        .map_err(|error| io::Error::other(error.to_string()))??;
 
     Ok(Output {
         status,
@@ -792,7 +806,7 @@ fn nvm_codex_paths(home: &Path) -> Vec<PathBuf> {
         .flat_map(|entries| entries.filter_map(Result::ok))
         .map(|entry| entry.path().join("bin").join("codex"))
         .collect::<Vec<_>>();
-    paths.sort_by(|left, right| nvm_node_version_key(right).cmp(&nvm_node_version_key(left)));
+    paths.sort_by_key(|path| std::cmp::Reverse(nvm_node_version_key(path)));
     paths
 }
 
@@ -1783,7 +1797,7 @@ BLOCKWRIGHT_JSON
                 CodexResponseSchema::Plan,
                 None,
                 None,
-                &[image_path.clone()],
+                std::slice::from_ref(&image_path),
             )
             .await
             .unwrap()

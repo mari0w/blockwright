@@ -11,6 +11,8 @@ pub struct AppConfig {
     pub minecraft: MinecraftConfig,
     pub security: SecurityConfig,
     pub codex: CodexConfig,
+    #[serde(default)]
+    pub llm: LlmConfig,
     pub chat: ChatConfig,
 }
 
@@ -47,10 +49,119 @@ pub struct CodexConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct LlmConfig {
+    #[serde(default = "default_llm_config_path")]
+    pub config_path: PathBuf,
+    #[serde(default = "default_env_path")]
+    pub env_path: PathBuf,
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            config_path: default_llm_config_path(),
+            env_path: default_env_path(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ChatConfig {
     pub config_path: PathBuf,
     #[serde(default = "default_env_path")]
     pub env_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmProviderKind {
+    #[serde(rename = "codex_cli", alias = "codex")]
+    CodexCli,
+    #[serde(rename = "openai", alias = "open_ai")]
+    OpenAi,
+    #[serde(rename = "deepseek", alias = "deep_seek")]
+    DeepSeek,
+    #[serde(rename = "doubao", alias = "ark", alias = "volcengine")]
+    Doubao,
+    #[serde(rename = "gemini", alias = "genmini", alias = "google")]
+    Gemini,
+}
+
+impl Default for LlmProviderKind {
+    fn default() -> Self {
+        Self::CodexCli
+    }
+}
+
+impl LlmProviderKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            LlmProviderKind::CodexCli => "Codex CLI",
+            LlmProviderKind::OpenAi => "OpenAI API",
+            LlmProviderKind::DeepSeek => "DeepSeek API",
+            LlmProviderKind::Doubao => "Doubao API",
+            LlmProviderKind::Gemini => "Gemini API",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LlmRuntimeConfig {
+    #[serde(default)]
+    pub provider: LlmProviderKind,
+    #[serde(default = "default_openai_api_config")]
+    pub openai: LlmApiProviderConfig,
+    #[serde(default = "default_deepseek_api_config")]
+    pub deepseek: LlmApiProviderConfig,
+    #[serde(default = "default_doubao_api_config")]
+    pub doubao: LlmApiProviderConfig,
+    #[serde(default = "default_gemini_api_config")]
+    pub gemini: LlmApiProviderConfig,
+}
+
+impl Default for LlmRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            provider: LlmProviderKind::CodexCli,
+            openai: default_openai_api_config(),
+            deepseek: default_deepseek_api_config(),
+            doubao: default_doubao_api_config(),
+            gemini: default_gemini_api_config(),
+        }
+    }
+}
+
+impl LlmRuntimeConfig {
+    pub fn active_api_config(&self) -> Option<&LlmApiProviderConfig> {
+        match self.provider {
+            LlmProviderKind::OpenAi => Some(&self.openai),
+            LlmProviderKind::DeepSeek => Some(&self.deepseek),
+            LlmProviderKind::Doubao => Some(&self.doubao),
+            LlmProviderKind::Gemini => Some(&self.gemini),
+            _ => None,
+        }
+    }
+
+    pub fn active_api_config_mut(&mut self) -> Option<&mut LlmApiProviderConfig> {
+        match self.provider {
+            LlmProviderKind::OpenAi => Some(&mut self.openai),
+            LlmProviderKind::DeepSeek => Some(&mut self.deepseek),
+            LlmProviderKind::Doubao => Some(&mut self.doubao),
+            LlmProviderKind::Gemini => Some(&mut self.gemini),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LlmApiProviderConfig {
+    pub model: String,
+    pub base_url: String,
+    pub api_key_env: String,
+    #[serde(default)]
+    pub supports_images: bool,
+    #[serde(default = "default_llm_api_timeout_seconds")]
+    pub timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -172,6 +283,43 @@ pub fn load_chat_runtime_config(
     Ok(config)
 }
 
+pub fn load_llm_runtime_config(
+    path: &Path,
+) -> Result<LlmRuntimeConfig, Box<dyn std::error::Error + Send + Sync>> {
+    if !path.exists() {
+        return Ok(LlmRuntimeConfig::default());
+    }
+
+    let source = std::fs::read_to_string(path)?;
+    let config = yaml_serde::from_str::<LlmRuntimeConfig>(&source)?;
+    validate_llm_runtime_config(&config)?;
+    Ok(config)
+}
+
+pub fn validate_llm_runtime_config(
+    config: &LlmRuntimeConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match config.provider {
+        LlmProviderKind::CodexCli => Ok(()),
+        LlmProviderKind::OpenAi => validate_llm_api_provider("OpenAI API", &config.openai),
+        LlmProviderKind::DeepSeek => validate_llm_api_provider("DeepSeek API", &config.deepseek),
+        LlmProviderKind::Doubao => validate_llm_api_provider("Doubao API", &config.doubao),
+        LlmProviderKind::Gemini => validate_llm_api_provider("Gemini API", &config.gemini),
+    }
+}
+
+pub fn write_llm_runtime_config(
+    path: &Path,
+    config: &LlmRuntimeConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    validate_llm_runtime_config(config)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, yaml_serde::to_string(config)?)?;
+    Ok(())
+}
+
 fn validate_chat_runtime_config(
     config: &ChatRuntimeConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -248,6 +396,104 @@ fn default_env_path() -> PathBuf {
     PathBuf::from(".env")
 }
 
+fn default_llm_config_path() -> PathBuf {
+    PathBuf::from("config/llm.local.yaml")
+}
+
+fn default_openai_api_config() -> LlmApiProviderConfig {
+    LlmApiProviderConfig {
+        model: "gpt-4.1".to_string(),
+        base_url: "https://api.openai.com/v1".to_string(),
+        api_key_env: "OPENAI_API_KEY".to_string(),
+        supports_images: true,
+        timeout_seconds: default_llm_api_timeout_seconds(),
+    }
+}
+
+fn default_deepseek_api_config() -> LlmApiProviderConfig {
+    LlmApiProviderConfig {
+        model: "deepseek-v4-flash".to_string(),
+        base_url: "https://api.deepseek.com".to_string(),
+        api_key_env: "DEEPSEEK_API_KEY".to_string(),
+        supports_images: false,
+        timeout_seconds: default_llm_api_timeout_seconds(),
+    }
+}
+
+fn default_doubao_api_config() -> LlmApiProviderConfig {
+    LlmApiProviderConfig {
+        model: "doubao-seed-2-0-lite-260215".to_string(),
+        base_url: "https://ark.cn-beijing.volces.com/api/v3".to_string(),
+        api_key_env: "ARK_API_KEY".to_string(),
+        supports_images: true,
+        timeout_seconds: default_llm_api_timeout_seconds(),
+    }
+}
+
+fn default_gemini_api_config() -> LlmApiProviderConfig {
+    LlmApiProviderConfig {
+        model: "gemini-2.5-flash".to_string(),
+        base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+        api_key_env: "GEMINI_API_KEY".to_string(),
+        supports_images: true,
+        timeout_seconds: default_llm_api_timeout_seconds(),
+    }
+}
+
+fn default_llm_api_timeout_seconds() -> u64 {
+    1800
+}
+
+fn validate_llm_api_provider(
+    label: &str,
+    config: &LlmApiProviderConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if config.model.trim().is_empty()
+        || config.base_url.trim().is_empty()
+        || config.api_key_env.trim().is_empty()
+    {
+        return Err(format!("{label} 的 model、base_url、api_key_env 不能为空").into());
+    }
+    validate_env_key_name(label, &config.api_key_env)?;
+    validate_llm_api_base_url(label, &config.base_url)?;
+    if config.timeout_seconds == 0 {
+        return Err(format!("{label} 的 timeout_seconds 必须大于 0").into());
+    }
+    Ok(())
+}
+
+pub fn validate_env_key_name(
+    label: &str,
+    key: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let key = key.trim();
+    let Some(first) = key.chars().next() else {
+        return Err(format!("{label} 的 api_key_env 不能为空").into());
+    };
+    if !(first == '_' || first.is_ascii_alphabetic())
+        || !key
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return Err(
+            format!("{label} 的 api_key_env 只能使用字母、数字和下划线，且不能以数字开头").into(),
+        );
+    }
+    Ok(())
+}
+
+pub fn validate_llm_api_base_url(
+    label: &str,
+    base_url: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let url = reqwest::Url::parse(base_url.trim())
+        .map_err(|_| format!("{label} 的 base_url 必须是有效的 http(s) URL"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(format!("{label} 的 base_url 必须使用 http 或 https").into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +523,102 @@ mod tests {
             .contains("model_reasoning_effort=medium"));
         assert!(config.codex.command.contains("--skip-git-repo-check"));
         assert!(!config.codex.command.contains("--ignore-user-config"));
+    }
+
+    #[test]
+    fn missing_llm_runtime_config_defaults_to_codex_cli() {
+        let path = std::env::temp_dir().join(format!(
+            "blockwright-missing-llm-config-{}-{}.yaml",
+            std::process::id(),
+            1
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let config = load_llm_runtime_config(&path).unwrap();
+
+        assert_eq!(LlmProviderKind::CodexCli, config.provider);
+        assert_eq!("gpt-4.1", config.openai.model);
+        assert_eq!("deepseek-v4-flash", config.deepseek.model);
+        assert_eq!("doubao-seed-2-0-lite-260215", config.doubao.model);
+        assert_eq!("gemini-2.5-flash", config.gemini.model);
+        assert_eq!(1800, config.openai.timeout_seconds);
+    }
+
+    #[test]
+    fn llm_runtime_config_accepts_api_provider_aliases() {
+        let source = r#"
+provider: genmini
+openai:
+  model: gpt-4.1-mini
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  supports_images: true
+  timeout_seconds: 120
+deepseek:
+  model: deepseek-v4-flash
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
+  supports_images: false
+  timeout_seconds: 120
+doubao:
+  model: doubao-seed-2-0-lite-260215
+  base_url: https://ark.cn-beijing.volces.com/api/v3
+  api_key_env: ARK_API_KEY
+  supports_images: true
+  timeout_seconds: 120
+gemini:
+  model: gemini-2.5-flash
+  base_url: https://generativelanguage.googleapis.com/v1beta
+  api_key_env: GEMINI_API_KEY
+  supports_images: true
+  timeout_seconds: 120
+"#;
+
+        let config = yaml_serde::from_str::<LlmRuntimeConfig>(source).unwrap();
+
+        assert_eq!(LlmProviderKind::Gemini, config.provider);
+        assert!(validate_llm_runtime_config(&config).is_ok());
+        assert_eq!("gpt-4.1-mini", config.openai.model);
+        assert_eq!("doubao-seed-2-0-lite-260215", config.doubao.model);
+    }
+
+    #[test]
+    fn llm_runtime_config_accepts_openai_deepseek_doubao_and_gemini() {
+        for provider in [
+            LlmProviderKind::OpenAi,
+            LlmProviderKind::DeepSeek,
+            LlmProviderKind::Doubao,
+            LlmProviderKind::Gemini,
+        ] {
+            let config = LlmRuntimeConfig {
+                provider,
+                ..LlmRuntimeConfig::default()
+            };
+
+            assert!(validate_llm_runtime_config(&config).is_ok());
+        }
+    }
+
+    #[test]
+    fn llm_runtime_config_rejects_invalid_active_base_url() {
+        let mut config = LlmRuntimeConfig {
+            provider: LlmProviderKind::OpenAi,
+            ..LlmRuntimeConfig::default()
+        };
+        config.openai.base_url = "not a url".to_string();
+
+        assert!(validate_llm_runtime_config(&config).is_err());
+    }
+
+    #[test]
+    fn llm_runtime_config_rejects_invalid_api_key_env_name() {
+        let mut config = LlmRuntimeConfig {
+            provider: LlmProviderKind::OpenAi,
+            ..LlmRuntimeConfig::default()
+        };
+        config.openai.api_key_env = "BAD KEY".to_string();
+
+        assert!(validate_llm_runtime_config(&config).is_err());
     }
 
     #[test]

@@ -92,7 +92,7 @@ flowchart LR
 - Minecraft 1.21.8 + Fabric Loader。
 - Fabric API。
 - 可选：`cargo-llvm-cov`，用于本地覆盖率门禁。
-- 已登录的 Codex CLI。controller 不再用本地关键词规则兜底识别建筑或动作意图。
+- 已登录的 Codex CLI，或已在 `/web` 设置里配置 OpenAI/DeepSeek API Key。controller 不再用本地关键词规则兜底识别建筑或动作意图。
 
 ### 启动 Web 端
 
@@ -113,6 +113,20 @@ chmod +x scripts/*.sh
 ```bash
 make run-web
 ```
+
+### AI 模型模式
+
+默认模式仍然是 Codex CLI。打开 `/web` 右上角设置，在 **AI 模型** 里可以选择：
+
+- `Codex CLI`：使用 controller 里配置好的 `codex` 命令。
+- `OpenAI API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`OPENAI_API_KEY` 写入本地 `.env`。
+- `DeepSeek API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`DEEPSEEK_API_KEY` 写入本地 `.env`。
+- `Doubao API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`ARK_API_KEY` 写入本地 `.env`。
+- `Gemini API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`GEMINI_API_KEY` 写入本地 `.env`。
+
+切换模型只替换规划/翻译的底座，蓝图规划、扫描上下文、构建记录、任务队列、进度提示和 Web 交互继续走同一套 controller 流程。同一玩家/用户名的 API 模式请求也会保留短上下文，支持“继续”“接着改”这类续接请求。图片输入需要模型支持视觉能力；OpenAI、豆包和 Gemini 默认启用图片输入，DeepSeek 默认不声明图片能力，遇到图片请求会回退到 Codex CLI 处理，避免静默丢图。
+
+`config/llm.local.yaml` 和 `.env` 都不会提交到 Git；仓库只提交 `config/llm.example.yaml` 作为模板。
 
 临时换端口：
 

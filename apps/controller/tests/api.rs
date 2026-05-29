@@ -77,6 +77,13 @@ fn config_with_chat_path_and_codex(
             require_token,
         },
         codex,
+        llm: blockwright_controller::config::LlmConfig {
+            config_path: env_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("llm.local.yaml"),
+            env_path: env_path.clone(),
+        },
         chat: blockwright_controller::config::ChatConfig {
             config_path: chat_config_path,
             env_path,
@@ -449,6 +456,14 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("aria-label=\"Open settings\""));
     assert!(page_body.contains("M21 4h-7"));
     assert!(page_body.contains("id=\"configPage\""));
+    assert!(page_body.contains("id=\"llmProvider\""));
+    assert!(page_body.contains("OpenAI API"));
+    assert!(page_body.contains("DeepSeek API"));
+    assert!(page_body.contains("Doubao API"));
+    assert!(page_body.contains("Gemini API"));
+    assert!(page_body.contains("/api/llm/config"));
+    assert!(page_body.contains("function saveLlmConfig"));
+    assert!(page_body.contains("bw.llmProvider"));
     assert!(page_body.contains("Request microphone permission"));
     assert!(page_body.contains("申请麦克风权限"));
     assert!(page_body.contains("Mobile HTTPS"));
@@ -1732,8 +1747,8 @@ tools:
     assert_eq!(body["tools"][1]["platform"], "matrix");
     assert_eq!(body["tools"][1]["inbound"], "polling");
     assert_eq!(body["tools"][1]["local_friendly"], true);
-    assert!(body.to_string().contains("DINGTALK_CLIENT_SECRET") == false);
-    assert!(body.to_string().contains("MATRIX_ACCESS_TOKEN") == false);
+    assert!(!body.to_string().contains("DINGTALK_CLIENT_SECRET"));
+    assert!(!body.to_string().contains("MATRIX_ACCESS_TOKEN"));
 }
 
 #[tokio::test]
@@ -1775,4 +1790,152 @@ async fn matrix_local_config_endpoint_writes_untracked_config_and_env() {
     assert!(chat_source.contains("MATRIX_ACCESS_TOKEN"));
     assert!(!chat_source.contains("test-matrix-token"));
     assert!(env_source.contains("MATRIX_ACCESS_TOKEN=test-matrix-token"));
+}
+
+#[tokio::test]
+async fn llm_config_endpoint_writes_untracked_config_and_env() {
+    let chat_path = temp_dir("llm-local-config").join("chat.local.yaml");
+    let env_path = chat_path.parent().unwrap().join(".env");
+    let llm_path = chat_path.parent().unwrap().join("llm.local.yaml");
+    let api_key_env = format!("BLOCKWRIGHT_TEST_DEEPSEEK_KEY_{}", std::process::id());
+    let gemini_api_key_env = format!("BLOCKWRIGHT_TEST_GEMINI_KEY_{}", std::process::id());
+    std::env::remove_var(&api_key_env);
+    std::env::remove_var(&gemini_api_key_env);
+    std::fs::create_dir_all(env_path.parent().unwrap()).unwrap();
+    std::fs::write(&env_path, format!("export {api_key_env}=old-token\n")).unwrap();
+    let state = AppState::new(config_with_chat_path(true, chat_path))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/llm/config",
+            Some(json!({
+                "provider": "deepseek",
+                "deepseek": {
+                    "model": "deepseek-v4-flash",
+                    "base_url": "https://api.deepseek.com",
+                    "api_key_env": api_key_env.clone(),
+                    "api_key": "test-deepseek-token",
+                    "supports_images": false,
+                    "timeout_seconds": 120
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["provider"], "deepseek");
+    assert_eq!(body["deepseek"]["api_key_configured"], true);
+    assert_eq!(body["doubao"]["model"], "doubao-seed-2-0-lite-260215");
+    assert_eq!(body["gemini"]["model"], "gemini-2.5-flash");
+    assert!(!body.to_string().contains("test-deepseek-token"));
+    let llm_source = std::fs::read_to_string(&llm_path).unwrap();
+    let env_source = std::fs::read_to_string(&env_path).unwrap();
+    assert!(llm_source.contains("deepseek-v4-flash"));
+    assert!(llm_source.contains(&api_key_env));
+    assert!(!llm_source.contains("test-deepseek-token"));
+    assert!(env_source.contains(&format!("{api_key_env}=test-deepseek-token")));
+    assert!(!env_source.contains("old-token"));
+
+    let response = app
+        .oneshot(request(
+            "PUT",
+            "/api/llm/config",
+            Some(json!({
+                "provider": "gemini",
+                "gemini": {
+                    "model": "gemini-2.5-flash",
+                    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                    "api_key_env": gemini_api_key_env.clone(),
+                    "api_key": "test-gemini-token",
+                    "supports_images": true,
+                    "timeout_seconds": 120
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["provider"], "gemini");
+    assert_eq!(body["gemini"]["api_key_configured"], true);
+    assert!(!body.to_string().contains("test-gemini-token"));
+    let llm_source = std::fs::read_to_string(&llm_path).unwrap();
+    let env_source = std::fs::read_to_string(&env_path).unwrap();
+    assert!(llm_source.contains("gemini-2.5-flash"));
+    assert!(llm_source.contains(&gemini_api_key_env));
+    assert!(!llm_source.contains("test-gemini-token"));
+    assert!(env_source.contains(&format!("{gemini_api_key_env}=test-gemini-token")));
+    std::env::remove_var(api_key_env);
+    std::env::remove_var(gemini_api_key_env);
+}
+
+#[tokio::test]
+async fn llm_config_endpoint_rejects_invalid_api_base_url() {
+    let chat_path = temp_dir("llm-invalid-base-url").join("chat.local.yaml");
+    let state = AppState::new(config_with_chat_path(true, chat_path))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .oneshot(request(
+            "PUT",
+            "/api/llm/config",
+            Some(json!({
+                "provider": "openai",
+                "openai": {
+                    "model": "gpt-4.1",
+                    "base_url": "not a url",
+                    "api_key": "test-openai-token",
+                    "supports_images": true
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response_text(response).await.contains("base_url"));
+}
+
+#[tokio::test]
+async fn llm_config_endpoint_rejects_invalid_api_key_env_name() {
+    let chat_path = temp_dir("llm-invalid-env-key").join("chat.local.yaml");
+    let state = AppState::new(config_with_chat_path(true, chat_path))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .oneshot(request(
+            "PUT",
+            "/api/llm/config",
+            Some(json!({
+                "provider": "openai",
+                "openai": {
+                    "model": "gpt-4.1",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key_env": "BAD KEY",
+                    "api_key": "test-openai-token",
+                    "supports_images": true
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(response_text(response).await.contains("api_key_env"));
 }

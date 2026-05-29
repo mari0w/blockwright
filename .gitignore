@@ -3,6 +3,8 @@ target/
 data/
 config/chat.local.yaml
 config/chat.*.local.yaml
+config/llm.local.yaml
+config/llm.*.local.yaml
 config/secrets/
 .env
 .env.*

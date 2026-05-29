@@ -315,7 +315,7 @@ const PALETTE: &[PaletteBlock] = &[
 pub fn should_generate_image_blueprint(
     text: &str,
     attachments: &[ChatAttachment],
-    codex_enabled: bool,
+    image_ai_available: bool,
 ) -> bool {
     if first_local_image_path(attachments).is_none() {
         return false;
@@ -323,14 +323,14 @@ pub fn should_generate_image_blueprint(
 
     let text = text.trim();
     if text.is_empty() {
-        return !codex_enabled;
+        return !image_ai_available;
     }
 
     if wants_pixel_surface(text) {
         return true;
     }
 
-    if codex_enabled && wants_3d_recreation(text) {
+    if image_ai_available && wants_3d_recreation(text) {
         return false;
     }
 
@@ -355,7 +355,7 @@ pub fn should_generate_image_blueprint(
         "高保真",
         "完全",
     ];
-    !codex_enabled
+    !image_ai_available
         && explicit_build_words
             .iter()
             .any(|keyword| text.contains(keyword))

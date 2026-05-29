@@ -11,6 +11,8 @@ struct HealthResponse {
     environment: String,
     codex_enabled: bool,
     codex_timeout_seconds: u64,
+    llm_enabled: bool,
+    llm_provider: String,
 }
 
 pub fn router() -> Router<AppState> {
@@ -29,5 +31,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
         environment: state.config.server.environment.clone(),
         codex_enabled: state.codex.enabled(),
         codex_timeout_seconds: state.config.codex.timeout_seconds,
+        llm_enabled: state.llm.enabled(),
+        llm_provider: state.llm.provider().label().to_string(),
     })
 }

@@ -92,7 +92,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the detailed design.
 - Minecraft 1.21.8 + Fabric Loader.
 - Fabric API.
 - Optional: `cargo-llvm-cov` for local coverage checks.
-- Logged-in Codex CLI. The controller no longer falls back to local keyword rules for building or action intent.
+- Logged-in Codex CLI, or an OpenAI/DeepSeek API key configured from `/web` settings. The controller no longer falls back to local keyword rules for building or action intent.
 
 ### Start the Web UI
 
@@ -113,6 +113,20 @@ You can also use Make:
 ```bash
 make run-web
 ```
+
+### AI Model Provider
+
+Codex CLI is the default planning mode. In `/web` settings, open **AI model** and choose one of:
+
+- `Codex CLI`: uses the controller's configured `codex` command.
+- `OpenAI API`: stores model/Base URL in `config/llm.local.yaml` and stores `OPENAI_API_KEY` in local `.env`.
+- `DeepSeek API`: stores model/Base URL in `config/llm.local.yaml` and stores `DEEPSEEK_API_KEY` in local `.env`.
+- `Doubao API`: stores model/Base URL in `config/llm.local.yaml` and stores `ARK_API_KEY` in local `.env`.
+- `Gemini API`: stores model/Base URL in `config/llm.local.yaml` and stores `GEMINI_API_KEY` in local `.env`.
+
+Switching providers only swaps the planning/translation backend. Blueprint planning, scan context, build records, queueing, progress updates, and the Web flow still run through the same controller path. API modes keep short context per player/username so follow-ups such as "continue" or "change that" still have continuity. Image input requires a vision-capable model; OpenAI, Doubao, and Gemini enable image input by default, while DeepSeek is text-only by default and image requests fall back to Codex CLI instead of silently dropping the image.
+
+`config/llm.local.yaml` and `.env` are ignored by Git. Use `config/llm.example.yaml` as the committed template.
 
 Use another port temporarily:
 
