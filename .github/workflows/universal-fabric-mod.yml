@@ -75,7 +75,7 @@ jobs:
           gradle-version: "8.12"
 
       - name: Download controllers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: target/controller-artifacts
           pattern: controller-*
