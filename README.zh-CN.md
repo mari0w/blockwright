@@ -6,437 +6,105 @@
 
 [English](README.md) | 简体中文
 
-项目官网源文件：[docs/index.html](docs/index.html)；GitHub Pages 配置说明：[docs/GITHUB_PAGES.zh-CN.md](docs/GITHUB_PAGES.zh-CN.md)。
+Blockwright 是一个 Minecraft Java 版 AI 助手。装好 Fabric 模组后，你可以用自然语言让它在游戏里发物品、调时间和天气、建造房子、改造已有建筑，或者执行一些普通游戏操作。
 
-Blockwright 让你用自然语言操控 Minecraft：建造、执行指令、发物品、查看世界，并在游玩中动态改变游戏。
-
-Blockwright 是一个面向 Minecraft Java 版的 AI 建筑和游戏操作助手。玩家在游戏里输入 `/bw ...`，controller 负责模型调用、蓝图、任务队列和构建记录，Fabric/Paper 执行端负责读取和修改 Minecraft 世界。
-
-项目当前面向 Minecraft Java 版世界，通过 Fabric 和 Paper 接入。Fabric 是本地单人存档和局域网开放世界的主要路径；Paper 保留给独立服务端场景。
+它主要给玩家使用：打开游戏后模组会自动启动本地服务，玩家通过 Web 页面、语音、游戏内 `/bw` 命令，或者聊天工具把需求发给 Blockwright。
 
 ![Blockwright Web 配置页](docs/assets/web-settings-preview.png)
 
-## ✨ 核心能力
+## 主要能做什么
 
-- 🎮 在游戏内用 `/bw ...` 发送自然语言需求：发物品、调天气/时间、建造房子、改造已有建筑。
-- 🧠 在 `/web` 里选择 Codex CLI、OpenAI、DeepSeek、Doubao 或 Gemini 作为规划模型。
-- 🧱 建筑先生成蓝图和构建记录，再把同一份方块清单下发到 Minecraft 执行。
-- ✅ Fabric/Paper 执行端逐块读取世界状态生成校验报告，报告和构建记录一致才算成功。
-- 🔍 改造已有建筑时先扫描玩家附近世界方块，再匹配已保存的构建记录；目标不明确时追问。
-- 🧩 支持携带方块状态的材质，例如 `minecraft:oak_leaves[persistent=true]`、`minecraft:oak_door[half=lower,facing=south]`。
-- 🤖 外部聊天工具通过 controller 统一接入，再把任务下发到 Minecraft 世界。
+- 发物品：`给我一把钻石剑`、`给我一组火把`、`给我一套钻石装备`。
+- 改游戏状态：`把时间调到白天`、`别下雨了`、`切到创造模式`。
+- 建造：`帮我盖一个小木屋`、`在我面前建一个带窗户和床的房间`。
+- 改造：`把这个房子的窗户换成蓝色玻璃`、`把我面前这面墙换成石砖`。
+- 查看和继续对话：可以围绕同一个玩家继续说“接着改”“换大一点”“把屋顶加高”。
 
-## 🧭 项目状态
+## 使用步骤
 
-Blockwright 处于早期可运行阶段，已经具备本地 controller、Fabric 模组、Paper 插件、MCP 工具、蓝图保存、任务队列、执行校验和 Codex CLI 助手闭环。
+### 1. 安装模组
 
-适合当前阶段的用途：
+准备 Minecraft Java Edition `1.21.8`、Fabric Loader、Fabric API，然后把发布包里的 `blockwright-fabric-*.jar` 放进当前游戏目录的 `mods` 文件夹。
 
-- Minecraft Java 版世界里的本地构建自动化实验。
-- 开发者验证 controller、Minecraft 执行端和蓝图模型的协作方式。
-- 逐步扩展聊天工具、图片转蓝图和已有建筑改造能力。
+### 2. 启动游戏
 
-暂不建议当前阶段的用途：
+用 Fabric 配置启动 Minecraft，进入你的世界。Blockwright 模组会随游戏自动启动，不需要玩家另外开服务。
 
-- 直接暴露到公网且无需额外鉴权的生产服务。
-- 大规模公共服务器自动建造。
-- 把真实聊天工具 token、webhook 或 client secret 提交到仓库。
+### 3. 打开 Web 端
 
-## 🌐 官网与 GitHub Pages
-
-仓库已经准备好一个可直接发布的静态官网，默认英文展示，并支持中英文切换：
+在 Minecraft 聊天栏输入：
 
 ```text
-docs/index.html
+/bw web
 ```
 
-GitHub Pages 推荐在仓库设置里选择：
+然后打开它显示的 Web 地址。本机通常是：
 
 ```text
-Source: Deploy from a branch
-Branch: main
-Folder: /docs
+http://127.0.0.1:8765/web
 ```
 
-发布完成后，把生成的 Pages URL 填到 GitHub 仓库 About 的 Website 字段。仓库社交预览图建议使用 [docs/assets/social-preview.png](docs/assets/social-preview.png)，具体配置清单见 [docs/GITHUB_PAGES.zh-CN.md](docs/GITHUB_PAGES.zh-CN.md)。
+### 4. 填自己的 Minecraft 用户名
 
-## 🧱 架构
+第一次打开 Web 端时，页面会让你填写 Minecraft 用户名。这里要填游戏里显示的准确名字，因为 Web 端文字和语音都会发给这个玩家。
 
-```mermaid
-flowchart LR
-    Player["Minecraft 玩家"] --> Fabric["Fabric 模组<br/>Java 版 / 单人存档 / 局域网"]
-    Player --> Paper["Paper 插件<br/>独立服务端"]
-    Bot["聊天工具<br/>stream / polling / local_command"] --> Controller["Rust controller<br/>Axum API / 队列 / 蓝图 / 构建记录"]
-    Fabric --> Controller
-    Paper --> Controller
-    Controller --> Codex["Codex CLI<br/>AI 助手 / MCP 工具调用"]
-    Controller --> Storage["data/<br/>blueprints / builds / sessions"]
-    Controller --> Fabric
-    Controller --> Paper
-```
+以后想修改，可以到 Web 端右上角设置里的 **玩家 > Minecraft 用户名** 修改。
 
-组件边界：
+### 5. 配置大模型
 
-- `apps/controller`：Rust/Axum 本地控制器，负责 HTTP API、聊天入口、Codex CLI 适配、蓝图管理、任务队列和构建记录。
-- `plugins/fabric`：Java 版/单人存档/局域网开放世界的主执行端，负责游戏内命令、世界扫描、发物品、放方块和校验。
-- `plugins/paper`：独立 Paper 服务端执行端，职责与 Fabric 类似，但面向服务端部署。
-- `blueprints/examples`：可提交的蓝图示例。
-- `config/servers`：随二进制打包的服务配置示例。
-- `config/chat.example.yaml`：聊天工具本地配置示例。
-- `docs`：架构、路线图和用户安装文档。
+在 Web 端右上角设置里选择 **AI 模型**。目前支持：
 
-更完整的设计说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+- Codex CLI
+- OpenAI
+- DeepSeek
+- 豆包 Doubao
+- Gemini
 
-## 🚀 快速开始
+选好模型并按页面提示完成配置后，就可以开始发指令。
 
-### 📦 环境要求
+### 6. 开始使用
 
-玩家使用需要：
+你可以用三种常用方式发需求：
 
-- Minecraft Java Edition `1.21.8`。
-- Fabric Loader。
-- Fabric API。
-- Blockwright Fabric 模组 jar。
-- 已登录的 Codex CLI，或已在 `/web` 设置里配置 OpenAI / DeepSeek / Doubao / Gemini API Key。
+- 在 Web 端输入文字。
+- 在 Web 端点击麦克风，按住说话，松手发送。
+- 在 Minecraft 聊天栏输入 `/bw ...`。
 
-开发构建还需要：
-
-- Rust stable。
-- JDK 21。
-- Gradle。
-- 可选：`cargo-llvm-cov`，用于本地覆盖率门禁。
-
-### 🖥️ 启动 Web 端
-
-仓库里的脚本已经提交执行权限，正常 clone 后可以直接运行。如果从压缩包或聊天软件拷贝导致执行权限丢失，先恢复一次：
-
-```bash
-chmod +x scripts/*.sh
-```
-
-启动 Web 端：
-
-```bash
-./scripts/run-web.sh
-```
-
-脚本会自动补齐本地 `.env` 示例文件，并启动 controller 的 `/web` 页面服务。也可以用 Makefile：
-
-```bash
-make run-web
-```
-
-### 🤖 AI 模型模式
-
-默认模式仍然是 Codex CLI。打开 `/web` 右上角设置，在 **AI 模型** 里可以选择：
-
-- `Codex CLI`：使用 controller 里配置好的 `codex` 命令。
-- `OpenAI API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`OPENAI_API_KEY` 写入本地 `.env`。
-- `DeepSeek API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`DEEPSEEK_API_KEY` 写入本地 `.env`。
-- `Doubao API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`ARK_API_KEY` 写入本地 `.env`。
-- `Gemini API`：模型名和 Base URL 写入 `config/llm.local.yaml`，`GEMINI_API_KEY` 写入本地 `.env`。
-
-切换模型只替换规划/翻译的底座，蓝图规划、扫描上下文、构建记录、任务队列、进度提示和 Web 交互继续走同一套 controller 流程。同一玩家/用户名的 API 模式请求也会保留短上下文，支持“继续”“接着改”这类续接请求。图片输入需要模型支持视觉能力；OpenAI、豆包和 Gemini 默认启用图片输入，DeepSeek 默认不声明图片能力，遇到图片请求会回退到 Codex CLI 处理，避免静默丢图。
-
-`config/llm.local.yaml` 和 `.env` 都不会提交到 Git；仓库只提交 `config/llm.example.yaml` 作为模板。
-
-临时换端口：
-
-```bash
-PORT=18765 ./scripts/run-web.sh
-```
-
-默认日志只保留关键业务信息，不打印 Fabric 每 2 秒轮询任务的 HTTP 细节。需要临时排查 HTTP 请求时再打开 debug：
-
-```bash
-RUST_LOG=info,tower_http=debug ./scripts/run-web.sh
-```
-
-停止服务时，在运行脚本的终端按 `Ctrl+C`。
-
-Web 端右上角的地球按钮可以在中文和英文之间切换；语言偏好保存在浏览器本地，不影响 controller API、蓝图或构建记录格式。
-
-默认会同时输出本机和局域网访问地址：
-
-```text
-Blockwright 本机访问：http://127.0.0.1:8765/web
-Blockwright 局域网访问：http://<当前机器局域网 IP>:8765/web
-Blockwright 本机 HTTPS：https://127.0.0.1:8766/web
-Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
-```
-
-本机电脑用 `http://127.0.0.1:8765/web` 即可。手机语音必须用 HTTPS 地址，因为手机浏览器通常只允许 HTTPS 页面申请麦克风权限。
-
-HTTPS 是本地自签方案，controller 会自动生成根证书和服务器证书。手机第一次访问 HTTPS 地址前，需要先在 `/web` 设置页下载 `Blockwright 本地根证书`。Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是保存证书文件，不是上传到 Google，也不是安装完成；进入设置后也通常不会自动提醒，需要手动进入“安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，再从下载目录选择 `Blockwright-Local-Root-CA.cer`。iPhone/iPad 请用 Safari 打开证书下载链接；下载后在“设置”顶部的“已下载描述文件”或“通用 > VPN 与设备管理/描述文件”里安装，再到“通用 > 关于本机 > 证书信任设置”打开完全信任。
-
-证书信任完成后，重新打开 HTTPS 地址，浏览器提示麦克风权限时选择允许。HTTPS 端口默认是 HTTP 端口 + 1，也可以用 `HTTPS_PORT` 指定；如果只在本机电脑调试文字输入或页面样式，可以临时关闭 HTTPS：
-
-```bash
-HTTPS_ENABLED=false ./scripts/run-web.sh
-```
-
-健康检查：
-
-```bash
-curl http://127.0.0.1:8765/health
-```
-
-默认配置位于 [config/servers/local.yaml](config/servers/local.yaml)。本地开发默认 `require_token: false`，适合可信局域网；如果放到不受控网络，必须启用共享 token。真实 token、Webhook、client secret 只写未追踪的 `.env` 或本地配置，不能提交到仓库。
-
-### 🧩 安装 Java 版 / Fabric 模组
-
-项目默认把 Fabric 作为 Java 版、单人存档和局域网开放世界的主安装方式。
-游戏实例里必须同时安装 Fabric API。
-
-```bash
-make
-```
-
-这个命令会先编译 Rust controller，再把当前平台的 controller 二进制打进 Fabric 模组 jar，最后自动识别当前正在运行的 Minecraft `--gameDir`，删除目标 `mods/` 目录里的旧 `blockwright-fabric-*.jar`，再安装新的单 jar。如果 Java 版没有运行，会优先尝试 `/Applications/.minecraft`，再退回 `~/.minecraft`。如果要手动指定目录：
-
-```bash
-make GAME_DIR=<Java 版当前游戏目录>
-```
-
-之后启动带 Blockwright 模组的游戏时，模组会先检查 `http://127.0.0.1:8765/health`，如果 controller 没有运行，就从 jar 内释放并启动 Web 服务，并在 Minecraft 启动日志/终端里输出 Web 地址；不需要再单独开终端跑 `./scripts/run-web.sh`。房主机器安装 Blockwright 模组即可；加入局域网的其他玩家不需要单独安装 Blockwright，前提是当前只使用原版方块、物品和服务端命令能力。
-
-面向公开分发时应该构建多平台 controller bundle，再打成一个 universal jar：
-
-```bash
-./scripts/build-java-mod.sh --all-platforms
-```
-
-这个 universal jar 会同时携带 `macos-aarch64`、`macos-x86_64`、`linux-aarch64`、`linux-x86_64` 和 `windows-x86_64` 的 controller；游戏启动时按当前系统自动选择。多平台构建需要本机或 CI 准备好对应 Rust target 和 linker。如果已经有各平台预编译产物，也可以按 `target/blockwright-controller-bundle/<平台>/blockwright-controller(.exe)` 的目录结构整理后执行：
-
-```bash
-./scripts/build-java-mod.sh --controller-bundle-dir target/blockwright-controller-bundle
-```
-
-仓库也提供 GitHub Actions 手动工作流 `Universal Fabric Mod`：各平台 runner 分别编译本机 controller，最后合并上传 `blockwright-fabric-universal` artifact。GitHub 官方托管 runner 当前支持 `ubuntu-24.04-arm` 和 `macos-14` 这类 arm64 标签，适合做这类多平台打包。
-
-详细安装步骤见 [docs/user/JAVA_FABRIC_INSTALL.md](docs/user/JAVA_FABRIC_INSTALL.md)。
-
-### 🎮 游戏内命令
-
-常用玩法：
+例如：
 
 ```text
 /bw 给我一把钻石剑
-/bw 帮我盖一个木屋
-/bw 把我面前这个房子的窗户换成蓝色玻璃
+/bw 帮我盖一个带窗户和床的小木屋
+/bw 把时间调到白天
+/bw 把我面前这面墙换成玻璃
 ```
 
-完整命令：
+## 支持的入口和聊天工具
+
+- **Web 端文字聊天**：适合在浏览器里直接打字。
+- **Web 端语音**：适合手机或电脑麦克风输入；手机一般需要使用 HTTPS 地址并允许麦克风权限。
+- **Minecraft 命令**：在游戏内直接输入 `/bw ...`。
+- **Element/Matrix**：支持通过房间消息把需求发到当前 Minecraft 玩家。
+- **钉钉机器人**：支持钉钉 Stream 模式接入。
+- **本地命令/自定义脚本入口**：适合把其他本地聊天工具或自动化脚本接进来。
+
+## 游戏内命令
 
 | 命令 | 用途 |
 | --- | --- |
-| `/bw <需求>` | 让 AI 处理物品、天气、时间、建筑、改造和普通游戏操作。 |
-| `/bw ask <需求>` / `/bw chat <需求>` | 显式发送聊天/规划请求。 |
-| `/bw web` | 在游戏聊天里显示本机和局域网 Web 地址。 |
-| `/bw config` | 提示打开 Web 设置页。 |
-| `/bw reload` | 重新加载 Fabric 本地配置。 |
-| `/bw restart` / `/bw controller restart` | 重启 controller 服务；适合 Web/API/模型配置更新后使用。 |
-| `/bw logs` | 显示最近的大模型相关日志。 |
-| `/bw logs watch` | 在游戏聊天里实时输出大模型相关日志；再次执行关闭。 |
-| `/bw logs all` / `/bw logs watch all` | 查看或实时输出 controller 原始日志。 |
-| `/bw url` / `/bw address` / `/bw lan` | `/bw web` 的地址查询别名。 |
+| `/bw <需求>` | 发送一条自然语言指令，例如发物品、建造、改造、调天气。 |
+| `/bw ask <需求>` | 明确让 AI 处理一条聊天/规划请求。 |
+| `/bw chat <需求>` | 和 `/bw ask` 类似，用来发送聊天/规划请求。 |
+| `/bw web` | 在游戏聊天里显示 Web 端访问地址。 |
+| `/bw config` | 提示你去 Web 端设置玩家名、模型和聊天工具。 |
+| `/bw url` / `/bw address` / `/bw lan` | 查看 Web 地址，和 `/bw web` 类似。 |
 
-配置入口统一放在 controller 的 Web 端，打开 `/web` 后点右上角设置图标保存模型和聊天工具接入；游戏内 `/bw config` 只提示打开 Web 配置页，不再提供 `/bwconfig` 配置命令。
+## 适合谁用
 
-`/bw restart` 只重启 controller 服务。如果新增或更新了 Fabric 模组里的 Java 命令本身，仍然需要重启 Minecraft 才能加载新版 jar。
+- 想在 Minecraft 里用一句话完成物品、建造和改造操作的玩家。
+- 想把 Minecraft 世界接到 Web、语音或聊天工具里的服主/运营。
+- 想体验 AI 参与 Minecraft 建造和游戏操作的人。
 
-第一次调用 Codex CLI 或本地模型处理复杂请求时可能耗时较长。本地 controller 的 Codex 超时和 Fabric/Paper 请求超时默认都是 1800 秒，也就是最多等 30 分钟；新版 Fabric 模组会在加载时把旧的短超时配置自动升级成 1800。旧配置也可以手动补上：
-
-```json
-{
-  "requestTimeoutSeconds": 1800
-}
-```
-
-改完后执行 `/bw reload` 或重启游戏。
-
-### 🧯 排查与日志
-
-- 游戏内觉得慢时，先执行 `/bw logs` 看本轮是否带了大量附近方块扫描、使用了哪个模型、耗时多久。
-- 需要边操作边看日志时，执行 `/bw logs watch`，再发一次 `/bw ...` 需求观察输出。
-- 本机终端也可以看完整日志：`tail -n 200 -f /Applications/.minecraft/logs/blockwright-controller.log`。
-- 改了 `/web` 或 controller 代码后，用 `/bw restart` 重启 controller；改了 Fabric 模组命令后，需要重启 Minecraft。
-
-## 🧪 本地 API 示例
-
-模拟游戏内命令：
-
-```bash
-curl -X POST http://127.0.0.1:8765/api/minecraft/message \
-  -H 'Content-Type: application/json' \
-  -d '{"server_id":"local-java","player":"Steve","text":"给我一把钻石剑","position":{"world":"world","x":0,"y":64,"z":0}}'
-```
-
-模拟外部机器人下发建造任务：
-
-```bash
-curl -X POST http://127.0.0.1:8765/api/robot/message \
-  -H 'Content-Type: application/json' \
-  -d '{"platform":"telegram","conversation_id":"local","sender":"charles","server_id":"local-java","target_player":"Steve","text":"帮我盖一个木屋"}'
-```
-
-如果接口返回 `job_id`，说明这次包含需要 Minecraft 执行端处理的任务。执行端放置后会回写校验报告，也可以用接口查看构建记录：
-
-```bash
-curl http://127.0.0.1:8765/api/builds/<job_id>
-```
-
-## 🧱 蓝图模型
-
-蓝图是一个可持久化的建筑图，记录建筑 ID、名称、描述、尺寸、材料清单、相对坐标方块列表和标签。
-
-普通方块：
-
-```text
-minecraft:oak_planks
-```
-
-带状态的方块：
-
-```text
-minecraft:oak_leaves[persistent=true]
-minecraft:oak_door[half=lower,facing=south]
-minecraft:red_bed[part=foot,facing=north]
-```
-
-方块状态是蓝图一致性的一部分，保存、下发、执行和校验都按同一份 `material` 字符串处理。
-
-示例蓝图见 [blueprints/examples/oak_house.json](blueprints/examples/oak_house.json)。运行时保存的蓝图默认在 `data/blueprints/`，构建记录默认在 `data/builds/`；这两个目录不会提交到 Git。
-
-## 💬 聊天工具接入
-
-controller 支持把不同聊天入口统一成一类消息，再转换成 Minecraft 任务。当前优先支持本地友好的接入方式：
-
-- Minecraft 游戏内命令。
-- 通用本地 HTTP 机器人入口：`POST /api/robot/message`。
-- 钉钉应用机器人 Stream 模式。
-- Element/Matrix 房间 polling 模式。
-- 后续 Telegram/Discord/企业微信等应优先选择 polling、stream 或 local_command。
-
-真实聊天工具配置放在未追踪文件：
-
-```text
-config/chat.local.yaml
-```
-
-示例配置：
-
-```bash
-cp config/chat.example.yaml config/chat.local.yaml
-```
-
-不要提交真实 token、webhook、client secret 或机器人凭证。
-
-Element 客户端使用 Matrix 协议。接入时新建一个 Matrix bot 账号，把 bot 邀进目标房间，并在本机环境变量里放 bot 账号的 access token：
-
-```bash
-export MATRIX_ACCESS_TOKEN=...
-```
-
-`config/chat.local.yaml` 里启用 Matrix/Element polling：
-
-```yaml
-tools:
-  - name: element-local
-    platform: matrix
-    enabled: true
-    inbound: polling
-    default_server_id: local-java
-    default_target_player: Charles
-    matrix:
-      homeserver_url: https://matrix.org
-      access_token_env: MATRIX_ACCESS_TOKEN
-      allowed_senders:
-        - "@enochzzg:matrix.org"
-      allow_own_user_messages: true
-      auto_join_invites: true
-```
-
-也可以显式配置 `room_id: "!xxxxxxxx:matrix.org"` 只监听一个房间；不填 `room_id` 时，controller 会监听 bot 已加入的房间，并只处理 `allowed_senders` 里的用户消息。如果 token 属于独立 bot 账号，`allow_own_user_messages` 保持默认关闭；如果 token 就是发指令的 Element 账号，才打开它。
-
-当前 Matrix 适配读取普通 `m.room.message` 文本事件，不处理端到端加密房间；请给 bot 使用未开启 E2EE 的专用房间。
-
-Element/Matrix 等聊天入口统一在 controller 的 `/web` 页面里点右上角设置图标保存；真实 token 仍只写入本地未追踪配置，不写进仓库示例。
-
-## 🛠️ MCP 助手入口
-
-Blockwright 也提供可选 MCP stdio 入口，让 Codex 或其他 MCP 客户端以助手方式调用 Blockwright 高层能力：
-
-```bash
-cargo run -p blockwright-controller -- mcp
-```
-
-MCP 可以 dry-run 自然语言请求，也可以在 `execute=true` 时把受控动作入队给 Minecraft 执行端。它还提供读取类工具，用来获取玩家主手/物品栏、扫描附近方块、查询蓝图和构建记录。Minecraft 命令统一通过 `run_command` 透传给 Fabric/Paper 执行端。
-
-详细说明见 [docs/MCP.md](docs/MCP.md)。
-
-## 👩‍💻 开发
-
-常用命令：
-
-```bash
-make test              # controller + Paper + Fabric 测试
-make test-controller   # Rust controller 测试
-make test-fabric       # Fabric 模组测试
-make test-paper        # Paper 插件测试
-make build-fabric      # 构建 Fabric 模组
-make build-paper       # 构建 Paper 插件
-make build-plugins     # 构建 Fabric + Paper
-make coverage          # controller 覆盖率门禁
-```
-
-controller 覆盖率门禁：
-
-```bash
-cargo install cargo-llvm-cov
-cargo llvm-cov --workspace --all-targets --ignore-filename-regex 'apps/controller/src/main.rs' --fail-under-lines 80
-```
-
-提交前建议至少运行：
-
-```bash
-cargo test --workspace
-cd plugins/fabric && gradle test
-cd plugins/paper && gradle test
-```
-
-贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-开源协作相关文件：
-
-- [CONTRIBUTING.md](CONTRIBUTING.md)：贡献指南和本地检查命令。
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)：社区行为准则。
-- [SUPPORT.md](SUPPORT.md)：问题反馈和支持渠道。
-- [SECURITY.md](SECURITY.md)：安全报告流程。
-- [CHANGELOG.md](CHANGELOG.md)：版本变更记录。
-
-## 🔐 安全边界
-
-- Minecraft 执行逻辑只放在 `plugins/fabric` 和 `plugins/paper`。
-- 外部机器人、Codex CLI、图片分析和任务队列只放在 `apps/controller`。
-- 建筑执行必须走服务端世界方块 API，不模拟玩家翻背包、选物品或右键放置。
-- 普通游戏命令走 `run_command`，执行端不做命令白名单限制。
-- 本地密钥和聊天工具凭证只放在未追踪配置或环境变量中。
-
-安全报告流程见 [SECURITY.md](SECURITY.md)。
-
-## 🗺️ 路线图
-
-近期方向：
-
-- 扩展已有建筑改造能力：楼层、朝向、局部区域、材质替换和撤销。
-- 增强图片到蓝图流水线：图片理解、材料映射、候选蓝图和玩家确认。
-- 增加更多本地友好的聊天工具接入。
-- 数据层从 JSON 文件逐步升级到 SQLite/Postgres，同时保留蓝图领域模型。
-- 提升 Fabric/Paper 执行端的一致性测试和边界场景覆盖。
-
-完整路线图见 [docs/ROADMAP.md](docs/ROADMAP.md)。
-
-## 📄 许可证
+## 许可证
 
 Blockwright 使用 [MIT License](LICENSE)。
