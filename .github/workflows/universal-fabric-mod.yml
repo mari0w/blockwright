@@ -48,7 +48,7 @@ jobs:
           cp "target/release/${{ matrix.binary }}" "artifact/${{ matrix.classifier }}/${{ matrix.binary }}"
 
       - name: Upload controller
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: controller-${{ matrix.classifier }}
           path: artifact/${{ matrix.classifier }}/${{ matrix.binary }}
@@ -98,7 +98,7 @@ jobs:
         run: gradle remapJar --no-daemon -PblockwrightControllerBundleDir="$GITHUB_WORKSPACE/target/blockwright-controller-bundle"
 
       - name: Upload universal Fabric jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: blockwright-fabric-universal
           path: plugins/fabric/build/libs/blockwright-fabric-*.jar
