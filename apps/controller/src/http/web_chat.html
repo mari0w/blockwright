@@ -1800,7 +1800,7 @@
     applyLlmDefaults(localStorage.getItem('bw.llmProvider') || 'codex_cli');
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
     matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
-    matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') !== '0';
+    matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') === '1';
     matrixAllowOwn.checked = localStorage.getItem('bw.matrixAllowOwn') !== '0';
     matrixAutoJoin.checked = localStorage.getItem('bw.matrixAutoJoin') !== '0';
 
@@ -2226,6 +2226,7 @@
       event.preventDefault();
       const token = controllerToken.value.trim();
       const homeserver = matrixHomeserver.value.trim();
+      const matrixAccessTokenValue = matrixAccessToken.value.trim();
       const allowedSender = matrixAllowedSender.value.trim();
       if (!token) {
         setConfigStatus(t('configTokenRequired'), true);
@@ -2236,8 +2237,11 @@
         setConfigStatus(t('llmConfigRequired'), true);
         return;
       }
-      const shouldSaveMatrix = homeserver || allowedSender || matrixAccessToken.value.trim();
-      if (shouldSaveMatrix && (!homeserver || !allowedSender)) {
+      const shouldSaveMatrix = matrixEnabled.checked
+        || matrixAccessTokenValue
+        || allowedSender
+        || localStorage.getItem('bw.matrixEnabled') === '0';
+      if (matrixEnabled.checked && (!homeserver || !allowedSender)) {
         setConfigStatus(t('matrixRequired'), true);
         return;
       }
@@ -2256,7 +2260,7 @@
             body: JSON.stringify({
               enabled: matrixEnabled.checked,
               homeserver_url: homeserver,
-              access_token: matrixAccessToken.value.trim(),
+              access_token: matrixAccessTokenValue,
               allowed_sender: allowedSender,
               allow_own_user_messages: matrixAllowOwn.checked,
               auto_join_invites: matrixAutoJoin.checked,

@@ -1,11 +1,11 @@
 # 路线图
 
-Blockwright 的路线图按“先跑通闭环，再增强规划，再提高可发布质量”推进。当前优先保证 HMCL/Fabric 本地世界的体验稳定，再扩展 Paper 和多聊天工具场景。
+Blockwright 的路线图按“先跑通闭环，再增强规划，再提高可发布质量”推进。当前优先保证 Java 版/Fabric 本地世界的体验稳定，再扩展 Paper 和多聊天工具场景。
 
 ## 已完成
 
 - Rust/Axum controller 基础 API。
-- Fabric 模组支持 HMCL、单人存档和局域网开放世界。
+- Fabric 模组支持 Java 版、单人存档和局域网开放世界。
 - Paper 插件保留给独立服务端场景。
 - 游戏内 `/bw` 命令。
 - 外部机器人通用 HTTP 入口。

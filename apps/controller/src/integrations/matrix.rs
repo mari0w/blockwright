@@ -560,7 +560,7 @@ mod tests {
             platform: ChatPlatform::Matrix,
             enabled: true,
             inbound: ChatInboundMode::Polling,
-            default_server_id: Some("hmcl-lan".to_string()),
+            default_server_id: Some("local-java".to_string()),
             default_target_player: Some("Charles".to_string()),
             dingtalk: None,
             matrix: Some(MatrixChatConfig {

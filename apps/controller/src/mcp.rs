@@ -1219,7 +1219,7 @@ mod tests {
                 data_dir: temp_dir(name),
             },
             minecraft: MinecraftConfig {
-                default_server_id: "hmcl-lan".to_string(),
+                default_server_id: "local-java".to_string(),
             },
             security: SecurityConfig {
                 shared_token: "test-token".to_string(),
@@ -1318,7 +1318,7 @@ mod tests {
     fn nearby_build_match_filters_by_world_and_radius() {
         let record = BuildRecord {
             id: "job-1".to_string(),
-            server_id: "hmcl-lan".to_string(),
+            server_id: "local-java".to_string(),
             target_player: Some("Steve".to_string()),
             summary: "测试建筑".to_string(),
             status: crate::domain::types::BuildStatus::Succeeded,
@@ -1382,7 +1382,7 @@ mod tests {
         let job_id = result["queued_job"]["id"].as_str().unwrap();
         let status = state.jobs.status(job_id).await.unwrap();
         let job = status.job.unwrap();
-        assert_eq!(job.server_id, "hmcl-lan");
+        assert_eq!(job.server_id, "local-java");
         assert_eq!(job.target_player.as_deref(), Some("Charles"));
         assert!(matches!(
             &job.actions[0],
@@ -1425,7 +1425,7 @@ mod tests {
         );
         assert_eq!(record.expected_actions[0].expected_count, 1);
 
-        let job = state.jobs.pop_next("hmcl-lan").await.unwrap();
+        let job = state.jobs.pop_next("local-java").await.unwrap();
         assert_eq!(job.id, job_id);
         assert!(matches!(
             &job.actions[0],
@@ -1479,7 +1479,7 @@ mod tests {
         );
         assert_eq!(record.expected_actions[1].expected_count, 2);
 
-        let job = state.jobs.pop_next("hmcl-lan").await.unwrap();
+        let job = state.jobs.pop_next("local-java").await.unwrap();
         assert_eq!(job.actions.len(), 2);
         assert!(matches!(
             &job.actions[0],

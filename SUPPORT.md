@@ -18,10 +18,10 @@ For controller issues:
 - `cargo run -p blockwright-controller -- serve` or `./scripts/run-web.sh` output.
 - The request path, response body, and relevant controller logs.
 
-For Fabric/HMCL issues:
+For Fabric/Java Edition issues:
 
 - Minecraft version, Fabric Loader version, and Fabric API version.
-- HMCL game directory if custom.
+- Java Edition game directory if custom.
 - Whether the world is single-player or opened to LAN.
 - `/bw config` output and relevant game log lines.
 

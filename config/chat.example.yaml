@@ -3,7 +3,7 @@ tools:
     platform: dingtalk
     enabled: true
     inbound: stream
-    default_server_id: hmcl-lan
+    default_server_id: local-java
     default_target_player: Steve
     dingtalk:
       client_id_env: DINGTALK_CLIENT_ID
@@ -20,7 +20,7 @@ tools:
     platform: matrix
     enabled: false
     inbound: polling
-    default_server_id: hmcl-lan
+    default_server_id: local-java
     default_target_player: Charles
     matrix:
       homeserver_url: https://matrix.org

@@ -341,7 +341,7 @@ mod tests {
         let queue = JobQueue::default();
         let first = queue
             .enqueue(
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Charles".to_string()),
                 "改造现有建筑".to_string(),
                 vec![GameAction::ScanNearbyAndPlan {
@@ -352,7 +352,7 @@ mod tests {
             .await;
         let merged = queue
             .merge_pending_scan_job(
-                "hmcl-lan",
+                "local-java",
                 Some("charles"),
                 "继续优化现有建筑".to_string(),
                 &[GameAction::ScanNearbyAndPlan {
@@ -364,9 +364,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(merged.id, first.id);
-        let job = queue.pop_next("hmcl-lan").await.unwrap();
+        let job = queue.pop_next("local-java").await.unwrap();
         assert_eq!(job.summary, "继续优化现有建筑");
-        assert!(queue.pop_next("hmcl-lan").await.is_none());
+        assert!(queue.pop_next("local-java").await.is_none());
         assert!(matches!(
             &job.actions[0],
             GameAction::ScanNearbyAndPlan { text, attachments }
@@ -381,7 +381,7 @@ mod tests {
         let queue = JobQueue::default();
         queue
             .enqueue(
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Charles".to_string()),
                 "改造现有建筑".to_string(),
                 scan_action("改造 A"),
@@ -390,7 +390,7 @@ mod tests {
 
         assert!(queue
             .merge_pending_scan_job(
-                "hmcl-lan",
+                "local-java",
                 Some("Alex"),
                 "改造现有建筑".to_string(),
                 &scan_action("改造 B"),
@@ -404,7 +404,7 @@ mod tests {
         let queue = JobQueue::default();
         let job = queue
             .enqueue(
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 None,
                 "建造小屋".to_string(),
                 chat_action("one"),
@@ -415,7 +415,7 @@ mod tests {
             queue.status(&job.id).await.unwrap().phase,
             JobQueuePhase::Pending
         );
-        assert_eq!(queue.pop_next("hmcl-lan").await.unwrap().id, job.id);
+        assert_eq!(queue.pop_next("local-java").await.unwrap().id, job.id);
         assert_eq!(
             queue.status(&job.id).await.unwrap().phase,
             JobQueuePhase::Claimed
@@ -434,7 +434,7 @@ mod tests {
         let queue = JobQueue::default();
         let job = queue
             .enqueue(
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "读取玩家状态".to_string(),
                 vec![GameAction::GetPlayerState {

@@ -14,7 +14,7 @@ Use the following values in the repository About panel:
 
 - Description: `Minecraft Java Edition automation framework with a Rust controller, MCP tools, blueprint records, and Fabric/Paper build verification.`
 - Website: after Pages is published, use `https://mari0w.github.io/blockwright/`; if you later bind a custom domain, use that domain instead.
-- Topics: `minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `hmcl`
+- Topics: `minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `java-edition`
 
 ## Pages Publishing
 
@@ -43,7 +43,7 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 - `README.md`: English default overview for GitHub visitors, with quick start, Fabric installation, API examples, and test commands.
 - `README.zh-CN.md`: Chinese README for Chinese readers.
 - `docs/index.html`: public project website for GitHub Pages, defaulting to English with an English/Chinese language switch.
-- `docs/user/HMCL_FABRIC_INSTALL.md`: detailed installation guide, linked from both README and the website.
+- `docs/user/JAVA_FABRIC_INSTALL.md`: detailed installation guide, linked from both README and the website.
 - `docs/ARCHITECTURE.md` and `docs/MCP.md`: developer-facing architecture and MCP documentation.
 
 ## Images

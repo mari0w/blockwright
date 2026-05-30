@@ -651,7 +651,7 @@ mod tests {
             phase: JobQueuePhase::Succeeded,
             job: Some(GameJob {
                 id: "hm-job-1".to_string(),
-                server_id: "hmcl-lan".to_string(),
+                server_id: "local-java".to_string(),
                 target_player: Some("Steve".to_string()),
                 summary: "发放红砖".to_string(),
                 actions: vec![GameAction::GiveItem {
@@ -673,7 +673,7 @@ mod tests {
             phase: JobQueuePhase::Claimed,
             job: Some(GameJob {
                 id: "hm-job-1".to_string(),
-                server_id: "hmcl-lan".to_string(),
+                server_id: "local-java".to_string(),
                 target_player: Some("Steve".to_string()),
                 summary: "建造".to_string(),
                 actions: vec![GameAction::PlaceBlocks {

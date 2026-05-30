@@ -132,7 +132,8 @@ async fn save_matrix_local_config(
     let tool = matrix_tool_from_request(&request)?;
     let token = request.access_token.trim();
     let env_path = state.config.chat.env_path.clone();
-    if token.is_empty() && !env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV) {
+    let mut token_configured = env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV);
+    if request.enabled && token.is_empty() && !token_configured {
         return Err((
             StatusCode::BAD_REQUEST,
             "Matrix access token is required. If a token is already configured, leave this field blank to keep it.".to_string(),
@@ -145,6 +146,7 @@ async fn save_matrix_local_config(
         ensure_env_value(&env_path, MATRIX_ACCESS_TOKEN_ENV, token)
             .map_err(internal_error_response)?;
         std::env::set_var(MATRIX_ACCESS_TOKEN_ENV, token);
+        token_configured = true;
     }
     let poller_started = if request.enabled {
         matrix::spawn_tool_poller(state.clone(), tool)
@@ -164,7 +166,7 @@ async fn save_matrix_local_config(
         tool_name: MATRIX_LOCAL_TOOL_NAME.to_string(),
         config_path: state.config.chat.config_path.display().to_string(),
         env_path: env_path.display().to_string(),
-        token_configured: true,
+        token_configured,
         poller_started,
     }))
 }
@@ -396,7 +398,7 @@ fn matrix_tool_from_request(
     let homeserver_url = request.homeserver_url.trim();
     let allowed_sender = request.allowed_sender.trim();
     let access_token = request.access_token.trim();
-    if homeserver_url.is_empty() || allowed_sender.is_empty() {
+    if request.enabled && (homeserver_url.is_empty() || allowed_sender.is_empty()) {
         return Err((
             StatusCode::BAD_REQUEST,
             "homeserver_url and allowed_sender are required.".to_string(),
@@ -421,10 +423,16 @@ fn matrix_tool_from_request(
         default_target_player: normalize_optional_string(request.default_target_player.as_deref()),
         dingtalk: None,
         matrix: Some(MatrixChatConfig {
-            homeserver_url: homeserver_url.to_string(),
+            homeserver_url: if homeserver_url.is_empty() {
+                "https://matrix-client.matrix.org".to_string()
+            } else {
+                homeserver_url.to_string()
+            },
             access_token_env: MATRIX_ACCESS_TOKEN_ENV.to_string(),
             room_id: normalize_optional_string(request.room_id.as_deref()),
-            allowed_senders: vec![allowed_sender.to_string()],
+            allowed_senders: normalize_optional_string(Some(allowed_sender))
+                .into_iter()
+                .collect(),
             allow_own_user_messages: Some(request.allow_own_user_messages),
             auto_join_invites: Some(request.auto_join_invites),
             poll_interval_seconds: request.poll_interval_seconds,
@@ -623,7 +631,7 @@ mod tests {
             allowed_sender: " @enochzzg:matrix.org ".to_string(),
             allow_own_user_messages: true,
             auto_join_invites: true,
-            default_server_id: Some("hmcl-lan".to_string()),
+            default_server_id: Some("local-java".to_string()),
             default_target_player: Some("Charles".to_string()),
             poll_interval_seconds: Some(2),
             sync_timeout_seconds: Some(30),

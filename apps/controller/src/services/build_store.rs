@@ -266,7 +266,7 @@ mod tests {
         let record = store
             .register_planned(
                 "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "建造测试".to_string(),
                 &[place_action()],
@@ -287,7 +287,7 @@ mod tests {
         store
             .register_planned(
                 "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "建造测试".to_string(),
                 &[place_action()],
@@ -332,7 +332,7 @@ mod tests {
         store
             .register_planned(
                 "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "建造测试".to_string(),
                 &[place_action()],
@@ -387,7 +387,7 @@ mod tests {
         store
             .register_planned(
                 "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "建造测试".to_string(),
                 &[place_action()],
@@ -420,7 +420,7 @@ mod tests {
         store
             .register_planned(
                 "hm-job-1".to_string(),
-                "hmcl-lan".to_string(),
+                "local-java".to_string(),
                 Some("Steve".to_string()),
                 "建造测试".to_string(),
                 &[place_action()],

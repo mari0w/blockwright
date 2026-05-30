@@ -40,14 +40,14 @@
     <rect x="294" y="434" width="54" height="54" fill="#8a6835"/>
     <rect x="294" y="380" width="54" height="54" fill="#b08843"/>
   </g>
-  <text x="78" y="132" class="eyebrow">Minecraft Java Edition</text>
+  <text x="78" y="132" class="eyebrow">Minecraft Java 版</text>
   <text x="78" y="226" class="title">Blockwright</text>
   <text x="82" y="289" class="subtitle">Minecraft Java 版自动化框架</text>
   <text x="82" y="341" class="subtitle">Rust controller + MCP 工具</text>
   <text x="82" y="389" class="subtitle">Fabric/Paper 构建校验</text>
   <g transform="translate(82 432)">
     <rect width="148" height="48" rx="8" fill="url(#green)"/>
-    <text x="22" y="32" class="small">HMCL / Fabric</text>
+    <text x="22" y="32" class="small">Java 版 / Fabric</text>
     <rect x="166" width="112" height="48" rx="8" fill="url(#amber)"/>
     <text x="188" y="32" class="small">Codex</text>
     <rect x="296" width="158" height="48" rx="8" fill="#2b3330"/>

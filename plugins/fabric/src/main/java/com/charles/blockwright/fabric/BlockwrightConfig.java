@@ -16,7 +16,7 @@ public final class BlockwrightConfig {
     public String controllerLaunchCommand = "";
     public String controllerWorkingDirectory = "";
     public int controllerStartupTimeoutSeconds = 120;
-    public String serverId = "hmcl-lan";
+    public String serverId = "local-java";
     public String sharedToken = "local-dev-token";
     public int connectTimeoutSeconds = 5;
     public int requestTimeoutSeconds = MAX_REQUEST_TIMEOUT_SECONDS;
@@ -75,7 +75,7 @@ public final class BlockwrightConfig {
         }
         controllerStartupTimeoutSeconds = normalizeBounded(controllerStartupTimeoutSeconds, 5, 600);
         if (serverId == null || serverId.isBlank()) {
-            serverId = "hmcl-lan";
+            serverId = "local-java";
         }
         if (sharedToken == null) {
             sharedToken = "";

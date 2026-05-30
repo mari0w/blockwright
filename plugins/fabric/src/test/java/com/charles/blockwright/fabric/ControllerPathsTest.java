@@ -19,8 +19,8 @@ final class ControllerPathsTest {
                 "/api/minecraft/progress/req-1%2Fbad",
                 ControllerPaths.minecraftProgressPath("req-1/bad"));
         assertEquals(
-                "/api/minecraft/jobs/next?server_id=hmcl-lan",
-                ControllerPaths.nextJobPath("hmcl-lan"));
+                "/api/minecraft/jobs/next?server_id=local-java",
+                ControllerPaths.nextJobPath("local-java"));
         assertEquals(
                 "/api/minecraft/jobs/hm-job-1%2Fbad/result",
                 ControllerPaths.jobResultPath("hm-job-1/bad"));

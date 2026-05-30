@@ -48,27 +48,27 @@ detect_game_dir() {
 }
 
 if [[ $# -gt 1 ]]; then
-  echo "用法：./scripts/install-hmcl-mod.sh [HMCL 当前游戏目录|auto]" >&2
+  echo "用法：./scripts/install-java-mod.sh [Java 版当前游戏目录|auto]" >&2
   echo
   echo "例子："
-  echo "./scripts/install-hmcl-mod.sh"
-  echo "./scripts/install-hmcl-mod.sh auto"
-  echo "./scripts/install-hmcl-mod.sh ~/.minecraft"
-  echo "./scripts/install-hmcl-mod.sh /Applications/.minecraft"
+  echo "./scripts/install-java-mod.sh"
+  echo "./scripts/install-java-mod.sh auto"
+  echo "./scripts/install-java-mod.sh ~/.minecraft"
+  echo "./scripts/install-java-mod.sh /Applications/.minecraft"
   exit 1
 fi
 
 GAME_DIR="${1:-auto}"
 if [[ "$GAME_DIR" == "auto" || "$GAME_DIR" == "" ]]; then
   GAME_DIR="$(detect_game_dir)"
-  echo "已自动识别 HMCL 当前游戏目录：$GAME_DIR"
+  echo "已自动识别 Java 版当前游戏目录：$GAME_DIR"
 else
   GAME_DIR="${GAME_DIR/#\~/$HOME}"
 fi
 MODS_DIR="$GAME_DIR/mods"
 
 echo "正在重新编译 Blockwright Fabric 模组..."
-./scripts/build-hmcl-mod.sh
+./scripts/build-java-mod.sh
 FABRIC_VERSION="$(fabric_version)"
 JAR_PATH="plugins/fabric/build/libs/blockwright-fabric-${FABRIC_VERSION}.jar"
 
@@ -87,11 +87,11 @@ echo "$MODS_DIR/$(basename "$JAR_PATH")"
 
 echo
 echo "这个 jar 已内置 Blockwright controller。"
-echo "之后启动带 Blockwright 模组的 HMCL/Fabric 游戏时，会自动释放并启动 controller Web 服务。"
+echo "之后启动带 Blockwright 模组的 Java 版/Fabric 游戏时，会自动释放并启动 controller Web 服务。"
 
 if ! find "$MODS_DIR" -maxdepth 1 -type f -iname 'fabric-api*.jar' | grep -q .; then
   echo
   echo "注意：没有在 mods/ 目录里发现 Fabric API。"
-  echo "请在 HMCL 里安装 Fabric API，或把 Fabric API 1.21.8 的 jar 放进："
+  echo "请在 Java 版里安装 Fabric API，或把 Fabric API 1.21.8 的 jar 放进："
   echo "$MODS_DIR"
 fi

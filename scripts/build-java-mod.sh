@@ -25,7 +25,7 @@ bump_fabric_version() {
 
 usage() {
   cat <<'USAGE'
-用法：./scripts/build-hmcl-mod.sh [选项]
+用法：./scripts/build-java-mod.sh [选项]
 
 选项：
   --current-platform       只打包当前平台 controller（默认）
@@ -106,11 +106,11 @@ CONTROLLER_BUNDLE_ABS="$(cd "$CONTROLLER_BUNDLE_DIR" && pwd)"
 )
 
 echo
-echo "HMCL/Fabric 一体化模组已生成："
+echo "Java 版/Fabric 一体化模组已生成："
 echo "plugins/fabric/build/libs/blockwright-fabric-${FABRIC_VERSION}.jar"
 echo
 echo "已打包 controller 平台："
 find "$CONTROLLER_BUNDLE_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort
 echo
-echo "把这个 jar 放到 HMCL 当前 1.21.8 实例的 mods/ 目录；游戏启动后会自动选择当前平台 controller 并启动 Web 服务。"
+echo "把这个 jar 放到 Java 版当前 1.21.8 实例的 mods/ 目录；游戏启动后会自动选择当前平台 controller 并启动 Web 服务。"
 echo "仍需确认同目录已有 Fabric API。"

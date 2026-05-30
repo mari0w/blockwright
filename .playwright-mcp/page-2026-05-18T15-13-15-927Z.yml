@@ -9,8 +9,8 @@
       - /placeholder: 默认同用户名
     - generic [ref=e9]: 服务器
     - textbox "服务器" [ref=e10]:
-      - /placeholder: hmcl-lan
-      - text: hmcl-lan
+      - /placeholder: local-java
+      - text: local-java
     - generic [ref=e11]: 参考图片
     - button "参考图片" [ref=e12]
   - main [ref=e13]:

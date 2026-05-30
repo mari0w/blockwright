@@ -498,6 +498,9 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("function setAddPanel"));
     assert!(page_body.contains("Sent to Minecraft and waiting for execution"));
     assert!(page_body.contains("操作已交给 Minecraft"));
+    assert!(page_body
+        .contains("matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') === '1';"));
+    assert!(page_body.contains("if (matrixEnabled.checked && (!homeserver || !allowedSender))"));
     assert!(!page_body.contains("我已经准备好方案，正在等 Minecraft 接手"));
     assert!(page_body.contains("切换到文字输入"));
     assert!(page_body.contains("navigator.mediaDevices.getUserMedia"));
@@ -619,7 +622,7 @@ async fn web_chat_reply_does_not_queue_minecraft_job() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "先聊一下，我想做一个建筑但还没想好风格",
                 "images": []
             })),
@@ -637,7 +640,7 @@ async fn web_chat_reply_does_not_queue_minecraft_job() {
     let next_response = app
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -659,7 +662,7 @@ async fn web_existing_edit_queues_minecraft_scan_instead_of_manual_bw_hint() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "把我面前这个建筑的窗户换成蓝色玻璃",
                 "images": [
                     {
@@ -689,7 +692,7 @@ async fn web_existing_edit_queues_minecraft_scan_instead_of_manual_bw_hint() {
     let next_response = app
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -725,7 +728,7 @@ async fn web_existing_edit_followups_merge_pending_scan_job() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "把我面前这个建筑的窗户换成蓝色玻璃",
                 "images": []
             })),
@@ -744,7 +747,7 @@ async fn web_existing_edit_followups_merge_pending_scan_job() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "把我面前这个建筑的窗户换成蓝色玻璃，还要更大更复杂",
                 "images": []
             })),
@@ -762,7 +765,7 @@ async fn web_existing_edit_followups_merge_pending_scan_job() {
         .clone()
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -776,7 +779,7 @@ async fn web_existing_edit_followups_merge_pending_scan_job() {
     let empty_response = app
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -950,7 +953,7 @@ async fn web_job_status_reports_queue_claim_and_result() {
             Some(json!({
                 "username": "Charles",
                 "target_player": "Charles",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "帮我盖一个木屋",
                 "images": []
             })),
@@ -982,7 +985,7 @@ async fn web_job_status_reports_queue_claim_and_result() {
         .clone()
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -1067,7 +1070,7 @@ async fn web_item_job_status_does_not_blame_player_wording() {
             Some(json!({
                 "username": "Steve",
                 "target_player": "Steve",
-                "server_id": "hmcl-lan",
+                "server_id": "local-java",
                 "text": "给我一把钻石剑",
                 "images": []
             })),
@@ -1099,7 +1102,7 @@ async fn web_item_job_status_does_not_blame_player_wording() {
         .clone()
         .oneshot(request(
             "GET",
-            "/api/minecraft/jobs/next?server_id=hmcl-lan",
+            "/api/minecraft/jobs/next?server_id=local-java",
             None,
             Some("test-token"),
         ))
@@ -1194,7 +1197,7 @@ async fn minecraft_build_message_returns_job_id_for_direct_execution() {
 async fn minecraft_modification_without_scan_asks_fabric_to_rescan_once() {
     let app = test_app_with_fake_codex(true, "api-minecraft-missing-scan").await;
     let modification_request = json!({
-        "server_id": "hmcl-lan",
+        "server_id": "local-java",
         "player": "Steve",
         "text": "把我脚下这个建筑的窗户换成蓝色玻璃",
         "position": {
@@ -1717,7 +1720,7 @@ tools:
     platform: matrix
     enabled: true
     inbound: polling
-    default_server_id: hmcl-lan
+    default_server_id: local-java
     default_target_player: Charles
     matrix:
       homeserver_url: https://matrix.org
@@ -1771,7 +1774,7 @@ async fn matrix_local_config_endpoint_writes_untracked_config_and_env() {
                 "allowed_sender": "@enochzzg:matrix.org",
                 "allow_own_user_messages": true,
                 "auto_join_invites": true,
-                "default_server_id": "hmcl-lan",
+                "default_server_id": "local-java",
                 "default_target_player": "Charles"
             })),
             Some("test-token"),
@@ -1790,6 +1793,43 @@ async fn matrix_local_config_endpoint_writes_untracked_config_and_env() {
     assert!(chat_source.contains("MATRIX_ACCESS_TOKEN"));
     assert!(!chat_source.contains("test-matrix-token"));
     assert!(env_source.contains("MATRIX_ACCESS_TOKEN=test-matrix-token"));
+}
+
+#[tokio::test]
+async fn matrix_local_config_endpoint_allows_disabled_without_sender_or_token() {
+    std::env::remove_var("MATRIX_ACCESS_TOKEN");
+    let chat_path = temp_dir("matrix-disabled-local-config").join("chat.local.yaml");
+    let env_path = chat_path.parent().unwrap().join(".env");
+    let state = AppState::new(config_with_chat_path(true, chat_path.clone()))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .oneshot(request(
+            "PUT",
+            "/api/chat/matrix/local-config",
+            Some(json!({
+                "enabled": false,
+                "homeserver_url": "https://matrix-client.matrix.org",
+                "access_token": "",
+                "allowed_sender": "",
+                "allow_own_user_messages": true,
+                "auto_join_invites": true
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["token_configured"], false);
+    let chat_source = std::fs::read_to_string(chat_path).unwrap();
+    assert!(chat_source.contains("element-local"));
+    assert!(chat_source.contains("enabled: false"));
+    assert!(!env_path.exists());
 }
 
 #[tokio::test]

@@ -614,7 +614,7 @@
           <p class="lead" data-i18n-html="hero.lead">Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code> to ask for items, small builds, or changes to existing structures. The mod executes through Minecraft world APIs, while the controller keeps plans, blueprints, and build records outside the game.</p>
           <div class="hero-actions">
             <a class="button primary" href="https://github.com/mari0w/blockwright" data-i18n="hero.github">View on GitHub</a>
-            <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/HMCL_FABRIC_INSTALL.md" data-i18n="hero.install">Install Fabric mod</a>
+            <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="hero.install">Install Fabric mod</a>
             <a class="button" href="https://github.com/mari0w/blockwright#quick-start" data-href-en="https://github.com/mari0w/blockwright#quick-start" data-href-zh="https://github.com/mari0w/blockwright/blob/main/README.zh-CN.md#快速开始" data-i18n="hero.start">Quick start</a>
           </div>
           <div class="badges" aria-label="Project highlights" data-i18n-aria="hero.badges">
@@ -643,7 +643,7 @@
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
             <h3 data-i18n="features.localTitle">Fabric local worlds</h3>
-            <p data-i18n="features.localCopy">The main path is an HMCL/Fabric mod for single-player saves and LAN-opened worlds, so maps do not need to move to a Paper server.</p>
+            <p data-i18n="features.localCopy">The main path is a Java Edition/Fabric mod for single-player saves and LAN-opened worlds, so maps do not need to move to a Paper server.</p>
           </article>
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
@@ -672,8 +672,8 @@
             <p data-i18n-html="start.webCopy">Run <code>./scripts/run-web.sh</code> from the repository root. The default local URL is <code>http://127.0.0.1:8765/web</code>.</p>
           </article>
           <article class="step">
-            <h3 data-i18n="start.fabricTitle">Install into HMCL/Fabric</h3>
-            <p data-i18n-html="start.fabricCopy">Run <code>make</code> to build and install the mod into the current HMCL game directory, or specify one with <code>make HMCL_DIR=...</code>.</p>
+            <h3 data-i18n="start.fabricTitle">Install into Java Edition/Fabric</h3>
+            <p data-i18n-html="start.fabricCopy">Run <code>make</code> to build and install the mod into the current Java Edition game directory, or specify one with <code>make GAME_DIR=...</code>.</p>
           </article>
           <article class="step">
             <h3 data-i18n="start.requestTitle">Use /bw in the world</h3>
@@ -703,8 +703,8 @@
         </div>
         <div class="config-grid">
           <article class="config-item">
-            <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/user/HMCL_FABRIC_INSTALL.md" data-i18n="docs.installTitle">HMCL / Fabric install</a></h3>
-            <p data-i18n="docs.installCopy">Set up the primary local-player path for HMCL, single-player saves, and LAN-opened worlds.</p>
+            <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="docs.installTitle">Java Edition / Fabric install</a></h3>
+            <p data-i18n="docs.installCopy">Set up the primary local-player path for Java Edition, single-player saves, and LAN-opened worlds.</p>
           </article>
           <article class="config-item">
             <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/ARCHITECTURE.md" data-i18n="docs.architectureTitle">Architecture</a></h3>
@@ -772,7 +772,7 @@
           commandTitle: "Talk in game",
           commandCopy: "Use <code>/bw</code> to ask for items, time changes, builds, or edits without leaving the Minecraft world.",
           localTitle: "Fabric local worlds",
-          localCopy: "The main path is an HMCL/Fabric mod for single-player saves and LAN-opened worlds, so maps do not need to move to a Paper server.",
+          localCopy: "The main path is a Java Edition/Fabric mod for single-player saves and LAN-opened worlds, so maps do not need to move to a Paper server.",
           buildTitle: "Build with records",
           buildCopy: "Build plans are saved as blueprints and records before the same block list is sent to Minecraft for placement.",
           editTitle: "Edit safely",
@@ -784,8 +784,8 @@
           copy: "Blockwright is early but runnable. The simplest flow is local controller plus Fabric mod in your current Minecraft 1.21.8 game directory.",
           webTitle: "Start the controller",
           webCopy: "Run <code>./scripts/run-web.sh</code> from the repository root. The default local URL is <code>http://127.0.0.1:8765/web</code>.",
-          fabricTitle: "Install into HMCL/Fabric",
-          fabricCopy: "Run <code>make</code> to build and install the mod into the current HMCL game directory, or specify one with <code>make HMCL_DIR=...</code>.",
+          fabricTitle: "Install into Java Edition/Fabric",
+          fabricCopy: "Run <code>make</code> to build and install the mod into the current Java Edition game directory, or specify one with <code>make GAME_DIR=...</code>.",
           requestTitle: "Use /bw in the world",
           requestCopy: "Try requests like <code>/bw give me a diamond sword</code> or <code>/bw build a small cabin in front of me</code>."
         },
@@ -799,8 +799,8 @@
           kicker: "Documentation",
           title: "Use the docs when you are ready to install, inspect the architecture, or contribute.",
           copy: "The homepage stays focused on what the mod does. Detailed setup, architecture, MCP tools, and roadmap live in the repository docs.",
-          installTitle: "HMCL / Fabric install",
-          installCopy: "Set up the primary local-player path for HMCL, single-player saves, and LAN-opened worlds.",
+          installTitle: "Java Edition / Fabric install",
+          installCopy: "Set up the primary local-player path for Java Edition, single-player saves, and LAN-opened worlds.",
           architectureTitle: "Architecture",
           architectureCopy: "See how the controller, Codex/MCP tools, Fabric mod, Paper plugin, blueprints, and build records fit together.",
           mcpTitle: "MCP tools",
@@ -853,7 +853,7 @@
           commandTitle: "游戏内对话",
           commandCopy: "用 <code>/bw</code> 直接提交发物品、调时间、建造或改造需求，不用离开 Minecraft 世界。",
           localTitle: "Fabric 本地世界",
-          localCopy: "主路径是 HMCL/Fabric 模组，适合单人存档和局域网开放世界，不需要把地图迁移到 Paper 服务端。",
+          localCopy: "主路径是 Java 版/Fabric 模组，适合单人存档和局域网开放世界，不需要把地图迁移到 Paper 服务端。",
           buildTitle: "有记录地建造",
           buildCopy: "建筑计划会先保存成蓝图和构建记录，再把同一份方块清单下发给 Minecraft 放置。",
           editTitle: "更稳地改造",
@@ -865,8 +865,8 @@
           copy: "Blockwright 还处于早期阶段，但已经可以跑通闭环。最简单的体验方式是本地 controller 加当前 Minecraft 1.21.8 游戏目录里的 Fabric 模组。",
           webTitle: "启动 controller",
           webCopy: "在仓库根目录运行 <code>./scripts/run-web.sh</code>，默认打开 <code>http://127.0.0.1:8765/web</code>。",
-          fabricTitle: "安装到 HMCL/Fabric",
-          fabricCopy: "运行 <code>make</code> 自动构建并安装到 HMCL 当前游戏目录，也可以用 <code>make HMCL_DIR=...</code> 指定。",
+          fabricTitle: "安装到 Java 版/Fabric",
+          fabricCopy: "运行 <code>make</code> 自动构建并安装到 Java 版当前游戏目录，也可以用 <code>make GAME_DIR=...</code> 指定。",
           requestTitle: "在世界里使用 /bw",
           requestCopy: "可以先试 <code>/bw 给我一把钻石剑</code> 或 <code>/bw 在我面前建一个小木屋</code>。"
         },
@@ -880,8 +880,8 @@
           kicker: "文档入口",
           title: "准备安装、查看架构或参与开发时，再进入详细文档。",
           copy: "官网首页聚焦介绍这个模组是做什么的；详细安装、架构、MCP 工具和路线图放在仓库文档里。",
-          installTitle: "HMCL / Fabric 安装",
-          installCopy: "配置 HMCL、单人存档和局域网开放世界的主安装路径。",
+          installTitle: "Java 版 / Fabric 安装",
+          installCopy: "配置 Java 版、单人存档和局域网开放世界的主安装路径。",
           architectureTitle: "架构说明",
           architectureCopy: "了解 controller、Codex/MCP 工具、Fabric 模组、Paper 插件、蓝图和构建记录如何协作。",
           mcpTitle: "MCP 工具",

@@ -85,7 +85,7 @@
       <rect x="0" y="24" width="252" height="254" rx="10" class="panel"/>
       <rect x="28" y="56" width="54" height="54" rx="8" fill="url(#blue)"/>
       <text x="28" y="140" class="card-title">Fabric / Paper</text>
-      <text x="28" y="178" class="body">Fabric 优先服务 HMCL 场景</text>
+      <text x="28" y="178" class="body">Fabric 优先服务 Java 版场景</text>
       <text x="28" y="206" class="body">Paper 面向独立服务端</text>
       <text x="28" y="234" class="body">通过世界方块 API 放置</text>
     </g>

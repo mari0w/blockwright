@@ -14,7 +14,7 @@ docs/index.html
 
 - Description：`Minecraft Java Edition automation framework with a Rust controller, MCP tools, blueprint records, and Fabric/Paper build verification.`
 - Website：发布 Pages 后填写 `https://mari0w.github.io/blockwright/`，如果绑定了自定义域名就填自定义域名。
-- Topics：`minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `hmcl`
+- Topics：`minecraft`, `fabric`, `rust`, `axum`, `mcp`, `codex`, `ai-agent`, `blueprints`, `java-edition`
 
 ## Pages 发布
 
@@ -43,7 +43,7 @@ https://mari0w.github.io/blockwright/
 - `README.md`：默认英文入口，给 GitHub 访问者快速判断项目是什么、怎么跑、怎么安装 Fabric 模组、开发者怎么测试。
 - `README.zh-CN.md`：中文 README。
 - `docs/index.html`：面向公开展示的项目官网，默认英文，并支持中英文切换。
-- `docs/user/HMCL_FABRIC_INSTALL.md`：保留详细安装步骤，README 和官网都链接到这里。
+- `docs/user/JAVA_FABRIC_INSTALL.md`：保留详细安装步骤，README 和官网都链接到这里。
 - `docs/ARCHITECTURE.md`、`docs/MCP.md`：给开发者和后续接入者阅读。
 
 ## 配图

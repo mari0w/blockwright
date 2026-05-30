@@ -63,7 +63,7 @@ MCP 不做：
 ```json
 {
   "text": "在我面前盖一个小木屋",
-  "server_id": "hmcl-lan",
+  "server_id": "local-java",
   "target_player": "Steve",
   "execute": false
 }
@@ -74,7 +74,7 @@ MCP 不做：
 ```json
 {
   "text": "给 Steve 一把钻石剑",
-  "server_id": "hmcl-lan",
+  "server_id": "local-java",
   "target_player": "Steve",
   "execute": true
 }

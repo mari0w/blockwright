@@ -200,7 +200,7 @@ fn codex_failure_reply_with_log_hint(error: &str, detail: &str, log_path: Option
         .unwrap_or_default();
     let log_hint = match log_path {
         Some(path) if !path.is_empty() => format!("详细日志：{path}。"),
-        _ => "详细日志：controller 控制台；HMCL 自动启动时也会写入 Minecraft logs/blockwright-controller.log。".to_string(),
+        _ => "详细日志：controller 控制台；Java 版自动启动时也会写入 Minecraft logs/blockwright-controller.log。".to_string(),
     };
     format!("AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}")
 }

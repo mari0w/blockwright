@@ -47,7 +47,7 @@
   <text x="82" y="389" class="subtitle">Fabric/Paper verification</text>
   <g transform="translate(82 432)">
     <rect width="148" height="48" rx="8" fill="url(#green)"/>
-    <text x="22" y="32" class="small">HMCL / Fabric</text>
+    <text x="22" y="32" class="small">Java Edition / Fabric</text>
     <rect x="166" width="112" height="48" rx="8" fill="url(#amber)"/>
     <text x="188" y="32" class="small">Codex</text>
     <rect x="296" width="158" height="48" rx="8" fill="#2b3330"/>

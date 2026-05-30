@@ -35,7 +35,7 @@ usage() {
 说明：
   真正全平台构建需要对应 Rust target 和 linker。当前机器没有交叉编译工具时，
   请在对应平台/CI 上分别构建后，把产物整理成上面的目录结构，再交给
-  ./scripts/build-hmcl-mod.sh --controller-bundle-dir <DIR> 打包成单个 universal jar。
+  ./scripts/build-java-mod.sh --controller-bundle-dir <DIR> 打包成单个 universal jar。
 USAGE
 }
 

@@ -8,7 +8,7 @@
 - 新增业务逻辑必须同步补单元测试；Rust controller 覆盖率门禁不低于 80%，用 `cargo llvm-cov --workspace --all-targets --ignore-filename-regex 'apps/controller/src/main.rs' --fail-under-lines 80` 校验。
 - 聊天工具接入优先支持本地可用的 `polling`、`stream` 或 `local_command`；本地 Minecraft 场景不要启用 webhook-only 入口。
 - 聊天工具真实密钥、Webhook、client secret 放在未追踪的本地配置或环境变量里，仓库只能提交示例配置，不能提交真实 token。
-- HMCL/单人存档/局域网开放世界的主安装方式是 `plugins/fabric` 生成的 Fabric 模组；不要要求用户迁移地图到 Paper 服务端。`plugins/paper` 只保留给独立 Paper 服务器场景。
+- Java 版/单人存档/局域网开放世界的主安装方式是 `plugins/fabric` 生成的 Fabric 模组；不要要求用户迁移地图到 Paper 服务端。`plugins/paper` 只保留给独立 Paper 服务器场景。
 - 建筑执行必须走服务端世界方块 API 放置蓝图方块，不能模拟玩家翻背包、选物品、右键摆放；背包/物品栏只用于 `give_item` 这类发物品动作。
 - `give_item` 的完成标准是物品进入目标玩家背包，并切换到玩家主手可见的快捷栏槽位；快捷栏/背包满时也要优先把新物品放到主手，旧手持物或多余数量没有存放空间时掉落在玩家脚边，不能只回复“已给”但不让玩家手上拿到。
 - 玩家手持物、背包、附近方块、蓝图和构建记录这类读取需求要沉淀成 Blockwright MCP 工具；玩家状态和世界扫描由 Fabric/Paper 通过服务端 API 读取，controller/MCP 对外提供工具语义，不能靠聊天文案或建筑动作绕路。

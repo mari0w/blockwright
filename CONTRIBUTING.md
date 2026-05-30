@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你关注 Blockwright。项目当前处于早期阶段，贡献重点是把 HMCL/Fabric 本地世界的闭环做稳定，再逐步扩展更多规划和聊天入口。
+感谢你关注 Blockwright。项目当前处于早期阶段，贡献重点是把 Java 版/Fabric 本地世界的闭环做稳定，再逐步扩展更多规划和聊天入口。
 
 ## 开发边界
 
@@ -37,10 +37,10 @@ cargo run -p blockwright-controller
 make
 ```
 
-自定义 HMCL 游戏目录：
+自定义 Java 版游戏目录：
 
 ```bash
-make HMCL_DIR=<HMCL当前游戏目录>
+make GAME_DIR=<Java 版当前游戏目录>
 ```
 
 ## 测试要求

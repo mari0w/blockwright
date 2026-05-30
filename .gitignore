@@ -12,6 +12,7 @@ config/secrets/
 .gradle/
 build/
 plugins/paper/build/
+plugins/fabric/logs/
 *.log
 *.class
 *.jar

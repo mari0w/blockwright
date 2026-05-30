@@ -19,7 +19,7 @@ final class BlockwrightConfigTest {
         assertEquals("", config.controllerLaunchCommand);
         assertEquals("", config.controllerWorkingDirectory);
         assertEquals(120, config.controllerStartupTimeoutSeconds);
-        assertEquals("hmcl-lan", config.serverId);
+        assertEquals("local-java", config.serverId);
         assertEquals(5, config.connectTimeoutSeconds);
         assertEquals(1800, config.requestTimeoutSeconds);
         assertTrue(config.protectExistingBlocks);
@@ -70,7 +70,7 @@ final class BlockwrightConfigTest {
         assertEquals("", config.controllerLaunchCommand);
         assertEquals("", config.controllerWorkingDirectory);
         assertEquals(5, config.controllerStartupTimeoutSeconds);
-        assertEquals("hmcl-lan", config.serverId);
+        assertEquals("local-java", config.serverId);
         assertEquals("", config.sharedToken);
         assertEquals(1, config.connectTimeoutSeconds);
         assertEquals(1800, config.requestTimeoutSeconds);
