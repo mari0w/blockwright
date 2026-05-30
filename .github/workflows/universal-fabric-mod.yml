@@ -20,9 +20,6 @@ jobs:
           - classifier: macos-aarch64
             os: macos-14
             binary: blockwright-controller
-          - classifier: macos-x86_64
-            os: macos-13
-            binary: blockwright-controller
           - classifier: linux-aarch64
             os: ubuntu-24.04-arm
             binary: blockwright-controller
