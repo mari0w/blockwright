@@ -4,6 +4,17 @@
   <img src="docs/assets/blockwright-logo.png" alt="Blockwright logo" width="160" height="160">
 </p>
 
+<p align="center">
+  <a href="https://github.com/mari0w/blockwright/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mari0w/blockwright/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/mari0w/blockwright/actions/workflows/universal-fabric-mod.yml"><img alt="Universal Fabric Mod" src="https://github.com/mari0w/blockwright/actions/workflows/universal-fabric-mod.yml/badge.svg"></a>
+  <a href="https://github.com/mari0w/blockwright/actions/workflows/ci.yml"><img alt="Coverage gate >=80%" src="https://img.shields.io/badge/coverage%20gate-%3E%3D80%25-brightgreen.svg"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <img alt="Minecraft 1.21.x" src="https://img.shields.io/badge/Minecraft-1.21.x-62B47A.svg">
+  <img alt="Fabric Loader >=0.16.14" src="https://img.shields.io/badge/Fabric%20Loader-%3E%3D0.16.14-DBD0B4.svg">
+  <img alt="Java 21+" src="https://img.shields.io/badge/Java-21%2B-orange.svg">
+  <a href="https://github.com/mari0w/blockwright/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/mari0w/blockwright?style=social"></a>
+</p>
+
 [English](README.md) | 简体中文
 
 Blockwright 是一个给 Minecraft Java 版玩家用的 AI 助手。装好 Fabric 模组后，打开游戏就可以用自然语言让它发物品、调时间和天气、建造房子、改造已有建筑，或者执行一些普通游戏操作。
