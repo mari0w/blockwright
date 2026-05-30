@@ -21,11 +21,14 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +50,13 @@ final class ControllerProcessManager {
         Thread thread = new Thread(() -> ensureStarted(config, gameDir), "blockwright-controller-autostart");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    static void restart(BlockwrightConfig config, Path gameDir) {
+        synchronized (ControllerProcessManager.class) {
+            stopRunningControllers(config, gameDir);
+            ensureStarted(config, gameDir, true);
+        }
     }
 
     static void stopIfLaunched() {
@@ -71,6 +81,13 @@ final class ControllerProcessManager {
     }
 
     private static void ensureStarted(BlockwrightConfig config, Path gameDir) {
+        ensureStarted(config, gameDir, false);
+    }
+
+    private static void ensureStarted(BlockwrightConfig config, Path gameDir, boolean force) {
+        if (!force && (config == null || !config.autoStartController)) {
+            return;
+        }
         if (launchedProcess != null && launchedProcess.isAlive()) {
             return;
         }
@@ -93,7 +110,7 @@ final class ControllerProcessManager {
             if (launchSpec.isEmpty()) {
                 LOGGER.warn(
                         "Blockwright controller auto-start is enabled, but no local launcher was found. "
-                                + "Run scripts/install-hmcl-mod.sh once, or set {} / {}.",
+                                + "Run scripts/install-java-mod.sh once, or set {} / {}.",
                         COMMAND_ENV,
                         WORKDIR_ENV);
                 return;
@@ -110,6 +127,7 @@ final class ControllerProcessManager {
             builder.redirectErrorStream(true);
 
             launchedProcess = builder.start();
+            writeControllerPid(gameDir, launchedProcess.pid());
             streamControllerOutput(launchedProcess, logPath);
             LOGGER.info(
                     "Blockwright controller auto-started from {}. Web: {}/web, log: {}",
@@ -129,6 +147,114 @@ final class ControllerProcessManager {
             LOGGER.warn("Blockwright controller auto-start failed: {}", rootMessage(error), error);
         } finally {
             STARTING.set(false);
+        }
+    }
+
+    private static void stopRunningControllers(BlockwrightConfig config, Path gameDir) {
+        Map<Long, ProcessHandle> targets = new LinkedHashMap<>();
+        Process process = launchedProcess;
+        launchedProcess = null;
+        if (process != null) {
+            addTargetWithDescendants(targets, process.toHandle());
+        }
+
+        pidFileProcess(gameDir).ifPresent(handle -> addTargetWithDescendants(targets, handle));
+        if (isLocalControllerUrl(config.controllerUrl)) {
+            ProcessHandle.allProcesses()
+                    .filter(handle -> handle.pid() != ProcessHandle.current().pid())
+                    .filter(ControllerProcessManager::isControllerProcess)
+                    .forEach(handle -> addTargetWithDescendants(targets, handle));
+        }
+
+        if (targets.isEmpty()) {
+            LOGGER.info("No local Blockwright controller process found to stop.");
+            deleteControllerPid(gameDir);
+            return;
+        }
+
+        targets.values().forEach(ProcessHandle::destroy);
+        for (ProcessHandle target : targets.values()) {
+            waitForExit(target, 5);
+        }
+        for (ProcessHandle target : targets.values()) {
+            if (target.isAlive()) {
+                target.destroyForcibly();
+                waitForExit(target, 2);
+            }
+        }
+        deleteControllerPid(gameDir);
+    }
+
+    private static void addTargetWithDescendants(Map<Long, ProcessHandle> targets, ProcessHandle handle) {
+        handle.descendants().forEach(child -> {
+            if (child.pid() != ProcessHandle.current().pid()) {
+                targets.put(child.pid(), child);
+            }
+        });
+        if (handle.pid() != ProcessHandle.current().pid()) {
+            targets.put(handle.pid(), handle);
+        }
+    }
+
+    private static boolean isControllerProcess(ProcessHandle handle) {
+        return handle
+                .info()
+                .commandLine()
+                .map(ControllerProcessManager::isControllerCommandLineForRestart)
+                .orElse(false);
+    }
+
+    static boolean isControllerCommandLineForRestart(String commandLine) {
+        if (commandLine == null || commandLine.isBlank()) {
+            return false;
+        }
+        String lower = commandLine.toLowerCase(Locale.ROOT);
+        return lower.contains("blockwright-controller") && lower.contains(" serve");
+    }
+
+    private static Optional<ProcessHandle> pidFileProcess(Path gameDir) {
+        Path pidPath = controllerPidPath(gameDir);
+        try {
+            if (!Files.isRegularFile(pidPath)) {
+                return Optional.empty();
+            }
+            String content = Files.readString(pidPath, StandardCharsets.UTF_8).trim();
+            if (content.isBlank()) {
+                return Optional.empty();
+            }
+            long pid = Long.parseLong(content);
+            return ProcessHandle.of(pid).filter(ProcessHandle::isAlive);
+        } catch (IOException | NumberFormatException error) {
+            LOGGER.warn("Failed to read Blockwright controller pid file {}: {}", pidPath, rootMessage(error));
+            return Optional.empty();
+        }
+    }
+
+    private static void writeControllerPid(Path gameDir, long pid) {
+        Path pidPath = controllerPidPath(gameDir);
+        try {
+            Files.createDirectories(pidPath.getParent());
+            Files.writeString(pidPath, Long.toString(pid), StandardCharsets.UTF_8);
+        } catch (IOException error) {
+            LOGGER.warn("Failed to write Blockwright controller pid file {}: {}", pidPath, rootMessage(error));
+        }
+    }
+
+    private static void deleteControllerPid(Path gameDir) {
+        try {
+            Files.deleteIfExists(controllerPidPath(gameDir));
+        } catch (IOException error) {
+            LOGGER.warn("Failed to delete Blockwright controller pid file: {}", rootMessage(error));
+        }
+    }
+
+    private static void waitForExit(ProcessHandle target, int timeoutSeconds) {
+        try {
+            target.onExit().get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException ignored) {
+            // Caller checks target.isAlive() after the wait.
         }
     }
 
@@ -211,7 +337,7 @@ final class ControllerProcessManager {
     private static Optional<LaunchSpec> launchSpecFromInstalledLauncher(Path gameDir) {
         Path launcher = gameDir.resolve("blockwright").resolve(isWindows() ? "run-web.cmd" : "run-web.sh");
         if (Files.isRegularFile(launcher)) {
-            return Optional.of(new LaunchSpec(scriptCommand(launcher), launcher.getParent(), "HMCL game directory launcher"));
+            return Optional.of(new LaunchSpec(scriptCommand(launcher), launcher.getParent(), "Java Edition game directory launcher"));
         }
         return Optional.empty();
     }
@@ -354,8 +480,12 @@ final class ControllerProcessManager {
         return false;
     }
 
-    private static Path controllerLogPath(Path gameDir) {
+    static Path controllerLogPath(Path gameDir) {
         return gameDir.resolve("logs").resolve("blockwright-controller.log");
+    }
+
+    static Path controllerPidPath(Path gameDir) {
+        return gameDir.resolve("blockwright").resolve("controller.pid");
     }
 
     private static boolean isLocalControllerUrl(String controllerUrl) {

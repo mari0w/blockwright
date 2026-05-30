@@ -1,6 +1,7 @@
 package com.charles.blockwright.fabric;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -24,7 +25,7 @@ final class ControllerProcessManagerTest {
 
         assertEquals(launcher.getParent(), spec.workingDirectory());
         assertTrue(spec.command().contains(launcher.toString()));
-        assertEquals("HMCL game directory launcher", spec.source());
+        assertEquals("Java Edition game directory launcher", spec.source());
     }
 
     @Test
@@ -88,6 +89,27 @@ final class ControllerProcessManagerTest {
         assertEquals(
                 "http://192.168.5.155:8765/web",
                 ControllerProcessManager.lanWebAddress("bad-url", "192.168.5.155"));
+    }
+
+    @Test
+    void identifiesControllerProcessesForRestart() {
+        assertTrue(ControllerProcessManager.isControllerCommandLineForRestart(
+                "/Applications/.minecraft/blockwright/runtime/macos-aarch64/blockwright-controller serve"));
+        assertTrue(ControllerProcessManager.isControllerCommandLineForRestart(
+                "SCREEN -dmS blockwright-controller /bin/zsh -lc blockwright-controller serve"));
+        assertFalse(ControllerProcessManager.isControllerCommandLineForRestart(
+                "java -jar minecraft-client.jar"));
+        assertFalse(ControllerProcessManager.isControllerCommandLineForRestart(
+                "blockwright-controller --help"));
+    }
+
+    @Test
+    void storesControllerPidInsideGameDirectory() throws Exception {
+        Path gameDir = Files.createTempDirectory("blockwright-game-dir");
+
+        assertEquals(
+                gameDir.resolve("blockwright").resolve("controller.pid"),
+                ControllerProcessManager.controllerPidPath(gameDir));
     }
 
     @Test

@@ -1,9 +1,13 @@
 package com.charles.blockwright.fabric;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import net.fabricmc.api.ModInitializer;
@@ -24,16 +28,21 @@ public final class BlockwrightFabricMod implements ModInitializer {
     public static final String MOD_ID = "blockwright";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private static final int MAX_SCAN_REPLAN_ATTEMPTS = 3;
+    private static final int LOG_WATCH_INTERVAL_TICKS = 20;
+    private static final int LOG_RECENT_LINE_COUNT = 14;
+    private static final int LOG_WATCH_LINE_COUNT = 8;
     private static final ExecutorService REQUEST_EXECUTOR =
             Executors.newSingleThreadExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "blockwright-controller-client");
                 thread.setDaemon(true);
                 return thread;
             });
+    private static final Map<UUID, LogWatchState> LOG_WATCHERS = new ConcurrentHashMap<>();
 
     private static BlockwrightConfig config;
     private static JobPoller jobPoller;
     private static Path gameDir;
+    private static int logWatchTickCounter;
 
     @Override
     public void onInitialize() {
@@ -46,11 +55,18 @@ public final class BlockwrightFabricMod implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 CommandManager.literal("bw")
                         .then(CommandManager.literal("reload").executes(context -> reload(context.getSource())))
+                        .then(CommandManager.literal("restart")
+                                .executes(context -> restartController(context.getSource())))
+                        .then(CommandManager.literal("controller")
+                                .then(CommandManager.literal("restart")
+                                        .executes(context -> restartController(context.getSource()))))
                         .then(CommandManager.literal("config").executes(context -> configHint(context.getSource())))
                         .then(CommandManager.literal("web").executes(context -> webAddress(context.getSource())))
                         .then(CommandManager.literal("url").executes(context -> webAddress(context.getSource())))
                         .then(CommandManager.literal("address").executes(context -> webAddress(context.getSource())))
                         .then(CommandManager.literal("lan").executes(context -> webAddress(context.getSource())))
+                        .then(logsCommand("logs"))
+                        .then(logsCommand("log"))
                         .then(CommandManager.literal("ask")
                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
                                         .executes(context -> runChat(
@@ -75,8 +91,20 @@ public final class BlockwrightFabricMod implements ModInitializer {
             if (jobPoller != null) {
                 jobPoller.tick();
             }
+            tickLogWatchers(server);
         });
         LOGGER.info("Blockwright Fabric mod initialized");
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> logsCommand(
+            String name) {
+        return CommandManager.literal(name)
+                .executes(context -> showLogs(context.getSource(), false))
+                .then(CommandManager.literal("all").executes(context -> showLogs(context.getSource(), true)))
+                .then(CommandManager.literal("watch")
+                        .executes(context -> toggleLogWatch(context.getSource(), false))
+                        .then(CommandManager.literal("all")
+                                .executes(context -> toggleLogWatch(context.getSource(), true))));
     }
 
     private static void sendStartupHint(ServerPlayerEntity player) {
@@ -110,6 +138,79 @@ public final class BlockwrightFabricMod implements ModInitializer {
         reloadConfig();
         ControllerProcessManager.ensureStartedAsync(config, gameDir);
         source.sendFeedback(() -> Text.literal("Blockwright 配置已重新加载。"), false);
+        return 1;
+    }
+
+    private static int restartController(ServerCommandSource source) {
+        MinecraftServer server = source.getServer();
+        source.sendFeedback(() -> Text.literal("Blockwright controller 正在重启..."), false);
+        CompletableFuture
+                .runAsync(() -> ControllerProcessManager.restart(config, gameDir), REQUEST_EXECUTOR)
+                .thenRun(() -> server.execute(() -> source.sendFeedback(
+                        () -> Text.literal("Blockwright controller 已重启。"),
+                        false)))
+                .exceptionally(error -> {
+                    server.execute(() -> source.sendError(
+                            Text.literal("Blockwright controller 重启失败：" + rootMessage(error))));
+                    LOGGER.warn("Blockwright controller restart failed", error);
+                    return null;
+                });
+        return 1;
+    }
+
+    private static int showLogs(ServerCommandSource source, boolean includeAll) {
+        Path logPath = ControllerProcessManager.controllerLogPath(gameDir);
+        List<String> lines;
+        try {
+            lines = ControllerLogViewer.recentLines(logPath, includeAll, LOG_RECENT_LINE_COUNT);
+        } catch (IOException error) {
+            source.sendError(Text.literal("读取 Blockwright 日志失败：" + rootMessage(error)));
+            return 0;
+        }
+
+        String scope = includeAll ? "controller 原始" : "大模型相关";
+        source.sendFeedback(() -> Text.literal("Blockwright 最近" + scope + "日志：" + logPath), false);
+        if (lines.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("没有匹配到日志；可先执行一次 /bw 命令，或用 /bw logs all 看原始日志。"), false);
+            return 1;
+        }
+        for (String line : lines) {
+            String message = line;
+            source.sendFeedback(() -> Text.literal(message), false);
+        }
+        source.sendFeedback(() -> Text.literal("实时查看：/bw logs watch；再次执行同一命令关闭。"), false);
+        return 1;
+    }
+
+    private static int toggleLogWatch(ServerCommandSource source, boolean includeAll) {
+        ServerPlayerEntity player = source.getPlayer();
+        if (player == null) {
+            source.sendError(Text.literal("实时日志只能由玩家在游戏内执行。"));
+            return 0;
+        }
+
+        UUID playerId = player.getUuid();
+        LogWatchState current = LOG_WATCHERS.get(playerId);
+        if (current != null && current.includeAll == includeAll) {
+            LOG_WATCHERS.remove(playerId);
+            player.sendMessage(Text.literal("Blockwright 实时日志已关闭。"), false);
+            return 1;
+        }
+
+        Path logPath = ControllerProcessManager.controllerLogPath(gameDir);
+        long position;
+        try {
+            position = ControllerLogViewer.currentSize(logPath);
+        } catch (IOException error) {
+            source.sendError(Text.literal("打开 Blockwright 实时日志失败：" + rootMessage(error)));
+            return 0;
+        }
+
+        LOG_WATCHERS.put(playerId, new LogWatchState(position, includeAll));
+        String scope = includeAll ? "controller 原始日志" : "大模型相关日志";
+        String closeCommand = includeAll ? "/bw logs watch all" : "/bw logs watch";
+        player.sendMessage(Text.literal("Blockwright 正在实时输出" + scope + "；再次执行 " + closeCommand + " 关闭。"), false);
+        player.sendMessage(Text.literal("当前日志文件：" + logPath), false);
         return 1;
     }
 
@@ -162,6 +263,43 @@ public final class BlockwrightFabricMod implements ModInitializer {
                     return null;
                 });
         return 1;
+    }
+
+    private static void tickLogWatchers(MinecraftServer server) {
+        if (LOG_WATCHERS.isEmpty()) {
+            return;
+        }
+        logWatchTickCounter++;
+        if (logWatchTickCounter < LOG_WATCH_INTERVAL_TICKS) {
+            return;
+        }
+        logWatchTickCounter = 0;
+
+        Path logPath = ControllerProcessManager.controllerLogPath(gameDir);
+        for (Map.Entry<UUID, LogWatchState> entry : LOG_WATCHERS.entrySet()) {
+            ServerPlayerEntity player = server.getPlayerManager().getPlayer(entry.getKey());
+            if (player == null) {
+                LOG_WATCHERS.remove(entry.getKey());
+                continue;
+            }
+            LogWatchState state = entry.getValue();
+            ControllerLogViewer.TailResult tail;
+            try {
+                tail = ControllerLogViewer.readSince(
+                        logPath,
+                        state.position,
+                        state.includeAll,
+                        LOG_WATCH_LINE_COUNT);
+            } catch (IOException error) {
+                LOG_WATCHERS.remove(entry.getKey());
+                player.sendMessage(Text.literal("Blockwright 实时日志已停止：" + rootMessage(error)), false);
+                continue;
+            }
+            LOG_WATCHERS.put(entry.getKey(), new LogWatchState(tail.nextPosition(), state.includeAll));
+            for (String line : tail.lines()) {
+                player.sendMessage(Text.literal("[BW日志] " + line), false);
+            }
+        }
     }
 
     private static JsonModels.MinecraftMessageResponse sendRequest(
@@ -374,4 +512,6 @@ public final class BlockwrightFabricMod implements ModInitializer {
         }
         return current.getMessage();
     }
+
+    private record LogWatchState(long position, boolean includeAll) {}
 }
