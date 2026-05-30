@@ -7,20 +7,14 @@ fabric_version() {
   sed -nE 's/^version = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' plugins/fabric/build.gradle.kts | head -n 1
 }
 
-bump_fabric_version() {
-  local current major minor patch next
+validated_fabric_version() {
+  local current
   current="$(fabric_version)"
   if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "无法解析 Fabric 模组版本号：$current" >&2
     exit 1
   fi
-
-  IFS=. read -r major minor patch <<< "$current"
-  next="${major}.${minor}.$((patch + 1))"
-  LC_ALL=C CURRENT_VERSION="$current" NEXT_VERSION="$next" perl -0pi -e \
-    's/^version = "\Q$ENV{CURRENT_VERSION}\E"/version = "$ENV{NEXT_VERSION}"/m' \
-    plugins/fabric/build.gradle.kts
-  echo "$next"
+  echo "$current"
 }
 
 usage() {
@@ -81,8 +75,8 @@ if [[ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]]; then
   export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 fi
 
-FABRIC_VERSION="$(bump_fabric_version)"
-echo "Blockwright Fabric 模组版本已递增到：$FABRIC_VERSION"
+FABRIC_VERSION="$(validated_fabric_version)"
+echo "Blockwright Fabric 模组版本：$FABRIC_VERSION"
 
 if [[ "$SKIP_CONTROLLER_BUILD" == false ]]; then
   if [[ "$BUILD_MODE" == "all" ]]; then
