@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright: Run Minecraft Actions with One Sentence</title>
+  <meta name="description" content="A shareable Blockwright introduction for players and publishing platforms: what it can do, how to start, and why it matters for Minecraft Java Edition.">
+  <meta property="og:title" content="Blockwright: Run Minecraft Actions with One Sentence">
+  <meta property="og:description" content="Blockwright is an AI assistant for Minecraft Java Edition. Use /bw, Web, voice, Element/Matrix, and DingTalk to give items, build, and edit structures.">
+  <meta property="og:type" content="article">
+  <meta property="og:image" content="../assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../assets/social-preview.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --panel: #151c18;
+      --text: #f3f6f0;
+      --muted: #b8c4bc;
+      --line: #354239;
+      --green: #3cc77a;
+      --amber: #e7b15d;
+      --max: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.78;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      color: var(--amber);
+      outline: none;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 14, 12, 0.9);
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .brand {
+      color: var(--text);
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 54px 0 72px;
+    }
+
+    .kicker {
+      margin: 0 0 14px;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(36px, 7vw, 58px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 22px 0 0;
+      color: #d6e2da;
+      font-size: 20px;
+    }
+
+    article {
+      margin-top: 46px;
+    }
+
+    h2 {
+      margin: 42px 0 14px;
+      font-size: 28px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.4em;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #101511;
+      color: #e8f1ea;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: #e8f1ea;
+    }
+
+    .share-box {
+      margin-top: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 20px;
+    }
+
+    .share-box h2 {
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../index.html">Blockwright</a>
+      <nav class="links" aria-label="Article navigation">
+        <a href="../index.html">Home</a>
+        <a href="blockwright-intro.zh-CN.html">简体中文</a>
+        <a href="blockwright-intro.en.md">Markdown</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="kicker">AI assistant for Minecraft Java Edition</p>
+    <h1>Blockwright: Run Minecraft Actions with One Sentence</h1>
+    <p class="lead">A shareable introduction to what Blockwright is, what it can do, and how Minecraft Java Edition players can start using it.</p>
+
+    <article>
+      <p>Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The repetitive parts are less exciting:</p>
+      <ul>
+        <li>looking up item IDs just to give yourself a tool;</li>
+        <li>switching time or weather while you are building;</li>
+        <li>starting a cabin, room, or treehouse from an empty patch of land;</li>
+        <li>replacing a wall or changing the glass color in an existing build;</li>
+        <li>letting friends in a LAN world send small requests without learning commands.</li>
+      </ul>
+
+      <p>Blockwright turns those moments into natural-language instructions.</p>
+
+      <pre><code>/bw give me a diamond sword
+/bw build a small cabin with windows and a bed
+/bw set the time to day
+/bw replace the wall in front of me with glass</code></pre>
+
+      <p>Blockwright sends the player's intent to an AI assistant, then uses the Fabric mod to make the change inside the Minecraft world.</p>
+
+      <h2>What is Blockwright?</h2>
+      <p>Blockwright is an AI assistant for Minecraft Java Edition players.</p>
+      <p>The main installation path is a Fabric mod, designed for Java Edition 1.21.x, single-player saves, and LAN-opened worlds. You do not need to move your map to a Paper server or change how you normally play Minecraft.</p>
+      <p>After installing it, you can talk to Blockwright through:</p>
+      <ul>
+        <li>the in-game <code>/bw ...</code> command;</li>
+        <li>a Web chat page;</li>
+        <li>voice input on the Web page;</li>
+        <li>Element/Matrix rooms;</li>
+        <li>DingTalk bot messages;</li>
+        <li>local commands or scripts for custom integrations.</li>
+      </ul>
+      <p>It is not meant to be a chatbot that only replies with text. The goal is to turn chat into real Minecraft actions.</p>
+
+      <h2>What can it do?</h2>
+      <p><strong>Give items.</strong> You can ask for a stack of torches, a full diamond kit, or a sword with knockback without remembering item IDs or full commands.</p>
+      <p><strong>Adjust game state.</strong> Ask Blockwright to set the time to day, stop the rain, give night vision, or switch game mode.</p>
+      <p><strong>Build small structures.</strong> It is best suited for cabins, rooms, treehouses, platforms, simple decorations, and local structure drafts.</p>
+      <p><strong>Modify what you are looking at.</strong> Ask it to replace windows with blue glass, change a wall to stone bricks, or make a roof higher.</p>
+      <p><strong>Continue the conversation.</strong> Start with “build a small cabin,” then continue with “make it bigger,” “add some lights,” or “change the roof to dark wood.”</p>
+
+      <h2>How do you start?</h2>
+      <ol>
+        <li>Prepare Minecraft Java Edition 1.21.x.</li>
+        <li>Install Fabric Loader 0.16.14 or newer.</li>
+        <li>Put Fabric API for your 1.21.x version and <code>blockwright-fabric-*.jar</code> in your current game directory's <code>mods/</code> folder.</li>
+        <li>Start Minecraft and enter a world.</li>
+        <li>Run <code>/bw web</code> in Minecraft chat.</li>
+      </ol>
+      <p>Open the displayed Web address, set your current Minecraft player name, then choose an AI model. Current options include Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</p>
+
+      <h2>Why is this interesting?</h2>
+      <p>Minecraft is about creative freedom, but many repeated actions are just setup work.</p>
+      <p>Giving items, changing time, clearing rain, drafting a basic room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one sentence, so players can spend more attention on the idea they are building.</p>
+
+      <h2>At a Glance</h2>
+      <p>Blockwright is not trying to play Minecraft for you.</p>
+      <p>It is a Minecraft assistant that understands natural language: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.</p>
+
+      <section class="share-box">
+        <h2>Short Version for X/Twitter</h2>
+        <p>I am building Blockwright, an AI assistant for Minecraft Java Edition.</p>
+        <p>After installing the Fabric mod, players can type:</p>
+        <pre><code>/bw give me a diamond sword
+/bw build a small cabin
+/bw set the time to day
+/bw replace this wall with glass</code></pre>
+        <p>It supports Web text, voice, in-game <code>/bw</code>, Element/Matrix, DingTalk, and model options including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</p>
+        <p>The goal is not to play Minecraft for you. It is to turn repeated actions like giving items, changing weather, drafting simple builds, and editing local structures into natural language.</p>
+      </section>
+    </article>
+  </main>
+</body>
+</html>

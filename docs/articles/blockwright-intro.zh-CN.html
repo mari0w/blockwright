@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright：让 Minecraft 玩家用一句话完成游戏操作</title>
+  <meta name="description" content="一篇面向玩家和发布平台的 Blockwright 介绍文章：它能做什么、怎么使用、适合哪些 Minecraft Java 版玩家。">
+  <meta property="og:title" content="Blockwright：让 Minecraft 玩家用一句话完成游戏操作">
+  <meta property="og:description" content="Blockwright 是 Minecraft Java 版 AI 助手，支持 /bw、Web、语音、Element/Matrix 和钉钉，让玩家用自然语言发物品、建造和改造建筑。">
+  <meta property="og:type" content="article">
+  <meta property="og:image" content="../assets/social-preview.zh-CN.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../assets/social-preview.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --panel: #151c18;
+      --text: #f3f6f0;
+      --muted: #b8c4bc;
+      --line: #354239;
+      --green: #3cc77a;
+      --amber: #e7b15d;
+      --max: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.78;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      color: var(--amber);
+      outline: none;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 14, 12, 0.9);
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .brand {
+      color: var(--text);
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 54px 0 72px;
+    }
+
+    .kicker {
+      margin: 0 0 14px;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(36px, 7vw, 58px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 22px 0 0;
+      color: #d6e2da;
+      font-size: 20px;
+    }
+
+    article {
+      margin-top: 46px;
+    }
+
+    h2 {
+      margin: 42px 0 14px;
+      font-size: 28px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.4em;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #101511;
+      color: #e8f1ea;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: #e8f1ea;
+    }
+
+    .share-box {
+      margin-top: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 20px;
+    }
+
+    .share-box h2 {
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../index.html">Blockwright</a>
+      <nav class="links" aria-label="文章导航">
+        <a href="../index.html">官网首页</a>
+        <a href="blockwright-intro.html">English</a>
+        <a href="blockwright-intro.zh-CN.md">Markdown 版本</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="kicker">Minecraft Java 版 AI 助手</p>
+    <h1>Blockwright：让 Minecraft 玩家用一句话完成游戏操作</h1>
+    <p class="lead">这是一篇可以直接分享的介绍文章：讲清楚 Blockwright 是什么、能做什么，以及玩家如何开始使用。</p>
+
+    <article>
+      <p>如果你经常玩 Minecraft Java 版，大概会遇到这样的时刻：</p>
+      <ul>
+        <li>想快速拿一件物品，但不想翻命令表；</li>
+        <li>想盖一个小木屋、房间或树屋，但不想从第一块木板慢慢摆；</li>
+        <li>想把眼前这面墙换成玻璃，或者把房子的窗户换成蓝色玻璃；</li>
+        <li>想切到白天、停止下雨、换个游戏模式；</li>
+        <li>想让朋友在局域网世界里也能直接通过聊天发需求。</li>
+      </ul>
+
+      <p>Blockwright 做的事情很简单：把这些 Minecraft 需求变成一句自然语言指令。</p>
+
+      <pre><code>/bw 给我一把钻石剑
+/bw 帮我盖一个带窗户和床的小木屋
+/bw 把时间调到白天
+/bw 把我面前这面墙换成玻璃</code></pre>
+
+      <p>然后 Blockwright 会把玩家的意图交给 AI 助手理解，再通过 Fabric 模组在 Minecraft 世界里执行。</p>
+
+      <h2>Blockwright 是什么？</h2>
+      <p>Blockwright 是一个面向 Minecraft Java 版玩家的 AI 助手。</p>
+      <p>它的主安装方式是 Fabric 模组，适合 Java 版 1.21.x、单人存档和局域网开放世界。玩家不需要把原来的地图迁移到 Paper 服务端，也不需要为了使用 AI 助手改变自己的游玩方式。</p>
+      <p>装好后，你可以通过几种方式和它说话：</p>
+      <ul>
+        <li>在 Minecraft 聊天栏里输入 <code>/bw ...</code></li>
+        <li>打开 Web 页面直接打字</li>
+        <li>在 Web 页面按住麦克风说话</li>
+        <li>通过 Element/Matrix 房间发消息</li>
+        <li>通过钉钉机器人发消息</li>
+        <li>通过本地命令或脚本接入其他工具</li>
+      </ul>
+      <p>它不是一个只会聊天的机器人。它的目标是把聊天变成 Minecraft 世界里的实际动作。</p>
+
+      <h2>它能做什么？</h2>
+      <p><strong>发物品。</strong> 你可以说 <code>/bw 给我一组火把</code>、<code>/bw 给我一套钻石装备</code>，不用记物品 ID，也不用手写完整命令。</p>
+      <p><strong>调整游戏状态。</strong> 比如 <code>/bw 把时间调到白天</code>、<code>/bw 别下雨了</code>、<code>/bw 给我夜视</code>。</p>
+      <p><strong>建造小型建筑。</strong> 比如小木屋、房间、树屋、平台和简单装饰。你仍然可以自己继续修改，但第一版不必从空地开始。</p>
+      <p><strong>改造眼前的东西。</strong> 比如 <code>/bw 把这个房子的窗户换成蓝色玻璃</code>，更接近“你在游戏里指着一个地方，然后告诉助手要怎么改”。</p>
+      <p><strong>继续对话。</strong> 你可以先说“盖一个小木屋”，再说“换大一点”“加几盏灯”“把屋顶换成深色木头”。</p>
+
+      <h2>怎么开始使用？</h2>
+      <ol>
+        <li>准备 Minecraft Java Edition 1.21.x。</li>
+        <li>安装 Fabric Loader 0.16.14 或更新版本。</li>
+        <li>在当前游戏目录的 <code>mods/</code> 文件夹里放入对应 1.21.x 游戏版本的 Fabric API 和 <code>blockwright-fabric-*.jar</code>。</li>
+        <li>启动 Minecraft，进入世界。</li>
+        <li>在游戏聊天栏输入 <code>/bw web</code>。</li>
+      </ol>
+      <p>打开显示出来的 Web 地址后，填写自己的 Minecraft 用户名，再选择一个 AI 模型。目前支持 Codex CLI、OpenAI、DeepSeek、豆包 Doubao 和 Gemini。</p>
+
+      <h2>为什么这件事有意思？</h2>
+      <p>Minecraft 的魅力在于自由创造，但很多重复操作并不一定有趣。</p>
+      <p>拿物品、调时间、清雨、搭一个基础小屋、替换一片墙、给房间补灯，这些事情都很常见。Blockwright 想做的是把这些重复操作变成一句话，让玩家把注意力放回想象和设计上。</p>
+
+      <h2>一眼看懂</h2>
+      <p>Blockwright 不是要替你玩 Minecraft。</p>
+      <p>它更像一个能听懂自然语言的 Minecraft 助手：你负责提出想法，它负责把一部分重复、繁琐、命令化的操作变成游戏里的实际动作。</p>
+
+      <section class="share-box">
+        <h2>适合 X/Twitter 的短版</h2>
+        <p>我在做一个叫 Blockwright 的 Minecraft Java 版 AI 助手。</p>
+        <p>装好 Fabric 模组后，玩家可以直接在游戏里输入：</p>
+        <pre><code>/bw 给我一把钻石剑
+/bw 帮我盖一个小木屋
+/bw 把时间调到白天
+/bw 把这面墙换成玻璃</code></pre>
+        <p>它支持 Web 文字、语音、游戏内 <code>/bw</code>、Element/Matrix、钉钉机器人，也支持 Codex CLI、OpenAI、DeepSeek、豆包和 Gemini。</p>
+        <p>目标不是替你玩 Minecraft，而是把发物品、调天气、搭基础建筑、局部改造这些重复操作变成一句自然语言。</p>
+      </section>
+    </article>
+  </main>
+</body>
+</html>

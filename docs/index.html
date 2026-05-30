@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Blockwright - AI Building Assistant for Minecraft Java Edition</title>
-  <meta name="description" content="Blockwright is a Minecraft Java Edition Fabric mod and local controller for asking an AI assistant to give items, plan builds, place blocks, and verify results.">
+  <meta name="description" content="Blockwright is a Minecraft Java Edition AI assistant for asking through /bw, Web, voice, and chat tools to give items, build, and edit structures.">
   <meta property="og:title" content="Blockwright - AI Building Assistant for Minecraft Java Edition">
-  <meta property="og:description" content="Use /bw in Minecraft Java Edition to ask for items, builds, and edits. Blockwright plans with a local controller and executes through Fabric/Paper world APIs.">
+  <meta property="og:description" content="Use /bw, Web chat, voice, or chat tools to ask for items, builds, and edits in Minecraft Java Edition.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mari0w.github.io/blockwright/">
   <meta property="og:image" content="assets/social-preview.png">
@@ -417,19 +417,6 @@
       font-size: 0.95em;
     }
 
-    .architecture {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 20px;
-    }
-
-    .architecture img {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #101411;
-    }
-
     .config-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -593,8 +580,8 @@
         <div class="nav-links">
           <a href="#features" data-i18n="nav.features">What it does</a>
           <a href="#start" data-i18n="nav.start">Try it</a>
-          <a href="#architecture" data-i18n="nav.architecture">How it works</a>
-          <a href="#docs" data-i18n="nav.docs">Docs</a>
+          <a href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="nav.article">Intro article</a>
+          <a href="#docs" data-i18n="nav.docs">Tutorials</a>
         </div>
         <a class="repo-link" href="https://github.com/mari0w/blockwright" data-i18n="nav.github">GitHub</a>
         <div class="language-switch" aria-label="Language" data-i18n-aria="language.label">
@@ -611,11 +598,11 @@
         <div class="hero-copy">
           <p class="eyebrow" data-i18n="hero.eyebrow">AI building assistant for Minecraft Java Edition</p>
           <h1 id="hero-title">Blockwright</h1>
-          <p class="lead" data-i18n-html="hero.lead">Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code> to ask for items, small builds, or changes to existing structures. The mod executes through Minecraft world APIs, while the controller keeps plans, blueprints, and build records outside the game.</p>
+          <p class="lead" data-i18n-html="hero.lead">Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code>, Web chat, voice, or chat tools to ask for items, builds, or changes to existing structures.</p>
           <div class="hero-actions">
             <a class="button primary" href="https://github.com/mari0w/blockwright" data-i18n="hero.github">View on GitHub</a>
             <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="hero.install">Install Fabric mod</a>
-            <a class="button" href="https://github.com/mari0w/blockwright#quick-start" data-href-en="https://github.com/mari0w/blockwright#quick-start" data-href-zh="https://github.com/mari0w/blockwright/blob/main/README.zh-CN.md#快速开始" data-i18n="hero.start">Quick start</a>
+            <a class="button" href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="hero.article">Read intro article</a>
           </div>
           <div class="badges" aria-label="Project highlights" data-i18n-aria="hero.badges">
             <span class="badge" data-i18n="hero.badgeFabric">Fabric first</span>
@@ -663,60 +650,63 @@
       <div class="section">
         <div class="section-head">
           <p class="section-kicker" data-i18n="start.kicker">Try it locally</p>
-          <h2 data-i18n="start.title">Start the controller, install the Fabric mod, then send a request in game.</h2>
-          <p class="section-copy" data-i18n="start.copy">Blockwright is early but runnable. The simplest flow is local controller plus Fabric mod in your current Minecraft 1.21.8 game directory.</p>
+          <h2 data-i18n="start.title">Install the mod, open Minecraft, then talk to Blockwright.</h2>
+          <p class="section-copy" data-i18n="start.copy">The player flow is intentionally simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw or the Web page.</p>
         </div>
         <div class="steps">
           <article class="step">
-            <h3 data-i18n="start.webTitle">Start the controller</h3>
-            <p data-i18n-html="start.webCopy">Run <code>./scripts/run-web.sh</code> from the repository root. The default local URL is <code>http://127.0.0.1:8765/web</code>.</p>
+            <h3 data-i18n="start.webTitle">Prepare Minecraft 1.21.x</h3>
+            <p data-i18n-html="start.webCopy">Use Minecraft Java Edition 1.21.x with Fabric Loader 0.16.14 or newer.</p>
           </article>
           <article class="step">
-            <h3 data-i18n="start.fabricTitle">Install into Java Edition/Fabric</h3>
-            <p data-i18n-html="start.fabricCopy">Run <code>make</code> to build and install the mod into the current Java Edition game directory, or specify one with <code>make GAME_DIR=...</code>.</p>
+            <h3 data-i18n="start.fabricTitle">Put mods in mods/</h3>
+            <p data-i18n-html="start.fabricCopy">Install Fabric API for your 1.21.x version, then put <code>blockwright-fabric-*.jar</code> in the same <code>mods/</code> folder.</p>
           </article>
           <article class="step">
-            <h3 data-i18n="start.requestTitle">Use /bw in the world</h3>
-            <p data-i18n-html="start.requestCopy">Try requests like <code>/bw give me a diamond sword</code> or <code>/bw build a small cabin in front of me</code>.</p>
+            <h3 data-i18n="start.requestTitle">Open Minecraft and use /bw</h3>
+            <p data-i18n-html="start.requestCopy">Run <code>/bw web</code> to open the Web page, then try <code>/bw give me a diamond sword</code>.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="architecture" class="band">
-      <div class="section architecture">
+    <section id="article" class="band">
+      <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="architecture.kicker">How it works</p>
-          <h2 data-i18n="architecture.title">The mod touches Minecraft; the controller handles planning, records, and integrations.</h2>
-          <p class="section-copy" data-i18n="architecture.copy">That split keeps Minecraft execution concrete: blocks are placed through Fabric/Paper world APIs, and the controller keeps the assistant, queue, blueprints, and verification records outside the game.</p>
+          <p class="section-kicker" data-i18n="article.kicker">Article</p>
+          <h2 data-i18n="article.title">A shareable introduction to what Blockwright can do.</h2>
+          <p class="section-copy" data-i18n="article.copy">Use this article on the website, or copy the Markdown version to X/Twitter, forums, newsletters, and other publishing platforms.</p>
         </div>
-        <img src="assets/architecture-flow.svg?v=20260525" data-src-en="assets/architecture-flow.svg?v=20260525" data-src-zh="assets/architecture-flow.zh-CN.svg?v=20260525" alt="Blockwright architecture flow" data-i18n-alt="architecture.alt">
+        <div class="hero-actions">
+          <a class="button primary" href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="article.read">Read the article</a>
+          <a class="button" href="articles/blockwright-intro.en.md" data-href-en="articles/blockwright-intro.en.md" data-href-zh="articles/blockwright-intro.zh-CN.md" data-i18n="article.markdown">Markdown version</a>
+        </div>
       </div>
     </section>
 
     <section id="docs" class="band alt">
       <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="docs.kicker">Documentation</p>
-          <h2 data-i18n="docs.title">Use the docs when you are ready to install, inspect the architecture, or contribute.</h2>
-          <p class="section-copy" data-i18n="docs.copy">The homepage stays focused on what the mod does. Detailed setup, architecture, MCP tools, and roadmap live in the repository docs.</p>
+          <p class="section-kicker" data-i18n="docs.kicker">Tutorials</p>
+          <h2 data-i18n="docs.title">Use these links to install, share, or introduce Blockwright.</h2>
+          <p class="section-copy" data-i18n="docs.copy">The website is focused on player-facing tutorials and promotional material. Technical references stay in the repository when needed.</p>
         </div>
         <div class="config-grid">
           <article class="config-item">
+            <h3><a href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="docs.articleTitle">Intro article</a></h3>
+            <p data-i18n="docs.articleCopy">A shareable article about what Blockwright can do for Minecraft players.</p>
+          </article>
+          <article class="config-item">
+            <h3><a href="articles/blockwright-intro.en.md" data-href-en="articles/blockwright-intro.en.md" data-href-zh="articles/blockwright-intro.zh-CN.md" data-i18n="docs.markdownTitle">Markdown copy</a></h3>
+            <p data-i18n="docs.markdownCopy">Copy the Markdown article to X/Twitter, forums, newsletters, or other publishing platforms.</p>
+          </article>
+          <article class="config-item">
             <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="docs.installTitle">Java Edition / Fabric install</a></h3>
-            <p data-i18n="docs.installCopy">Set up the primary local-player path for Java Edition, single-player saves, and LAN-opened worlds.</p>
+            <p data-i18n="docs.installCopy">Prepare Minecraft 1.21.x, Fabric Loader, Fabric API, and the Blockwright mod.</p>
           </article>
           <article class="config-item">
-            <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/ARCHITECTURE.md" data-i18n="docs.architectureTitle">Architecture</a></h3>
-            <p data-i18n="docs.architectureCopy">See how the controller, Codex/MCP tools, Fabric mod, Paper plugin, blueprints, and build records fit together.</p>
-          </article>
-          <article class="config-item">
-            <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/MCP.md" data-i18n="docs.mcpTitle">MCP tools</a></h3>
-            <p data-i18n="docs.mcpCopy">Use Blockwright tools for player state, inventory, nearby blocks, blueprint data, and controlled actions.</p>
-          </article>
-          <article class="config-item">
-            <h3><a href="https://github.com/mari0w/blockwright/blob/main/docs/ROADMAP.md" data-i18n="docs.roadmapTitle">Roadmap</a></h3>
-            <p data-i18n="docs.roadmapCopy">Track the next work on execution stability, existing-build edits, image-to-blueprint, chat tools, and data storage.</p>
+            <h3><a href="https://github.com/mari0w/blockwright" data-i18n="docs.githubTitle">GitHub repository</a></h3>
+            <p data-i18n="docs.githubCopy">Download releases, read the README, and follow project updates.</p>
           </article>
         </div>
       </div>
@@ -735,17 +725,17 @@
       en: {
         meta: {
           title: "Blockwright - AI Building Assistant for Minecraft Java Edition",
-          description: "Blockwright is a Minecraft Java Edition Fabric mod and local controller for asking an AI assistant to give items, plan builds, place blocks, and verify results.",
+          description: "Blockwright is a Minecraft Java Edition Fabric mod for asking an AI assistant to give items, build, edit structures, and respond through Web, voice, chat tools, or /bw.",
           ogTitle: "Blockwright - AI Building Assistant for Minecraft Java Edition",
-          ogDescription: "Use /bw in Minecraft Java Edition to ask for items, builds, and edits. Blockwright plans with a local controller and executes through Fabric/Paper world APIs."
+          ogDescription: "Use /bw, Web chat, voice, or chat tools to ask for items, builds, and edits in Minecraft Java Edition."
         },
         nav: {
           label: "Main navigation",
           home: "Blockwright home",
           features: "What it does",
           start: "Try it",
-          architecture: "How it works",
-          docs: "Docs",
+          article: "Intro article",
+          docs: "Tutorials",
           github: "GitHub"
         },
         language: {
@@ -755,10 +745,10 @@
         },
         hero: {
           eyebrow: "AI building assistant for Minecraft Java Edition",
-          lead: "Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code> to ask for items, small builds, or changes to existing structures. The mod executes through Minecraft world APIs, while the controller keeps plans, blueprints, and build records outside the game.",
+          lead: "Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code>, Web chat, voice, or chat tools to ask for items, builds, or changes to existing structures.",
           github: "View on GitHub",
           install: "Install Fabric mod",
-          start: "Quick start",
+          article: "Read intro article",
           badges: "Project highlights",
           badgeFabric: "Fabric first",
           badgeCommand: "/bw command",
@@ -780,33 +770,34 @@
         },
         start: {
           kicker: "Try it locally",
-          title: "Start the controller, install the Fabric mod, then send a request in game.",
-          copy: "Blockwright is early but runnable. The simplest flow is local controller plus Fabric mod in your current Minecraft 1.21.8 game directory.",
-          webTitle: "Start the controller",
-          webCopy: "Run <code>./scripts/run-web.sh</code> from the repository root. The default local URL is <code>http://127.0.0.1:8765/web</code>.",
-          fabricTitle: "Install into Java Edition/Fabric",
-          fabricCopy: "Run <code>make</code> to build and install the mod into the current Java Edition game directory, or specify one with <code>make GAME_DIR=...</code>.",
-          requestTitle: "Use /bw in the world",
-          requestCopy: "Try requests like <code>/bw give me a diamond sword</code> or <code>/bw build a small cabin in front of me</code>."
+          title: "Install the mod, open Minecraft, then talk to Blockwright.",
+          copy: "The player flow is intentionally simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw or the Web page.",
+          webTitle: "Prepare Minecraft 1.21.x",
+          webCopy: "Use Minecraft Java Edition 1.21.x with Fabric Loader 0.16.14 or newer.",
+          fabricTitle: "Put mods in mods/",
+          fabricCopy: "Install Fabric API for your 1.21.x version, then put <code>blockwright-fabric-*.jar</code> in the same <code>mods/</code> folder.",
+          requestTitle: "Open Minecraft and use /bw",
+          requestCopy: "Run <code>/bw web</code> to open the Web page, then try <code>/bw give me a diamond sword</code>."
         },
-        architecture: {
-          kicker: "How it works",
-          title: "The mod touches Minecraft; the controller handles planning, records, and integrations.",
-          copy: "That split keeps Minecraft execution concrete: blocks are placed through Fabric/Paper world APIs, and the controller keeps the assistant, queue, blueprints, and verification records outside the game.",
-          alt: "Blockwright architecture flow"
+        article: {
+          kicker: "Article",
+          title: "A shareable introduction to what Blockwright can do.",
+          copy: "Use this article on the website, or copy the Markdown version to X/Twitter, forums, newsletters, and other publishing platforms.",
+          read: "Read the article",
+          markdown: "Markdown version"
         },
         docs: {
-          kicker: "Documentation",
-          title: "Use the docs when you are ready to install, inspect the architecture, or contribute.",
-          copy: "The homepage stays focused on what the mod does. Detailed setup, architecture, MCP tools, and roadmap live in the repository docs.",
+          kicker: "Tutorials",
+          title: "Use these links to install, share, or introduce Blockwright.",
+          copy: "The website is focused on player-facing tutorials and promotional material. Technical references stay in the repository when needed.",
+          articleTitle: "Intro article",
+          articleCopy: "A shareable article about what Blockwright can do for Minecraft players.",
+          markdownTitle: "Markdown copy",
+          markdownCopy: "Copy the Markdown article to X/Twitter, forums, newsletters, or other publishing platforms.",
           installTitle: "Java Edition / Fabric install",
-          installCopy: "Set up the primary local-player path for Java Edition, single-player saves, and LAN-opened worlds.",
-          architectureTitle: "Architecture",
-          architectureCopy: "See how the controller, Codex/MCP tools, Fabric mod, Paper plugin, blueprints, and build records fit together.",
-          mcpTitle: "MCP tools",
-          mcpCopy: "Use Blockwright tools for player state, inventory, nearby blocks, blueprint data, and controlled actions.",
-          roadmapTitle: "Roadmap",
-          roadmapCopy: "Track the next work on execution stability, existing-build edits, image-to-blueprint, chat tools, and data storage."
+          installCopy: "Prepare Minecraft 1.21.x, Fabric Loader, Fabric API, and the Blockwright mod.",
+          githubTitle: "GitHub repository",
+          githubCopy: "Download releases, read the README, and follow project updates."
         },
         footer: {
           title: "Blockwright - AI building assistant for Minecraft Java Edition",
@@ -816,17 +807,17 @@
       "zh-CN": {
         meta: {
           title: "Blockwright - Minecraft Java 版 AI 建筑助手",
-          description: "Blockwright 是面向 Minecraft Java 版的 Fabric 模组和本地 controller，可通过 /bw 让 AI 助手发物品、规划建筑、放置方块并校验结果。",
+          description: "Blockwright 是面向 Minecraft Java 版玩家的 AI 助手，可以通过 /bw、Web、语音和聊天工具发物品、建造和改造建筑。",
           ogTitle: "Blockwright - Minecraft Java 版 AI 建筑助手",
-          ogDescription: "在 Minecraft Java 版里用 /bw 提交发物品、建造和改造需求。Blockwright 由本地 controller 规划，并通过 Fabric/Paper 世界 API 执行。"
+          ogDescription: "在 Minecraft Java 版里用 /bw、Web、语音或聊天工具提交发物品、建造和改造需求。"
         },
         nav: {
           label: "主导航",
           home: "Blockwright 首页",
           features: "用途",
           start: "体验",
-          architecture: "工作方式",
-          docs: "文档",
+          article: "介绍文章",
+          docs: "教程",
           github: "GitHub"
         },
         language: {
@@ -836,10 +827,10 @@
         },
         hero: {
           eyebrow: "面向 Minecraft Java 版的 AI 建筑助手",
-          lead: "把 Blockwright 安装到 Minecraft Java 版世界后，玩家可以用 <code>/bw</code> 让助手发物品、建造小型建筑或改造已有建筑。模组通过 Minecraft 世界 API 执行，controller 在游戏外保存规划、蓝图和构建记录。",
+          lead: "把 Blockwright 安装到 Minecraft Java 版世界后，玩家可以用 <code>/bw</code>、Web、语音或聊天工具让助手发物品、建造小型建筑或改造已有建筑。",
           github: "查看 GitHub",
           install: "安装 Fabric 模组",
-          start: "快速开始",
+          article: "阅读介绍文章",
           badges: "项目关键特性",
           badgeFabric: "Fabric 优先",
           badgeCommand: "/bw 命令",
@@ -861,33 +852,34 @@
         },
         start: {
           kicker: "本地体验",
-          title: "先启动 controller，再安装 Fabric 模组，然后在游戏里发送需求。",
-          copy: "Blockwright 还处于早期阶段，但已经可以跑通闭环。最简单的体验方式是本地 controller 加当前 Minecraft 1.21.8 游戏目录里的 Fabric 模组。",
-          webTitle: "启动 controller",
-          webCopy: "在仓库根目录运行 <code>./scripts/run-web.sh</code>，默认打开 <code>http://127.0.0.1:8765/web</code>。",
-          fabricTitle: "安装到 Java 版/Fabric",
-          fabricCopy: "运行 <code>make</code> 自动构建并安装到 Java 版当前游戏目录，也可以用 <code>make GAME_DIR=...</code> 指定。",
-          requestTitle: "在世界里使用 /bw",
-          requestCopy: "可以先试 <code>/bw 给我一把钻石剑</code> 或 <code>/bw 在我面前建一个小木屋</code>。"
+          title: "安装模组，打开 Minecraft，然后和 Blockwright 对话。",
+          copy: "玩家使用流程应该足够简单：准备 Fabric 游戏配置，把需要的模组放到正确目录，然后用 /bw 或 Web 页面发指令。",
+          webTitle: "准备 Minecraft 1.21.x",
+          webCopy: "使用 Minecraft Java Edition 1.21.x，并安装 Fabric Loader 0.16.14 或更新版本。",
+          fabricTitle: "把模组放进 mods/",
+          fabricCopy: "安装对应 1.21.x 版本的 Fabric API，再把 <code>blockwright-fabric-*.jar</code> 放进同一个 <code>mods/</code> 文件夹。",
+          requestTitle: "打开游戏并使用 /bw",
+          requestCopy: "先运行 <code>/bw web</code> 打开 Web 页面，再试试 <code>/bw 给我一把钻石剑</code>。"
         },
-        architecture: {
-          kicker: "工作方式",
-          title: "模组负责触达 Minecraft，controller 负责规划、记录和集成。",
-          copy: "这个分工让 Minecraft 执行保持明确：Fabric/Paper 通过世界 API 放置方块，controller 在游戏外维护助手、队列、蓝图和校验记录。",
-          alt: "Blockwright 架构流程图"
+        article: {
+          kicker: "介绍文章",
+          title: "一篇可以直接分享的 Blockwright 能力介绍。",
+          copy: "这篇文章可以放在官网，也可以复制 Markdown 版本到 X/Twitter、论坛、Newsletter 或其他发布平台。",
+          read: "阅读文章",
+          markdown: "Markdown 版本"
         },
         docs: {
-          kicker: "文档入口",
-          title: "准备安装、查看架构或参与开发时，再进入详细文档。",
-          copy: "官网首页聚焦介绍这个模组是做什么的；详细安装、架构、MCP 工具和路线图放在仓库文档里。",
+          kicker: "教程入口",
+          title: "用这些入口安装、分享和介绍 Blockwright。",
+          copy: "官网主要面向玩家教程和项目宣传；需要技术参考时，再进入仓库文档。",
+          articleTitle: "介绍文章",
+          articleCopy: "一篇说明 Blockwright 能为 Minecraft 玩家做什么的分享文章。",
+          markdownTitle: "Markdown 文案",
+          markdownCopy: "复制 Markdown 文章到 X/Twitter、论坛、Newsletter 或其他发布平台。",
           installTitle: "Java 版 / Fabric 安装",
-          installCopy: "配置 Java 版、单人存档和局域网开放世界的主安装路径。",
-          architectureTitle: "架构说明",
-          architectureCopy: "了解 controller、Codex/MCP 工具、Fabric 模组、Paper 插件、蓝图和构建记录如何协作。",
-          mcpTitle: "MCP 工具",
-          mcpCopy: "通过 Blockwright 工具读取玩家状态、物品栏、附近方块、蓝图数据，并执行受控动作。",
-          roadmapTitle: "路线图",
-          roadmapCopy: "查看执行稳定性、已有建筑改造、图片转蓝图、聊天工具和数据层的后续计划。"
+          installCopy: "准备 Minecraft 1.21.x、Fabric Loader、Fabric API 和 Blockwright 模组。",
+          githubTitle: "GitHub 仓库",
+          githubCopy: "下载发布包、查看 README，并关注项目更新。"
         },
         footer: {
           title: "Blockwright - Minecraft Java 版 AI 建筑助手",
