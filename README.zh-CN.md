@@ -20,9 +20,16 @@ Blockwright 是一个给 Minecraft Java 版玩家用的 AI 助手。装好 Fabri
 
 ## 使用步骤
 
-### 1. 安装模组
+### 1. 准备游戏和模组
 
-准备 Minecraft Java Edition `1.21.8+`（1.21.x 系列）、Fabric Loader、Fabric API，然后把发布包里的 `blockwright-fabric-*.jar` 放进当前游戏目录的 `mods` 文件夹。
+准备 Minecraft Java Edition `1.21.x` 系列，并安装 Fabric Loader `0.16.14` 或更新版本。
+
+需要放进当前游戏目录 `mods/` 文件夹的模组：
+
+- 对应 1.21.x 游戏版本的 Fabric API
+- Blockwright Fabric 模组：`blockwright-fabric-*.jar`
+
+如果你在启动器里给这个 1.21.x 游戏版本设置了单独的游戏目录，就放到那个目录下的 `mods/` 文件夹。
 
 ### 2. 启动游戏
 

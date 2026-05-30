@@ -20,9 +20,16 @@ You can type on the Web page, hold the microphone button to talk, use the in-gam
 
 ## How to Use
 
-### 1. Install the Mod
+### 1. Prepare the Game and Mods
 
-Prepare Minecraft Java Edition `1.21.8+` within the 1.21.x line, Fabric Loader, and Fabric API. Put the released `blockwright-fabric-*.jar` into the current game directory's `mods` folder.
+Prepare Minecraft Java Edition `1.21.x` and install Fabric Loader `0.16.14` or newer.
+
+Put these mods into the current game directory's `mods/` folder:
+
+- Fabric API for your 1.21.x game version
+- Blockwright Fabric mod: `blockwright-fabric-*.jar`
+
+If your launcher uses a separate game directory for this 1.21.x profile, use that profile's `mods/` folder.
 
 ### 2. Start Minecraft
 
