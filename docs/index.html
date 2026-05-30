@@ -176,7 +176,7 @@
       background-image:
         linear-gradient(90deg, rgba(11, 14, 12, 0.98) 0%, rgba(11, 14, 12, 0.82) 36%, rgba(11, 14, 12, 0.34) 100%),
         linear-gradient(0deg, rgba(11, 14, 12, 1) 0%, rgba(11, 14, 12, 0.2) 35%, rgba(11, 14, 12, 0) 100%),
-        url("assets/web-settings-preview.png");
+        url("assets/web-settings-preview.png?v=20260530");
       background-size: cover;
       background-position: center top;
       border-bottom: 1px solid var(--line);
@@ -423,6 +423,33 @@
       gap: 14px;
     }
 
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .screenshot-item {
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .screenshot-item img {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101411;
+      box-shadow: var(--shadow);
+    }
+
+    .screenshot-item figcaption {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
     .config-item strong {
       color: var(--text);
     }
@@ -478,7 +505,8 @@
 
       .feature-grid,
       .steps,
-      .config-grid {
+      .config-grid,
+      .screenshot-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -542,7 +570,8 @@
 
       .feature-grid,
       .steps,
-      .config-grid {
+      .config-grid,
+      .screenshot-grid {
         grid-template-columns: 1fr;
       }
 
@@ -684,7 +713,31 @@
       </div>
     </section>
 
-    <section id="docs" class="band alt">
+    <section id="screenshots" class="band alt">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker" data-i18n="screenshots.kicker">Screenshots</p>
+          <h2 data-i18n="screenshots.title">Ready-to-use visuals for tutorials and social posts.</h2>
+          <p class="section-copy" data-i18n="screenshots.copy">These screenshots show the mobile chat, Web settings, and supported AI model options.</p>
+        </div>
+        <div class="screenshot-grid">
+          <figure class="screenshot-item">
+            <img src="assets/web-chat-mobile-preview.png?v=20260530" alt="Blockwright mobile chat window" data-i18n-alt="screenshots.chatAlt">
+            <figcaption data-i18n="screenshots.chatCaption">Mobile chat window</figcaption>
+          </figure>
+          <figure class="screenshot-item">
+            <img src="assets/web-settings-preview.png?v=20260530" alt="Blockwright Web settings page" data-i18n-alt="screenshots.settingsAlt">
+            <figcaption data-i18n="screenshots.settingsCaption">Web settings page</figcaption>
+          </figure>
+          <figure class="screenshot-item">
+            <img src="assets/web-model-provider-dropdown.png?v=20260530" alt="Blockwright supported AI model dropdown" data-i18n-alt="screenshots.modelsAlt">
+            <figcaption data-i18n="screenshots.modelsCaption">Supported AI models</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="docs" class="band">
       <div class="section">
         <div class="section-head">
           <p class="section-kicker" data-i18n="docs.kicker">Tutorials</p>
@@ -786,6 +839,17 @@
           read: "Read the article",
           markdown: "Markdown version"
         },
+        screenshots: {
+          kicker: "Screenshots",
+          title: "Ready-to-use visuals for tutorials and social posts.",
+          copy: "These screenshots show the mobile chat, Web settings, and supported AI model options.",
+          chatAlt: "Blockwright mobile chat window",
+          chatCaption: "Mobile chat window",
+          settingsAlt: "Blockwright Web settings page",
+          settingsCaption: "Web settings page",
+          modelsAlt: "Blockwright supported AI model dropdown",
+          modelsCaption: "Supported AI models"
+        },
         docs: {
           kicker: "Tutorials",
           title: "Use these links to install, share, or introduce Blockwright.",
@@ -867,6 +931,17 @@
           copy: "这篇文章可以放在官网，也可以复制 Markdown 版本到 X/Twitter、论坛、Newsletter 或其他发布平台。",
           read: "阅读文章",
           markdown: "Markdown 版本"
+        },
+        screenshots: {
+          kicker: "界面截图",
+          title: "可以直接用于教程和社媒宣传的配图。",
+          copy: "这里展示移动端聊天窗口、Web 设置页和支持的大模型选项。",
+          chatAlt: "Blockwright 移动端聊天窗口",
+          chatCaption: "移动端聊天窗口",
+          settingsAlt: "Blockwright Web 设置页面",
+          settingsCaption: "Web 设置页面",
+          modelsAlt: "Blockwright 支持的大模型下拉选项",
+          modelsCaption: "支持的大模型"
         },
         docs: {
           kicker: "教程入口",

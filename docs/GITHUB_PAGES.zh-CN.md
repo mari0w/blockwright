@@ -48,9 +48,11 @@ https://mari0w.github.io/blockwright/
 
 ## 配图
 
-当前准备了三类图片：
+当前准备了官网和宣传配图：
 
-- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用在 README 和官网 hero 背景。
+- `docs/assets/web-chat-mobile-preview.png`：移动端 `/web` 聊天窗口截图，用于教程和社媒宣传。
+- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用在官网 hero 背景和介绍文章。
+- `docs/assets/web-model-provider-dropdown.png`：支持的大模型下拉选项截图。
 - `docs/assets/architecture-flow.svg`：默认英文官网架构图，解释 controller、Codex/MCP 和 Fabric/Paper 执行端之间的关系。
 - `docs/assets/architecture-flow.zh-CN.svg`：切换到中文时使用的官网架构图。
 - `docs/assets/social-preview.png`：推荐上传到 GitHub 仓库 Settings 的 Social preview；源文件是 `docs/assets/social-preview.svg`。

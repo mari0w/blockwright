@@ -157,6 +157,26 @@
     .share-box h2 {
       margin-top: 0;
     }
+
+    .screenshot-figure {
+      margin: 24px 0 30px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .screenshot-figure img {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #101511;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, .24);
+    }
+
+    .screenshot-figure figcaption {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+    }
   </style>
 </head>
 <body>
@@ -226,6 +246,21 @@
         <li>Run <code>/bw web</code> in Minecraft chat.</li>
       </ol>
       <p>Open the displayed Web address, set your current Minecraft player name, then choose an AI model. Current options include Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</p>
+
+      <h2>Interface Screenshots</h2>
+      <p>These screenshots are ready to use on the website, tutorials, X/Twitter, forums, or other publishing platforms.</p>
+      <figure class="screenshot-figure">
+        <img src="../assets/web-chat-mobile-preview.png?v=20260530" alt="Blockwright mobile chat window">
+        <figcaption>Mobile chat window with text and voice input.</figcaption>
+      </figure>
+      <figure class="screenshot-figure">
+        <img src="../assets/web-settings-preview.png?v=20260530" alt="Blockwright Web settings page">
+        <figcaption>Web settings page with player, language, and AI model configuration.</figcaption>
+      </figure>
+      <figure class="screenshot-figure">
+        <img src="../assets/web-model-provider-dropdown.png?v=20260530" alt="Blockwright supported AI model dropdown">
+        <figcaption>Supported AI model options: Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</figcaption>
+      </figure>
 
       <h2>Why is this interesting?</h2>
       <p>Minecraft is about creative freedom, but many repeated actions are just setup work.</p>

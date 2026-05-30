@@ -48,9 +48,11 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 
 ## Images
 
-The repository currently includes three main website assets:
+The repository currently includes website and promotional assets:
 
-- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot used by the README and website hero.
+- `docs/assets/web-chat-mobile-preview.png`: mobile `/web` chat screenshot for tutorials and social posts.
+- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot used by the website hero and intro article.
+- `docs/assets/web-model-provider-dropdown.png`: supported AI model dropdown screenshot.
 - `docs/assets/architecture-flow.svg`: English architecture diagram for the default website language.
 - `docs/assets/architecture-flow.zh-CN.svg`: Chinese architecture diagram used when the website language is switched to Chinese.
 - `docs/assets/social-preview.png`: recommended image for GitHub repository Social preview; the source file is `docs/assets/social-preview.svg`.

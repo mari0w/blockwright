@@ -130,6 +130,22 @@ Current model options include:
 
 After that, you can send requests from the Web page, voice input, the in-game `/bw` command, or connected chat tools.
 
+## Interface Screenshots
+
+These screenshots are ready to use on the website, tutorials, X/Twitter, forums, or other publishing platforms.
+
+![Blockwright mobile chat window](../assets/web-chat-mobile-preview.png?v=20260530)
+
+The mobile chat screenshot shows that players can use text or voice from a phone browser.
+
+![Blockwright Web settings page](../assets/web-settings-preview.png?v=20260530)
+
+The Web settings screenshot shows the player name, language, Controller Token, and AI model configuration entry.
+
+![Blockwright supported AI model dropdown](../assets/web-model-provider-dropdown.png?v=20260530)
+
+The AI model dropdown shows Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
+
 ## Why is this interesting?
 
 Minecraft is about creative freedom, but many repeated actions are just setup work.
