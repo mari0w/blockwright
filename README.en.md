@@ -10,8 +10,6 @@ Blockwright is an AI assistant for Minecraft Java Edition. After installing the 
 
 It is mainly for players. When Minecraft starts, the mod starts the local Blockwright service automatically. Players can talk to it from the Web page, by voice, with the in-game `/bw` command, or through supported chat tools.
 
-![Blockwright web settings page](docs/assets/web-settings-preview.png)
-
 ## What It Does
 
 - Give items: `give me a diamond sword`, `give me torches`, `give me full diamond armor`.
