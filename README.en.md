@@ -6,9 +6,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Blockwright is an AI assistant for Minecraft Java Edition. After installing the Fabric mod, you can ask it in natural language to give items, change time or weather, build houses, edit existing structures, or run ordinary game actions.
+Blockwright is an AI assistant for Minecraft Java Edition players. After installing the Fabric mod, start the game and ask it in natural language to give items, change time or weather, build houses, edit existing structures, or run ordinary game actions.
 
-It is mainly for players. When Minecraft starts, the mod starts the local Blockwright service automatically. Players can talk to it from the Web page, by voice, with the in-game `/bw` command, or through supported chat tools.
+You can type on the Web page, hold the microphone button to talk, use the in-game `/bw` command, or connect chat tools such as Element/Matrix and DingTalk.
 
 ## What It Does
 
@@ -16,7 +16,7 @@ It is mainly for players. When Minecraft starts, the mod starts the local Blockw
 - Change game state: `make it daytime`, `stop the rain`, `switch me to creative mode`.
 - Build: `build a small wooden cabin`, `make a room in front of me with windows and a bed`.
 - Edit builds: `replace this house's windows with blue glass`, `change this wall to stone bricks`.
-- Continue a conversation for the same player: `make it bigger`, `raise the roof`, `continue that build`.
+- Continue a conversation for the same player: `make it bigger`, `make the roof higher`, `continue that build`.
 
 ## How to Use
 
@@ -26,7 +26,7 @@ Prepare Minecraft Java Edition `1.21.8`, Fabric Loader, and Fabric API. Put the 
 
 ### 2. Start Minecraft
 
-Start Minecraft with the Fabric profile and enter your world. The Blockwright mod starts automatically with the game, so players do not need to start anything else.
+Start Minecraft with the Fabric profile and enter your world. Blockwright is ready with the game, so players do not need to start any extra program.
 
 ### 3. Open the Web Page
 
