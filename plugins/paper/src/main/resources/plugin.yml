@@ -3,7 +3,7 @@ version: ${version}
 main: com.charles.blockwright.BlockwrightPlugin
 api-version: "1.21"
 author: charles
-description: Local AI/Codex assistant bridge for Minecraft building and item actions.
+description: Local AI/Codex assistant bridge for controlled Minecraft actions.
 commands:
   bw:
     description: Talk to the local Blockwright controller.

@@ -6,7 +6,7 @@
   <title>Blockwright：让 Minecraft 玩家用一句话完成游戏操作</title>
   <meta name="description" content="一篇面向玩家和发布平台的 Blockwright 介绍文章：它能做什么、怎么使用、适合哪些 Minecraft Java 版玩家。">
   <meta property="og:title" content="Blockwright：让 Minecraft 玩家用一句话完成游戏操作">
-  <meta property="og:description" content="Blockwright 是 Minecraft Java 版 AI 助手，支持 /bw、Web、语音、Element/Matrix 和钉钉，让玩家用自然语言发物品、建造和改造建筑。">
+  <meta property="og:description" content="Blockwright 是 Minecraft Java 版 AI 助手，支持 /bw、Web、语音、Element/Matrix、钉钉和本地脚本，让助手读取上下文、执行受控动作、建造、改造并校验结果。">
   <meta property="og:type" content="article">
   <meta property="og:image" content="../assets/social-preview.zh-CN.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -198,23 +198,23 @@
     <p class="lead">这是一篇可以直接分享的介绍文章：讲清楚 Blockwright 是什么、能做什么，以及玩家如何开始使用。</p>
 
     <article>
-      <p>如果你经常玩 Minecraft Java 版，大概会遇到这样的时刻：</p>
+      <p>如果你经常玩 Minecraft Java 版，大概会遇到这样的时刻：脑子里已经知道要做什么，但还得停下来把想法翻译成命令。</p>
       <ul>
-        <li>想快速拿一件物品，但不想翻命令表；</li>
-        <li>想盖一个小木屋、房间或树屋，但不想从第一块木板慢慢摆；</li>
-        <li>想把眼前这面墙换成玻璃，或者把房子的窗户换成蓝色玻璃；</li>
-        <li>想切到白天、停止下雨、换个游戏模式；</li>
-        <li>想让朋友在局域网世界里也能直接通过聊天发需求。</li>
+        <li>想知道自己手上拿的是什么，或者面前这块方块是什么；</li>
+        <li>想快速执行物品、效果、时间、天气或模式相关操作，但不想翻命令表；</li>
+        <li>想描述一个建筑想法，再一步步继续调整；</li>
+        <li>想改造眼前已有结构，而不是手动替换每一块方块；</li>
+        <li>想让朋友在局域网世界里也能直接通过聊天发真实需求。</li>
       </ul>
 
-      <p>Blockwright 做的事情很简单：把这些 Minecraft 需求变成一句自然语言指令。</p>
+      <p>Blockwright 做的事情很直接：把这些 Minecraft 需求变成自然语言指令，再让 AI 助手通过受控的 Minecraft 工具执行。</p>
 
-      <pre><code>/bw 给我一把钻石剑
-/bw 帮我盖一个带窗户和床的小木屋
-/bw 把时间调到白天
-/bw 把我面前这面墙换成玻璃</code></pre>
+      <pre><code>/bw 扫描我看着的地方，告诉我这是什么方块
+/bw 把时间调到白天并停止下雨
+/bw 帮我盖一个有窗户、床、灯和可进入门的小屋
+/bw 把我面前这面墙换成石砖</code></pre>
 
-      <p>然后 Blockwright 会把玩家的意图交给 AI 助手理解，再通过 Fabric 模组在 Minecraft 世界里执行。</p>
+      <p>然后 Blockwright 会把玩家的意图交给 AI 助手理解，再通过 Fabric 模组读取世界、执行动作、放置或改造方块，并返回执行结果。</p>
 
       <h2>Blockwright 是什么？</h2>
       <p>Blockwright 是一个面向 Minecraft Java 版玩家的 AI 助手。</p>
@@ -228,14 +228,14 @@
         <li>通过钉钉机器人发消息</li>
         <li>通过本地命令或脚本接入其他工具</li>
       </ul>
-      <p>它不是一个只会聊天的机器人。它的目标是把聊天变成 Minecraft 世界里的实际动作。</p>
+      <p>它不是一个只会聊天的机器人，也不只是几个固定示例动作。它的目标是给 Minecraft AI 助手一层受控工具，让它能读取、操作、建造、改造和校验世界里的真实结果。</p>
 
       <h2>它能做什么？</h2>
-      <p><strong>发物品。</strong> 你可以说 <code>/bw 给我一组火把</code>、<code>/bw 给我一套钻石装备</code>，不用记物品 ID，也不用手写完整命令。</p>
-      <p><strong>调整游戏状态。</strong> 比如 <code>/bw 把时间调到白天</code>、<code>/bw 别下雨了</code>、<code>/bw 给我夜视</code>。</p>
-      <p><strong>建造小型建筑。</strong> 比如小木屋、房间、树屋、平台和简单装饰。你仍然可以自己继续修改，但第一版不必从空地开始。</p>
+      <p><strong>读取玩家和世界上下文。</strong> 询问手持物、查看背包，或在操作前扫描附近方块。</p>
+      <p><strong>执行受控游戏动作。</strong> 发物品、调时间、停雨、加效果、切模式，或通过明确动作类型执行支持的命令。</p>
+      <p><strong>带记录和校验地建造。</strong> 建造请求会先保存成蓝图和构建记录，再由 Fabric 模组放置方块并回读世界校验。</p>
       <p><strong>改造眼前的东西。</strong> 比如 <code>/bw 把这个房子的窗户换成蓝色玻璃</code>，更接近“你在游戏里指着一个地方，然后告诉助手要怎么改”。</p>
-      <p><strong>继续对话。</strong> 你可以先说“盖一个小木屋”，再说“换大一点”“加几盏灯”“把屋顶换成深色木头”。</p>
+      <p><strong>继续对话。</strong> 你可以先说“盖一个木屋”，再说“换大一点”“加几盏灯”“把屋顶换成深色木头”。</p>
 
       <h2>怎么开始使用？</h2>
       <ol>
@@ -263,23 +263,23 @@
       </figure>
 
       <h2>为什么这件事有意思？</h2>
-      <p>Minecraft 的魅力在于自由创造，但很多重复操作并不一定有趣。</p>
-      <p>拿物品、调时间、清雨、搭一个基础小屋、替换一片墙、给房间补灯，这些事情都很常见。Blockwright 想做的是把这些重复操作变成一句话，让玩家把注意力放回想象和设计上。</p>
+      <p>Minecraft 的魅力在于自由创造，但很多重复操作本质上只是准备工作或命令语法。</p>
+      <p>读取附近状态、拿物品、调时间、清雨、搭一个房间、替换一片墙、给房间补灯，这些事情都很常见。Blockwright 想做的是把这些操作变成和助手的一段对话，让玩家把注意力放回正在创造的世界。</p>
 
       <h2>一眼看懂</h2>
       <p>Blockwright 不是要替你玩 Minecraft。</p>
-      <p>它更像一个能听懂自然语言的 Minecraft 助手：你负责提出想法，它负责把一部分重复、繁琐、命令化的操作变成游戏里的实际动作。</p>
+      <p>它更像一个能听懂自然语言、也能调用受控工具的 Minecraft 助手：你负责提出想法，它负责把一部分重复、繁琐、命令化的操作变成游戏里的实际动作。</p>
 
       <section class="share-box">
         <h2>适合 X/Twitter 的短版</h2>
         <p>我在做一个叫 Blockwright 的 Minecraft Java 版 AI 助手。</p>
         <p>装好 Fabric 模组后，玩家可以直接在游戏里输入：</p>
         <pre><code>/bw 给我一把钻石剑
-/bw 帮我盖一个小木屋
-/bw 把时间调到白天
-/bw 把这面墙换成玻璃</code></pre>
+/bw 扫描我看着的地方
+/bw 帮我盖一个有灯和床的小屋
+/bw 把这面墙换成石砖</code></pre>
         <p>它支持 Web 文字、语音、游戏内 <code>/bw</code>、Element/Matrix、钉钉机器人，也支持 Codex CLI、OpenAI、DeepSeek、豆包和 Gemini。</p>
-        <p>目标不是替你玩 Minecraft，而是把发物品、调天气、搭基础建筑、局部改造这些重复操作变成一句自然语言。</p>
+        <p>目标不是替你玩 Minecraft，而是让 AI 助手通过受控工具操作 Minecraft：读取上下文、执行支持动作、建造、改造，并校验发生了什么。</p>
       </section>
     </article>
   </main>

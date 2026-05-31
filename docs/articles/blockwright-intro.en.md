@@ -1,25 +1,25 @@
 # Blockwright: Run Minecraft Actions with One Sentence
 
-Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The repetitive parts are less exciting:
+Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The friction usually starts when you have to stop playing and translate an idea into commands:
 
-- looking up item IDs just to give yourself a tool;
-- switching time or weather while you are building;
-- starting a cabin, room, or treehouse from an empty patch of land;
-- replacing a wall or changing the glass color in an existing build;
-- letting friends in a LAN world send small requests without learning commands.
+- checking what you are holding or what block you are looking at;
+- looking up item IDs, effect names, time and weather commands;
+- asking for a structure and then refining it step by step;
+- changing part of an existing build without manually replacing every block;
+- letting friends in a LAN world send real requests without learning command syntax.
 
-Blockwright turns those moments into natural-language instructions.
+Blockwright turns those moments into natural-language instructions that an AI assistant can carry out through controlled Minecraft tools.
 
 You can type things like:
 
 ```text
-/bw give me a diamond sword
-/bw build a small cabin with windows and a bed
-/bw set the time to day
-/bw replace the wall in front of me with glass
+/bw scan what I am looking at and tell me what block it is
+/bw set the time to day and stop the rain
+/bw build a cabin with windows, a bed, lights, and a reachable door
+/bw replace the wall in front of me with stone bricks
 ```
 
-Blockwright sends the player's intent to an AI assistant, then uses the Fabric mod to make the change inside the Minecraft world.
+Blockwright sends the player's intent to an AI assistant, then uses the Fabric mod to read the world, execute actions, place or edit blocks, and report back what happened.
 
 ## What is Blockwright?
 
@@ -36,46 +36,47 @@ After installing it, you can talk to Blockwright through:
 - DingTalk bot messages;
 - local commands or scripts for custom integrations.
 
-It is not meant to be a chatbot that only replies with text. The goal is to turn chat into real Minecraft actions.
+It is not meant to be a chatbot that only replies with text, and it is not limited to a few canned examples. The goal is to give a Minecraft AI assistant a controlled tool layer for reading, acting, building, editing, and verifying inside the world.
 
 ## What can it do?
 
-### 1. Give Items
+### 1. Read Player and World Context
 
-Instead of remembering full `/give` commands, you can ask:
+Blockwright can work from real game context instead of only guessing from chat text:
+
+```text
+/bw what am I holding
+/bw check my inventory
+/bw scan the blocks near me
+```
+
+That context is useful before edits, build changes, item requests, and ordinary gameplay commands.
+
+### 2. Execute Controlled Game Actions
+
+The assistant can run supported actions through the controller and Minecraft execution side:
 
 ```text
 /bw give me a stack of torches
-/bw give me a full diamond kit
-/bw give me a sword with knockback
-```
-
-This is useful when you want to stay in the flow of building or testing without stopping to search for item IDs.
-
-### 2. Adjust Game State
-
-You can also ask for common world or player changes:
-
-```text
 /bw set the time to day
 /bw stop the rain
 /bw give me night vision
 /bw switch me to creative mode
 ```
 
-These are the small actions players often repeat while building, testing, or playing with friends.
+This keeps common operations conversational while still routing them through explicit action types and server-side APIs.
 
-### 3. Build Small Structures
+### 3. Build With Records and Verification
 
-Blockwright can generate and place simple structures from plain language:
+For build requests, Blockwright saves the plan before Minecraft executes it:
 
 ```text
-/bw build a small cabin
 /bw build a room with windows and a bed in front of me
 /bw build a simple treehouse with a reachable entrance
+/bw add a lit path from here to the door
 ```
 
-It is best suited for cabins, rooms, treehouses, platforms, simple decorations, and local structure drafts. You can still edit everything yourself afterward, but you no longer have to start from a blank space.
+Blueprints and build records are kept by the controller, then the Fabric mod places blocks through server-side world APIs and reads the world back for verification.
 
 ### 4. Modify What You Are Looking At
 
@@ -94,7 +95,7 @@ This makes the interaction feel closer to pointing at something in the world and
 You do not have to write a perfect request on the first try. You can continue step by step:
 
 ```text
-/bw build a small cabin
+/bw build a cabin
 /bw make it bigger
 /bw add some lights
 /bw change the roof to dark wood
@@ -148,9 +149,9 @@ The AI model dropdown shows Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
 ## Why is this interesting?
 
-Minecraft is about creative freedom, but many repeated actions are just setup work.
+Minecraft is about creative freedom, but many repeated actions are just setup work or command syntax.
 
-Giving items, changing time, clearing rain, drafting a basic room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one sentence, so players can spend more attention on the idea they are building.
+Reading local world state, giving items, changing time, clearing rain, drafting a room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one conversation with an assistant, so players can spend more attention on the world they are shaping.
 
 It is useful for:
 
@@ -164,9 +165,9 @@ It is useful for:
 
 Blockwright is not trying to play Minecraft for you.
 
-It is a Minecraft assistant that understands natural language: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.
+It is a Minecraft assistant that understands natural language and can use a controlled tool layer: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.
 
-If you want Minecraft item giving, building, local edits, and testing to start with one sentence, Blockwright is built for that direction.
+If you want a Minecraft AI assistant that can read context, run supported actions, build, edit, and verify results, Blockwright is built for that direction.
 
 ## Short Version for X/Twitter
 
@@ -176,11 +177,11 @@ After installing the Fabric mod, players can type:
 
 ```text
 /bw give me a diamond sword
-/bw build a small cabin
-/bw set the time to day
-/bw replace this wall with glass
+/bw scan what I am looking at
+/bw build a cabin with lights and a bed
+/bw replace this wall with stone bricks
 ```
 
 It supports Web text, voice, in-game `/bw`, Element/Matrix, DingTalk, and model options including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
-The goal is not to play Minecraft for you. It is to turn repeated actions like giving items, changing weather, drafting simple builds, and editing local structures into natural language.
+The goal is not to play Minecraft for you. It is to let an AI assistant operate Minecraft through controlled tools: read context, run supported actions, build, edit, and verify what changed.

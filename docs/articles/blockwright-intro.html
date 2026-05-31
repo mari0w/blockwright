@@ -6,7 +6,7 @@
   <title>Blockwright: Run Minecraft Actions with One Sentence</title>
   <meta name="description" content="A shareable Blockwright introduction for players and publishing platforms: what it can do, how to start, and why it matters for Minecraft Java Edition.">
   <meta property="og:title" content="Blockwright: Run Minecraft Actions with One Sentence">
-  <meta property="og:description" content="Blockwright is an AI assistant for Minecraft Java Edition. Use /bw, Web, voice, Element/Matrix, and DingTalk to give items, build, and edit structures.">
+  <meta property="og:description" content="Blockwright is an AI assistant for Minecraft Java Edition. Use /bw, Web, voice, Element/Matrix, DingTalk, or local scripts to read context, run controlled actions, build, edit, and verify results.">
   <meta property="og:type" content="article">
   <meta property="og:image" content="../assets/social-preview.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -198,23 +198,23 @@
     <p class="lead">A shareable introduction to what Blockwright is, what it can do, and how Minecraft Java Edition players can start using it.</p>
 
     <article>
-      <p>Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The repetitive parts are less exciting:</p>
+      <p>Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The friction usually starts when you have to stop playing and translate an idea into commands:</p>
       <ul>
-        <li>looking up item IDs just to give yourself a tool;</li>
-        <li>switching time or weather while you are building;</li>
-        <li>starting a cabin, room, or treehouse from an empty patch of land;</li>
-        <li>replacing a wall or changing the glass color in an existing build;</li>
-        <li>letting friends in a LAN world send small requests without learning commands.</li>
+        <li>checking what you are holding or what block you are looking at;</li>
+        <li>looking up item IDs, effect names, time and weather commands;</li>
+        <li>asking for a structure and then refining it step by step;</li>
+        <li>changing part of an existing build without manually replacing every block;</li>
+        <li>letting friends in a LAN world send real requests without learning command syntax.</li>
       </ul>
 
-      <p>Blockwright turns those moments into natural-language instructions.</p>
+      <p>Blockwright turns those moments into natural-language instructions that an AI assistant can carry out through controlled Minecraft tools.</p>
 
-      <pre><code>/bw give me a diamond sword
-/bw build a small cabin with windows and a bed
-/bw set the time to day
-/bw replace the wall in front of me with glass</code></pre>
+      <pre><code>/bw scan what I am looking at and tell me what block it is
+/bw set the time to day and stop the rain
+/bw build a cabin with windows, a bed, lights, and a reachable door
+/bw replace the wall in front of me with stone bricks</code></pre>
 
-      <p>Blockwright sends the player's intent to an AI assistant, then uses the Fabric mod to make the change inside the Minecraft world.</p>
+      <p>Blockwright sends the player's intent to an AI assistant, then uses the Fabric mod to read the world, execute actions, place or edit blocks, and report back what happened.</p>
 
       <h2>What is Blockwright?</h2>
       <p>Blockwright is an AI assistant for Minecraft Java Edition players.</p>
@@ -228,14 +228,14 @@
         <li>DingTalk bot messages;</li>
         <li>local commands or scripts for custom integrations.</li>
       </ul>
-      <p>It is not meant to be a chatbot that only replies with text. The goal is to turn chat into real Minecraft actions.</p>
+      <p>It is not meant to be a chatbot that only replies with text, and it is not limited to a few canned examples. The goal is to give a Minecraft AI assistant a controlled tool layer for reading, acting, building, editing, and verifying inside the world.</p>
 
       <h2>What can it do?</h2>
-      <p><strong>Give items.</strong> You can ask for a stack of torches, a full diamond kit, or a sword with knockback without remembering item IDs or full commands.</p>
-      <p><strong>Adjust game state.</strong> Ask Blockwright to set the time to day, stop the rain, give night vision, or switch game mode.</p>
-      <p><strong>Build small structures.</strong> It is best suited for cabins, rooms, treehouses, platforms, simple decorations, and local structure drafts.</p>
+      <p><strong>Read player and world context.</strong> Ask what you are holding, check inventory, or scan nearby blocks before taking action.</p>
+      <p><strong>Execute controlled game actions.</strong> Give items, set time, stop rain, add effects, switch mode, or run supported commands through explicit action types.</p>
+      <p><strong>Build with records and verification.</strong> Build requests are saved as blueprints and build records before the Fabric mod places blocks and reads the world back.</p>
       <p><strong>Modify what you are looking at.</strong> Ask it to replace windows with blue glass, change a wall to stone bricks, or make a roof higher.</p>
-      <p><strong>Continue the conversation.</strong> Start with “build a small cabin,” then continue with “make it bigger,” “add some lights,” or “change the roof to dark wood.”</p>
+      <p><strong>Continue the conversation.</strong> Start with “build a cabin,” then continue with “make it bigger,” “add some lights,” or “change the roof to dark wood.”</p>
 
       <h2>How do you start?</h2>
       <ol>
@@ -263,23 +263,23 @@
       </figure>
 
       <h2>Why is this interesting?</h2>
-      <p>Minecraft is about creative freedom, but many repeated actions are just setup work.</p>
-      <p>Giving items, changing time, clearing rain, drafting a basic room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one sentence, so players can spend more attention on the idea they are building.</p>
+      <p>Minecraft is about creative freedom, but many repeated actions are just setup work or command syntax.</p>
+      <p>Reading local world state, giving items, changing time, clearing rain, drafting a room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one conversation with an assistant, so players can spend more attention on the world they are shaping.</p>
 
       <h2>At a Glance</h2>
       <p>Blockwright is not trying to play Minecraft for you.</p>
-      <p>It is a Minecraft assistant that understands natural language: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.</p>
+      <p>It is a Minecraft assistant that understands natural language and can use a controlled tool layer: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.</p>
 
       <section class="share-box">
         <h2>Short Version for X/Twitter</h2>
         <p>I am building Blockwright, an AI assistant for Minecraft Java Edition.</p>
         <p>After installing the Fabric mod, players can type:</p>
         <pre><code>/bw give me a diamond sword
-/bw build a small cabin
-/bw set the time to day
-/bw replace this wall with glass</code></pre>
+/bw scan what I am looking at
+/bw build a cabin with lights and a bed
+/bw replace this wall with stone bricks</code></pre>
         <p>It supports Web text, voice, in-game <code>/bw</code>, Element/Matrix, DingTalk, and model options including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</p>
-        <p>The goal is not to play Minecraft for you. It is to turn repeated actions like giving items, changing weather, drafting simple builds, and editing local structures into natural language.</p>
+        <p>The goal is not to play Minecraft for you. It is to let an AI assistant operate Minecraft through controlled tools: read context, run supported actions, build, edit, and verify what changed.</p>
       </section>
     </article>
   </main>

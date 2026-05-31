@@ -51,7 +51,8 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 The repository currently includes website and promotional assets:
 
 - `docs/assets/web-chat-mobile-preview.png`: mobile `/web` chat screenshot for tutorials and social posts.
-- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot used by the website hero and intro article.
+- `docs/assets/hero-ai-assistant.jpg`: generated wide hero background used by the website landing page.
+- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot for tutorials and intro-article UI examples.
 - `docs/assets/web-model-provider-dropdown.png`: supported AI model dropdown screenshot.
 - `docs/assets/architecture-flow.svg`: English architecture diagram for the default website language.
 - `docs/assets/architecture-flow.zh-CN.svg`: Chinese architecture diagram used when the website language is switched to Chinese.
@@ -63,4 +64,4 @@ When real in-game build screenshots are available, add:
 docs/assets/minecraft-build-preview.png
 ```
 
-Then use it in the hero or a case-study section so the website can show actual Minecraft build results instead of only the control UI.
+Then use it in a case-study section so the website can show actual Minecraft build results alongside the generated hero visual.

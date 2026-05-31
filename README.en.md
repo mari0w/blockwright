@@ -17,16 +17,16 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Blockwright is an AI assistant for Minecraft Java Edition players. After installing the Fabric mod, start the game and ask it in natural language to give items, change time or weather, build houses, edit existing structures, or run ordinary game actions.
+Blockwright is an AI assistant for Minecraft Java Edition players. After installing the Fabric mod, you can describe what you want in natural language and let the assistant use controlled tools to read player and world state, run supported Minecraft actions, place or edit blocks, and verify the result.
 
 You can type on the Web page, hold the microphone button to talk, use the in-game `/bw` command, or connect chat tools such as Element/Matrix and DingTalk.
 
 ## What It Does
 
-- Give items: `give me a diamond sword`, `give me torches`, `give me full diamond armor`.
-- Change game state: `make it daytime`, `stop the rain`, `switch me to creative mode`.
-- Build: `build a small wooden cabin`, `make a room in front of me with windows and a bed`.
-- Edit builds: `replace this house's windows with blue glass`, `change this wall to stone bricks`.
+- Read context: check the current player, inventory, held item, and nearby world blocks.
+- Run controlled game actions: give items, change time or weather, apply effects, switch mode, or run supported commands.
+- Build and edit with records: save blueprints and build records before placing or changing blocks.
+- Verify results: execution reads world blocks back and reports whether the placed blocks match the recorded plan.
 - Continue a conversation for the same player: `make it bigger`, `make the roof higher`, `continue that build`.
 
 ## How to Use
@@ -89,10 +89,11 @@ You can use three common entry points:
 Examples:
 
 ```text
-/bw give me a diamond sword
-/bw build me a wooden cabin with windows and a bed
+/bw scan what I am looking at and tell me what block it is
+/bw set the time to day and stop the rain
+/bw build me a wooden cabin with windows, a bed, and lights
 /bw make it daytime
-/bw replace this wall with glass
+/bw replace this wall with stone bricks
 ```
 
 ## Supported Entry Points and Chat Tools
@@ -108,12 +109,12 @@ Examples:
 
 | Command | Purpose |
 | --- | --- |
-| `/bw <request>` | Send a natural-language request, such as giving items, building, editing, or changing weather. |
+| `/bw <request>` | Send a natural-language request that can read context, run controlled actions, build, edit, or change world/player state. |
 | `/bw web` | Print the Web page address in Minecraft chat. |
 
 ## Who It Is For
 
-- Players who want to control Minecraft with one sentence.
+- Players who want to control Minecraft with an AI assistant instead of memorizing every command.
 - Server owners or operators who want to connect Minecraft to Web, voice, or chat tools.
 - Anyone who wants to try AI-assisted Minecraft building and gameplay.
 

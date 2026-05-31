@@ -3,7 +3,7 @@
   "id": "blockwright",
   "version": "${version}",
   "name": "Blockwright",
-  "description": "本地 Minecraft 建造助手，适合 Java 版/Fabric 单人存档和局域网开放世界。",
+  "description": "本地 Minecraft AI 助手，适合 Java 版/Fabric 单人存档和局域网开放世界。",
   "authors": [
     "charles"
   ],

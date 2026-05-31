@@ -335,10 +335,10 @@ fn codex_failure_reply_with_log_hint_for_language(
     };
     match language {
         ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
-            format!("The AI building assistant failed this time, so nothing has been sent to Minecraft. {detail} {trace_hint}{log_hint}")
+            format!("The Minecraft AI assistant failed this time, so nothing has been sent to Minecraft. {detail} {trace_hint}{log_hint}")
         }
         _ => format!(
-            "AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}"
+            "Minecraft AI 助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}"
         ),
     }
 }
@@ -424,9 +424,9 @@ fn is_cjk_ideograph(ch: char) -> bool {
 fn no_ai_reply(language: ResponseLanguage) -> &'static str {
     match language {
         ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
-            "I am not connected to the AI building assistant yet, so I cannot understand natural-language requests. Ask an administrator to check the backend configuration first."
+            "I am not connected to the Minecraft AI assistant yet, so I cannot understand natural-language requests. Ask an administrator to check the backend configuration first."
         }
-        _ => "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。",
+        _ => "我现在还没有连上 Minecraft AI 助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。",
     }
 }
 
@@ -5116,7 +5116,7 @@ BLOCKWRIGHT_JSON
             .await;
 
         assert_eq!(result.summary, "AI 助手未启用");
-        assert!(result.reply.contains("AI 建造助手"));
+        assert!(result.reply.contains("Minecraft AI 助手"));
         assert!(result.actions.is_empty());
     }
 

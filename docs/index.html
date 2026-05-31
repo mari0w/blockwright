@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Blockwright - AI Building Assistant for Minecraft Java Edition</title>
-  <meta name="description" content="Blockwright is a Minecraft Java Edition AI assistant for asking through /bw, Web, voice, and chat tools to give items, build, and edit structures.">
-  <meta property="og:title" content="Blockwright - AI Building Assistant for Minecraft Java Edition">
-  <meta property="og:description" content="Use /bw, Web chat, voice, or chat tools to ask for items, builds, and edits in Minecraft Java Edition.">
+  <title>Blockwright - Minecraft Java Edition AI Assistant</title>
+  <meta name="description" content="Blockwright gives an AI assistant a controlled tool layer for Minecraft Java Edition: read world state, run game actions, place and edit blocks, and verify results through /bw, Web, voice, and chat tools.">
+  <meta property="og:title" content="Blockwright - Minecraft Java Edition AI Assistant">
+  <meta property="og:description" content="Use /bw, Web chat, voice, Matrix/DingTalk, or local scripts to let an AI assistant operate Minecraft through controlled tools.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mari0w.github.io/blockwright/">
   <meta property="og:image" content="assets/social-preview.png">
@@ -176,9 +176,9 @@
       background-image:
         linear-gradient(90deg, rgba(11, 14, 12, 0.98) 0%, rgba(11, 14, 12, 0.82) 36%, rgba(11, 14, 12, 0.34) 100%),
         linear-gradient(0deg, rgba(11, 14, 12, 1) 0%, rgba(11, 14, 12, 0.2) 35%, rgba(11, 14, 12, 0) 100%),
-        url("assets/web-settings-preview.png?v=20260530");
+        url("assets/hero-ai-assistant.jpg?v=20260531");
       background-size: cover;
-      background-position: center top;
+      background-position: center right;
       border-bottom: 1px solid var(--line);
     }
 
@@ -295,6 +295,7 @@
     .band {
       padding: 72px 0;
       background: var(--bg);
+      scroll-margin-top: 76px;
     }
 
     .band.alt {
@@ -384,7 +385,7 @@
 
     .steps {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       counter-reset: steps;
     }
@@ -421,6 +422,50 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
+    }
+
+    .model-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .command-table {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .command-row {
+      display: grid;
+      grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
+      border-top: 1px solid var(--line);
+    }
+
+    .command-row:first-child {
+      border-top: 0;
+    }
+
+    .command-cell {
+      padding: 18px 20px;
+      min-width: 0;
+    }
+
+    .command-cell + .command-cell {
+      border-left: 1px solid var(--line);
+    }
+
+    .command-cell strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+
+    .command-cell p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
     }
 
     .screenshot-grid {
@@ -506,6 +551,7 @@
       .feature-grid,
       .steps,
       .config-grid,
+      .model-grid,
       .screenshot-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -527,7 +573,7 @@
 
       .hero {
         min-height: 72svh;
-        background-position: center top;
+        background-position: 62% top;
       }
 
       .hero-inner {
@@ -571,8 +617,18 @@
       .feature-grid,
       .steps,
       .config-grid,
+      .model-grid,
       .screenshot-grid {
         grid-template-columns: 1fr;
+      }
+
+      .command-row {
+        grid-template-columns: 1fr;
+      }
+
+      .command-cell + .command-cell {
+        border-left: 0;
+        border-top: 1px solid var(--line);
       }
 
       .hero-actions {
@@ -607,10 +663,10 @@
       </a>
       <div class="nav-actions">
         <div class="nav-links">
-          <a href="#features" data-i18n="nav.features">What it does</a>
-          <a href="#start" data-i18n="nav.start">Try it</a>
-          <a href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="nav.article">Intro article</a>
-          <a href="#docs" data-i18n="nav.docs">Tutorials</a>
+          <a href="#features" data-i18n="nav.features">What it is</a>
+          <a href="#models" data-i18n="nav.models">Models</a>
+          <a href="#commands" data-i18n="nav.commands">Commands</a>
+          <a href="#start" data-i18n="nav.start">How to use</a>
         </div>
         <a class="repo-link" href="https://github.com/mari0w/blockwright" data-i18n="nav.github">GitHub</a>
         <div class="language-switch" aria-label="Language" data-i18n-aria="language.label">
@@ -625,9 +681,9 @@
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-inner">
         <div class="hero-copy">
-          <p class="eyebrow" data-i18n="hero.eyebrow">AI building assistant for Minecraft Java Edition</p>
+          <p class="eyebrow" data-i18n="hero.eyebrow">Minecraft Java Edition AI assistant</p>
           <h1 id="hero-title">Blockwright</h1>
-          <p class="lead" data-i18n-html="hero.lead">Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code>, Web chat, voice, or chat tools to ask for items, builds, or changes to existing structures.</p>
+          <p class="lead" data-i18n-html="hero.lead">Install the Fabric mod, then talk through <code>/bw</code>, Web, voice, Matrix/DingTalk, or local scripts. Blockwright gives the AI assistant controlled tools to read the world, run Minecraft actions, place blocks, edit builds, and verify results.</p>
           <div class="hero-actions">
             <a class="button primary" href="https://github.com/mari0w/blockwright" data-i18n="hero.github">View on GitHub</a>
             <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="hero.install">Install Fabric mod</a>
@@ -635,8 +691,8 @@
           </div>
           <div class="badges" aria-label="Project highlights" data-i18n-aria="hero.badges">
             <span class="badge" data-i18n="hero.badgeFabric">Fabric first</span>
-            <span class="badge" data-i18n="hero.badgeCommand">/bw command</span>
-            <span class="badge" data-i18n="hero.badgeBlueprints">Blueprint records</span>
+            <span class="badge" data-i18n="hero.badgeCommand">/bw + Web + chat tools</span>
+            <span class="badge" data-i18n="hero.badgeBlueprints">MCP tool runtime</span>
             <span class="badge" data-i18n="hero.badgeVerify">Verified builds</span>
           </div>
         </div>
@@ -646,15 +702,15 @@
     <section id="features" class="band">
       <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="features.kicker">What it does</p>
-          <h2 data-i18n="features.title">Blockwright turns Minecraft requests into controlled in-game actions.</h2>
-          <p class="section-copy" data-i18n="features.copy">It is meant for local Minecraft Java Edition play first: ask inside the world, let the assistant plan, and let the Fabric mod place or verify the result through server-side APIs.</p>
+          <p class="section-kicker" data-i18n="features.kicker">What it is</p>
+          <h2 data-i18n="features.title">Blockwright lets an AI assistant operate Minecraft through controlled tools.</h2>
+          <p class="section-copy" data-i18n="features.copy">It is meant for local Minecraft Java Edition play first: ask inside the world, let the assistant inspect context and choose tools, then let the Fabric mod execute and verify changes through server-side APIs.</p>
         </div>
         <div class="feature-grid">
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
-            <h3 data-i18n="features.commandTitle">Talk in game</h3>
-            <p data-i18n-html="features.commandCopy">Use <code>/bw</code> to ask for items, time changes, builds, or edits without leaving the Minecraft world.</p>
+            <h3 data-i18n="features.commandTitle">Talk from anywhere</h3>
+            <p data-i18n-html="features.commandCopy">Use <code>/bw</code>, Web, voice, Matrix/DingTalk, or local commands as different entrances to the same Minecraft assistant.</p>
           </article>
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
@@ -663,8 +719,8 @@
           </article>
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
-            <h3 data-i18n="features.buildTitle">Build with records</h3>
-            <p data-i18n="features.buildCopy">Build plans are saved as blueprints and records before the same block list is sent to Minecraft for placement.</p>
+            <h3 data-i18n="features.buildTitle">Act through tools</h3>
+            <p data-i18n="features.buildCopy">The assistant can read player and world state, enqueue controlled actions, run supported commands, place blocks, and save blueprint records.</p>
           </article>
           <article class="feature">
             <div class="feature-mark" aria-hidden="true"></div>
@@ -675,16 +731,96 @@
       </div>
     </section>
 
+    <section id="models" class="band alt">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker" data-i18n="models.kicker">Supported models</p>
+          <h2 data-i18n="models.title">Choose the AI backend from the Web settings page.</h2>
+          <p class="section-copy" data-i18n="models.copy">Blockwright separates the Minecraft execution layer from the model provider. Configure the provider locally, then the same /bw, Web, voice, and chat-tool entrances use that assistant.</p>
+        </div>
+        <div class="model-grid">
+          <article class="config-item">
+            <h3 data-i18n="models.codexTitle">Codex CLI</h3>
+            <p data-i18n="models.codexCopy">Local-first assistant path for development and Minecraft tool workflows.</p>
+          </article>
+          <article class="config-item">
+            <h3 data-i18n="models.openaiTitle">OpenAI</h3>
+            <p data-i18n="models.openaiCopy">Use an OpenAI API key configured in the local Web settings.</p>
+          </article>
+          <article class="config-item">
+            <h3 data-i18n="models.deepseekTitle">DeepSeek</h3>
+            <p data-i18n="models.deepseekCopy">Alternative hosted model provider for chat and tool planning.</p>
+          </article>
+          <article class="config-item">
+            <h3 data-i18n="models.doubaoTitle">Doubao</h3>
+            <p data-i18n="models.doubaoCopy">Volcengine/Doubao model option for Chinese-friendly deployments.</p>
+          </article>
+          <article class="config-item">
+            <h3 data-i18n="models.geminiTitle">Gemini</h3>
+            <p data-i18n="models.geminiCopy">Google Gemini backend option for assistant requests.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="commands" class="band">
+      <div class="section">
+        <div class="section-head">
+          <p class="section-kicker" data-i18n="commands.kicker">Commands and entrances</p>
+          <h2 data-i18n="commands.title">Use /bw in game, or send the same request from Web and chat tools.</h2>
+          <p class="section-copy" data-i18n="commands.copy">The command surface stays small. Natural language carries the task, while Blockwright decides which controlled tool or action should run.</p>
+        </div>
+        <div class="command-table">
+          <div class="command-row">
+            <div class="command-cell">
+              <strong><code>/bw &lt;request&gt;</code></strong>
+              <p data-i18n="commands.requestLabel">Main Minecraft command</p>
+            </div>
+            <div class="command-cell">
+              <p data-i18n-html="commands.requestCopy">Send a natural-language request such as <code>scan what I am looking at</code>, <code>set the time to day</code>, <code>give me torches</code>, or <code>replace this wall with stone bricks</code>.</p>
+            </div>
+          </div>
+          <div class="command-row">
+            <div class="command-cell">
+              <strong><code>/bw web</code></strong>
+              <p data-i18n="commands.webLabel">Open Web UI</p>
+            </div>
+            <div class="command-cell">
+              <p data-i18n="commands.webCopy">Print the local Web address in Minecraft chat so you can configure the player name, model provider, text chat, and voice input.</p>
+            </div>
+          </div>
+          <div class="command-row">
+            <div class="command-cell">
+              <strong data-i18n="commands.webVoiceTitle">Web text and voice</strong>
+              <p data-i18n="commands.webVoiceLabel">Browser entrance</p>
+            </div>
+            <div class="command-cell">
+              <p data-i18n="commands.webVoiceCopy">Send text from a browser, or hold the microphone button to speak. Requests are sent to the Minecraft player configured on the page.</p>
+            </div>
+          </div>
+          <div class="command-row">
+            <div class="command-cell">
+              <strong data-i18n="commands.chatToolsTitle">Matrix, DingTalk, local scripts</strong>
+              <p data-i18n="commands.chatToolsLabel">Chat-tool entrances</p>
+            </div>
+            <div class="command-cell">
+              <p data-i18n="commands.chatToolsCopy">Connect external chat tools or local command scripts when you want Minecraft requests to come from outside the game window.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="start" class="band alt">
       <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="start.kicker">Try it locally</p>
-          <h2 data-i18n="start.title">Install the mod, open Minecraft, then talk to Blockwright.</h2>
-          <p class="section-copy" data-i18n="start.copy">The player flow is intentionally simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw or the Web page.</p>
+          <p class="section-kicker" data-i18n="start.kicker">How to use</p>
+          <h2 data-i18n="start.title">Install the Fabric mod, choose a model, then send a request.</h2>
+          <p class="section-copy" data-i18n="start.copy">The player flow stays simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw, Web, voice, or a connected chat tool.</p>
         </div>
         <div class="steps">
           <article class="step">
-            <h3 data-i18n="start.webTitle">Prepare Minecraft 1.21.x</h3>
+            <h3 data-i18n="start.webTitle">Prepare Minecraft</h3>
             <p data-i18n-html="start.webCopy">Use Minecraft Java Edition 1.21.x with Fabric Loader 0.16.14 or newer.</p>
           </article>
           <article class="step">
@@ -692,8 +828,12 @@
             <p data-i18n-html="start.fabricCopy">Install Fabric API for your 1.21.x version, then put <code>blockwright-fabric-*.jar</code> in the same <code>mods/</code> folder.</p>
           </article>
           <article class="step">
-            <h3 data-i18n="start.requestTitle">Open Minecraft and use /bw</h3>
-            <p data-i18n-html="start.requestCopy">Run <code>/bw web</code> to open the Web page, then try <code>/bw give me a diamond sword</code>.</p>
+            <h3 data-i18n="start.modelTitle">Choose an AI model</h3>
+            <p data-i18n-html="start.modelCopy">Run <code>/bw web</code>, open the Web page, set your Minecraft username, and choose Codex CLI, OpenAI, DeepSeek, Doubao, or Gemini.</p>
+          </article>
+          <article class="step">
+            <h3 data-i18n="start.requestTitle">Send a request</h3>
+            <p data-i18n-html="start.requestCopy">Use <code>/bw</code>, Web text, voice, or a connected chat tool. Try <code>/bw scan what I am looking at and make this wall stone brick</code>.</p>
           </article>
         </div>
       </div>
@@ -768,25 +908,27 @@
 
   <footer class="site-footer">
     <div class="footer-inner">
-      <span data-i18n="footer.title">Blockwright - AI building assistant for Minecraft Java Edition</span>
-      <span data-i18n="footer.copy">Fabric first. /bw in game. Plans, places, and verifies builds.</span>
+      <span data-i18n="footer.title">Blockwright - Minecraft Java Edition AI assistant</span>
+      <span data-i18n="footer.copy">Fabric first. Tool-driven actions. World scans, build records, and verification.</span>
     </div>
   </footer>
   <script>
-    const LANGUAGE_KEY = "bw.pages.language";
+    const DEFAULT_LANGUAGE = "en";
     const TRANSLATIONS = {
       en: {
         meta: {
-          title: "Blockwright - AI Building Assistant for Minecraft Java Edition",
-          description: "Blockwright is a Minecraft Java Edition Fabric mod for asking an AI assistant to give items, build, edit structures, and respond through Web, voice, chat tools, or /bw.",
-          ogTitle: "Blockwright - AI Building Assistant for Minecraft Java Edition",
-          ogDescription: "Use /bw, Web chat, voice, or chat tools to ask for items, builds, and edits in Minecraft Java Edition."
+          title: "Blockwright - Minecraft Java Edition AI Assistant",
+          description: "Blockwright gives an AI assistant a controlled tool layer for Minecraft Java Edition: read world state, run game actions, place and edit blocks, and verify results through /bw, Web, voice, and chat tools.",
+          ogTitle: "Blockwright - Minecraft Java Edition AI Assistant",
+          ogDescription: "Use /bw, Web chat, voice, Matrix/DingTalk, or local scripts to let an AI assistant operate Minecraft through controlled tools."
         },
         nav: {
           label: "Main navigation",
           home: "Blockwright home",
-          features: "What it does",
-          start: "Try it",
+          features: "What it is",
+          models: "Models",
+          commands: "Commands",
+          start: "How to use",
           article: "Intro article",
           docs: "Tutorials",
           github: "GitHub"
@@ -797,40 +939,72 @@
           chinese: "Switch to Chinese"
         },
         hero: {
-          eyebrow: "AI building assistant for Minecraft Java Edition",
-          lead: "Install Blockwright in a Minecraft Java Edition world and use <code>/bw</code>, Web chat, voice, or chat tools to ask for items, builds, or changes to existing structures.",
+          eyebrow: "Minecraft Java Edition AI assistant",
+          lead: "Install the Fabric mod, then talk through <code>/bw</code>, Web, voice, Matrix/DingTalk, or local scripts. Blockwright gives the AI assistant controlled tools to read the world, run Minecraft actions, place blocks, edit builds, and verify results.",
           github: "View on GitHub",
           install: "Install Fabric mod",
           article: "Read intro article",
           badges: "Project highlights",
           badgeFabric: "Fabric first",
-          badgeCommand: "/bw command",
-          badgeBlueprints: "Blueprint records",
+          badgeCommand: "/bw + Web + chat tools",
+          badgeBlueprints: "MCP tool runtime",
           badgeVerify: "Verified builds"
         },
         features: {
-          kicker: "What it does",
-          title: "Blockwright turns Minecraft requests into controlled in-game actions.",
-          copy: "It is meant for local Minecraft Java Edition play first: ask inside the world, let the assistant plan, and let the Fabric mod place or verify the result through server-side APIs.",
-          commandTitle: "Talk in game",
-          commandCopy: "Use <code>/bw</code> to ask for items, time changes, builds, or edits without leaving the Minecraft world.",
+          kicker: "What it is",
+          title: "Blockwright lets an AI assistant operate Minecraft through controlled tools.",
+          copy: "It is meant for local Minecraft Java Edition play first: ask inside the world, let the assistant inspect context and choose tools, then let the Fabric mod execute and verify changes through server-side APIs.",
+          commandTitle: "Talk from anywhere",
+          commandCopy: "Use <code>/bw</code>, Web, voice, Matrix/DingTalk, or local commands as different entrances to the same Minecraft assistant.",
           localTitle: "Fabric local worlds",
           localCopy: "The main path is a Java Edition/Fabric mod for single-player saves and LAN-opened worlds, so maps do not need to move to a Paper server.",
-          buildTitle: "Build with records",
-          buildCopy: "Build plans are saved as blueprints and records before the same block list is sent to Minecraft for placement.",
+          buildTitle: "Act through tools",
+          buildCopy: "The assistant can read player and world state, enqueue controlled actions, run supported commands, place blocks, and save blueprint records.",
           editTitle: "Edit safely",
           editCopy: "For existing builds, Blockwright scans nearby world blocks and matches saved build records before changing the structure."
         },
+        models: {
+          kicker: "Supported models",
+          title: "Choose the AI backend from the Web settings page.",
+          copy: "Blockwright separates the Minecraft execution layer from the model provider. Configure the provider locally, then the same /bw, Web, voice, and chat-tool entrances use that assistant.",
+          codexTitle: "Codex CLI",
+          codexCopy: "Local-first assistant path for development and Minecraft tool workflows.",
+          openaiTitle: "OpenAI",
+          openaiCopy: "Use an OpenAI API key configured in the local Web settings.",
+          deepseekTitle: "DeepSeek",
+          deepseekCopy: "Alternative hosted model provider for chat and tool planning.",
+          doubaoTitle: "Doubao",
+          doubaoCopy: "Volcengine/Doubao model option for Chinese-friendly deployments.",
+          geminiTitle: "Gemini",
+          geminiCopy: "Google Gemini backend option for assistant requests."
+        },
+        commands: {
+          kicker: "Commands and entrances",
+          title: "Use /bw in game, or send the same request from Web and chat tools.",
+          copy: "The command surface stays small. Natural language carries the task, while Blockwright decides which controlled tool or action should run.",
+          requestLabel: "Main Minecraft command",
+          requestCopy: "Send a natural-language request such as <code>scan what I am looking at</code>, <code>set the time to day</code>, <code>give me torches</code>, or <code>replace this wall with stone bricks</code>.",
+          webLabel: "Open Web UI",
+          webCopy: "Print the local Web address in Minecraft chat so you can configure the player name, model provider, text chat, and voice input.",
+          webVoiceTitle: "Web text and voice",
+          webVoiceLabel: "Browser entrance",
+          webVoiceCopy: "Send text from a browser, or hold the microphone button to speak. Requests are sent to the Minecraft player configured on the page.",
+          chatToolsTitle: "Matrix, DingTalk, local scripts",
+          chatToolsLabel: "Chat-tool entrances",
+          chatToolsCopy: "Connect external chat tools or local command scripts when you want Minecraft requests to come from outside the game window."
+        },
         start: {
-          kicker: "Try it locally",
-          title: "Install the mod, open Minecraft, then talk to Blockwright.",
-          copy: "The player flow is intentionally simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw or the Web page.",
-          webTitle: "Prepare Minecraft 1.21.x",
+          kicker: "How to use",
+          title: "Install the Fabric mod, choose a model, then send a request.",
+          copy: "The player flow stays simple: prepare the Fabric profile, put the required mods in the right folder, and use /bw, Web, voice, or a connected chat tool.",
+          webTitle: "Prepare Minecraft",
           webCopy: "Use Minecraft Java Edition 1.21.x with Fabric Loader 0.16.14 or newer.",
           fabricTitle: "Put mods in mods/",
           fabricCopy: "Install Fabric API for your 1.21.x version, then put <code>blockwright-fabric-*.jar</code> in the same <code>mods/</code> folder.",
-          requestTitle: "Open Minecraft and use /bw",
-          requestCopy: "Run <code>/bw web</code> to open the Web page, then try <code>/bw give me a diamond sword</code>."
+          modelTitle: "Choose an AI model",
+          modelCopy: "Run <code>/bw web</code>, open the Web page, set your Minecraft username, and choose Codex CLI, OpenAI, DeepSeek, Doubao, or Gemini.",
+          requestTitle: "Send a request",
+          requestCopy: "Use <code>/bw</code>, Web text, voice, or a connected chat tool. Try <code>/bw scan what I am looking at and make this wall stone brick</code>."
         },
         article: {
           kicker: "Article",
@@ -864,22 +1038,24 @@
           githubCopy: "Download releases, read the README, and follow project updates."
         },
         footer: {
-          title: "Blockwright - AI building assistant for Minecraft Java Edition",
-          copy: "Fabric first. /bw in game. Plans, places, and verifies builds."
+          title: "Blockwright - Minecraft Java Edition AI assistant",
+          copy: "Fabric first. Tool-driven actions. World scans, build records, and verification."
         }
       },
       "zh-CN": {
         meta: {
-          title: "Blockwright - Minecraft Java 版 AI 建筑助手",
-          description: "Blockwright 是面向 Minecraft Java 版玩家的 AI 助手，可以通过 /bw、Web、语音和聊天工具发物品、建造和改造建筑。",
-          ogTitle: "Blockwright - Minecraft Java 版 AI 建筑助手",
-          ogDescription: "在 Minecraft Java 版里用 /bw、Web、语音或聊天工具提交发物品、建造和改造需求。"
+          title: "Blockwright - Minecraft Java 版 AI 助手",
+          description: "Blockwright 为 Minecraft Java 版里的 AI 助手提供受控工具层，可以读取世界状态、执行游戏动作、放置和改造方块，并通过 /bw、Web、语音和聊天工具交互。",
+          ogTitle: "Blockwright - Minecraft Java 版 AI 助手",
+          ogDescription: "通过 /bw、Web、语音、Matrix/钉钉或本地脚本，让 AI 助手用受控工具操作 Minecraft。"
         },
         nav: {
           label: "主导航",
           home: "Blockwright 首页",
-          features: "用途",
-          start: "体验",
+          features: "是什么",
+          models: "模型",
+          commands: "命令",
+          start: "怎么用",
           article: "介绍文章",
           docs: "教程",
           github: "GitHub"
@@ -890,40 +1066,72 @@
           chinese: "切换到中文"
         },
         hero: {
-          eyebrow: "面向 Minecraft Java 版的 AI 建筑助手",
-          lead: "把 Blockwright 安装到 Minecraft Java 版世界后，玩家可以用 <code>/bw</code>、Web、语音或聊天工具让助手发物品、建造小型建筑或改造已有建筑。",
+          eyebrow: "面向 Minecraft Java 版的 AI 助手",
+          lead: "安装 Fabric 模组后，玩家可以通过 <code>/bw</code>、Web、语音、Matrix/钉钉或本地脚本和它对话。Blockwright 给 AI 助手一层受控工具，让它读取世界状态、执行游戏动作、放置和改造方块、保存记录并校验结果。",
           github: "查看 GitHub",
           install: "安装 Fabric 模组",
           article: "阅读介绍文章",
           badges: "项目关键特性",
           badgeFabric: "Fabric 优先",
-          badgeCommand: "/bw 命令",
-          badgeBlueprints: "蓝图记录",
+          badgeCommand: "/bw + Web + 聊天工具",
+          badgeBlueprints: "MCP 工具运行时",
           badgeVerify: "构建校验"
         },
         features: {
-          kicker: "能做什么",
-          title: "Blockwright 把玩家的 Minecraft 需求变成受控的游戏内动作。",
-          copy: "它优先面向本地 Minecraft Java 版玩法：玩家在世界里提出需求，助手负责规划，Fabric 模组通过服务端 API 放置方块或校验结果。",
-          commandTitle: "游戏内对话",
-          commandCopy: "用 <code>/bw</code> 直接提交发物品、调时间、建造或改造需求，不用离开 Minecraft 世界。",
+          kicker: "是什么",
+          title: "Blockwright 让 AI 助手通过受控工具操作 Minecraft。",
+          copy: "它优先面向本地 Minecraft Java 版玩法：玩家在世界里提出需求，助手读取上下文并选择工具，Fabric 模组再通过服务端 API 执行和校验变化。",
+          commandTitle: "多入口对话",
+          commandCopy: "用 <code>/bw</code>、Web、语音、Matrix/钉钉或本地命令接入同一个 Minecraft 助手。",
           localTitle: "Fabric 本地世界",
           localCopy: "主路径是 Java 版/Fabric 模组，适合单人存档和局域网开放世界，不需要把地图迁移到 Paper 服务端。",
-          buildTitle: "有记录地建造",
-          buildCopy: "建筑计划会先保存成蓝图和构建记录，再把同一份方块清单下发给 Minecraft 放置。",
+          buildTitle: "通过工具执行",
+          buildCopy: "助手可以读取玩家和世界状态、入队受控动作、执行支持的命令、放置方块，并保存蓝图和构建记录。",
           editTitle: "更稳地改造",
           editCopy: "改造已有建筑前，Blockwright 会先扫描附近世界方块并匹配已保存的构建记录。"
         },
+        models: {
+          kicker: "支持的模型",
+          title: "在 Web 设置页选择 AI 后端。",
+          copy: "Blockwright 把 Minecraft 执行层和模型提供方分开。你在本地配置好模型后，/bw、Web、语音和聊天工具都会走同一个助手。",
+          codexTitle: "Codex CLI",
+          codexCopy: "偏本地优先的助手路径，适合开发和 Minecraft 工具工作流。",
+          openaiTitle: "OpenAI",
+          openaiCopy: "在本地 Web 设置里配置 OpenAI API key 后使用。",
+          deepseekTitle: "DeepSeek",
+          deepseekCopy: "用于聊天理解和工具规划的托管模型选项。",
+          doubaoTitle: "豆包 Doubao",
+          doubaoCopy: "面向中文场景更友好的火山引擎/豆包模型选项。",
+          geminiTitle: "Gemini",
+          geminiCopy: "Google Gemini 模型后端选项。"
+        },
+        commands: {
+          kicker: "命令和入口",
+          title: "在游戏里用 /bw，也可以从 Web 和聊天工具发同样的需求。",
+          copy: "命令面保持很小，自然语言表达任务，Blockwright 决定该调用哪个受控工具或动作。",
+          requestLabel: "主要 Minecraft 命令",
+          requestCopy: "发送自然语言需求，例如 <code>扫描我看着的地方</code>、<code>把时间调到白天</code>、<code>给我火把</code>、<code>把这面墙换成石砖</code>。",
+          webLabel: "打开 Web 端",
+          webCopy: "在 Minecraft 聊天里显示本地 Web 地址，用来配置玩家名、模型、文字聊天和语音输入。",
+          webVoiceTitle: "Web 文字和语音",
+          webVoiceLabel: "浏览器入口",
+          webVoiceCopy: "可以在浏览器里打字，也可以按住麦克风说话。请求会发给页面里配置的 Minecraft 玩家。",
+          chatToolsTitle: "Matrix、钉钉、本地脚本",
+          chatToolsLabel: "聊天工具入口",
+          chatToolsCopy: "当你希望从游戏窗口之外提交 Minecraft 需求时，可以接入外部聊天工具或本地命令脚本。"
+        },
         start: {
-          kicker: "本地体验",
-          title: "安装模组，打开 Minecraft，然后和 Blockwright 对话。",
-          copy: "玩家使用流程应该足够简单：准备 Fabric 游戏配置，把需要的模组放到正确目录，然后用 /bw 或 Web 页面发指令。",
-          webTitle: "准备 Minecraft 1.21.x",
+          kicker: "如何使用",
+          title: "安装 Fabric 模组，选择模型，然后发送需求。",
+          copy: "玩家使用流程保持简单：准备 Fabric 游戏配置，把需要的模组放到正确目录，然后用 /bw、Web、语音或已接入的聊天工具发指令。",
+          webTitle: "准备 Minecraft",
           webCopy: "使用 Minecraft Java Edition 1.21.x，并安装 Fabric Loader 0.16.14 或更新版本。",
           fabricTitle: "把模组放进 mods/",
           fabricCopy: "安装对应 1.21.x 版本的 Fabric API，再把 <code>blockwright-fabric-*.jar</code> 放进同一个 <code>mods/</code> 文件夹。",
-          requestTitle: "打开游戏并使用 /bw",
-          requestCopy: "先运行 <code>/bw web</code> 打开 Web 页面，再试试 <code>/bw 给我一把钻石剑</code>。"
+          modelTitle: "选择 AI 模型",
+          modelCopy: "运行 <code>/bw web</code> 打开 Web 页面，填写 Minecraft 用户名，然后选择 Codex CLI、OpenAI、DeepSeek、豆包或 Gemini。",
+          requestTitle: "发送需求",
+          requestCopy: "使用 <code>/bw</code>、Web 文字、语音或已接入的聊天工具。可以试试 <code>/bw 扫描我看着的地方，把这面墙换成石砖</code>。"
         },
         article: {
           kicker: "介绍文章",
@@ -957,8 +1165,8 @@
           githubCopy: "下载发布包、查看 README，并关注项目更新。"
         },
         footer: {
-          title: "Blockwright - Minecraft Java 版 AI 建筑助手",
-          copy: "Fabric 优先。游戏内 /bw。规划、放置并校验建筑。"
+          title: "Blockwright - Minecraft Java 版 AI 助手",
+          copy: "Fabric 优先。工具化动作。世界扫描、构建记录和结果校验。"
         }
       }
     };
@@ -1007,20 +1215,10 @@
         button.setAttribute("aria-pressed", String(isActive));
       });
 
-      try {
-        localStorage.setItem(LANGUAGE_KEY, activeLanguage);
-      } catch (_) {
-        // Ignore storage errors in private browsing or locked-down browser contexts.
-      }
     }
 
     function initialLanguage() {
-      try {
-        const stored = localStorage.getItem(LANGUAGE_KEY);
-        return TRANSLATIONS[stored] ? stored : "en";
-      } catch (_) {
-        return "en";
-      }
+      return DEFAULT_LANGUAGE;
     }
 
     document.querySelectorAll("[data-language]").forEach((button) => {

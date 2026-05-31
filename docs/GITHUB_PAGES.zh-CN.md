@@ -51,7 +51,8 @@ https://mari0w.github.io/blockwright/
 当前准备了官网和宣传配图：
 
 - `docs/assets/web-chat-mobile-preview.png`：移动端 `/web` 聊天窗口截图，用于教程和社媒宣传。
-- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用在官网 hero 背景和介绍文章。
+- `docs/assets/hero-ai-assistant.jpg`：生成的宽幅首页背景图，用在官网首屏。
+- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用于教程和介绍文章里的界面示例。
 - `docs/assets/web-model-provider-dropdown.png`：支持的大模型下拉选项截图。
 - `docs/assets/architecture-flow.svg`：默认英文官网架构图，解释 controller、Codex/MCP 和 Fabric/Paper 执行端之间的关系。
 - `docs/assets/architecture-flow.zh-CN.svg`：切换到中文时使用的官网架构图。
@@ -63,4 +64,4 @@ https://mari0w.github.io/blockwright/
 docs/assets/minecraft-build-preview.png
 ```
 
-然后替换官网 hero 背景或新增案例区域。这样官网会从“控制台展示”升级成“游戏内结果展示”。
+然后新增案例区域。这样官网可以在生成的首屏视觉之外，继续展示真实游戏内结果。
