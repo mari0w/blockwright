@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>I Built a Minecraft AI Mod for My 5-Year-Old Daughter</title>
+  <meta name="description" content="A Quora-ready Blockwright article about building a Minecraft Java AI mod so a young child can play by speaking instead of reading menus.">
+  <meta property="og:title" content="I Built a Minecraft AI Mod for My 5-Year-Old Daughter">
+  <meta property="og:description" content="Blockwright turns natural language and voice into controlled Minecraft Java Edition actions through a Fabric mod and local controller.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mari0w.github.io/blockwright/articles/blockwright-quora-final.en.html">
+  <meta property="og:site_name" content="Blockwright">
+  <meta property="og:image" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <meta property="og:image:secure_url" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="I Built a Minecraft AI Mod for My 5-Year-Old Daughter">
+  <meta name="twitter:description" content="Blockwright turns natural language and voice into controlled Minecraft Java Edition actions through a Fabric mod and local controller.">
+  <meta name="twitter:image" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <link rel="icon" href="../assets/social-preview.png">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --line: #d8dee4;
+      --panel: #f6f8fa;
+      --accent: #0969da;
+      --max: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.72;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .brand {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 32px 0 72px;
+    }
+
+    .copy-tools {
+      margin: 0 0 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .copy-tools p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    button {
+      border: 1px solid #1f883d;
+      border-radius: 6px;
+      background: #1f883d;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 8px 12px;
+      white-space: nowrap;
+    }
+
+    button:focus-visible {
+      outline: 3px solid rgba(9, 105, 218, .25);
+      outline-offset: 2px;
+    }
+
+    article {
+      font-size: 17px;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      font-size: clamp(34px, 6vw, 52px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 42px 0 12px;
+      font-size: 28px;
+      line-height: 1.24;
+      letter-spacing: 0;
+    }
+
+    p,
+    li {
+      color: var(--text);
+      font-size: 17px;
+    }
+
+    ul {
+      padding-left: 1.35em;
+    }
+
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 22px 0 28px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px 16px;
+      white-space: pre-wrap;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: .95em;
+    }
+
+    strong {
+      font-weight: 800;
+    }
+
+    .copy-status {
+      min-width: 72px;
+      color: #1f883d;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../index.html">Blockwright</a>
+      <nav class="links" aria-label="Article navigation">
+        <a href="../index.html">Home</a>
+        <a href="../blog.html">Blog</a>
+        <a href="blockwright-quora-final.en.md">Markdown</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="copy-tools">
+      <p>Copy-friendly article page for Quora. The button copies only the article body.</p>
+      <div>
+        <button type="button" id="copyArticle">Copy article</button>
+        <span class="copy-status" id="copyStatus" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <article id="articleBody">
+      <h1>I Built a Minecraft AI Mod for My 5-Year-Old Daughter, So She Could Play by Talking Instead of Reading Menus</h1>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png" alt="A child using voice control with a Minecraft-style building world on screen">
+
+      <p>I have been building a Minecraft Java Edition mod called <strong>Blockwright</strong>.</p>
+
+      <p>The origin is very simple. It did not start as a big plan to “AI-enable” a game. It started with my 5-year-old daughter.</p>
+
+      <p>She loves playing Minecraft. She knows what she wants to say. She knows the names of many items. She can ask for a torch, a bed, glass, a door, or a small house. She can say that she wants it to be daytime, or that she wants to change something in front of her.</p>
+
+      <p>But she cannot read much yet.</p>
+
+      <p>For adults, Minecraft menus, item names, commands, and settings are just things we search for, type, or look up. For a young child, that is a very different barrier. She may know that she wants a torch, but she cannot easily find the word in the inventory. She may want to build a house, but she does not know where to start. She may want to modify a place in the world, but she cannot translate that into game operations.</p>
+
+      <p>So I started asking myself: if she can already say what she wants, can Minecraft listen?</p>
+
+      <p>That became the first idea behind Blockwright: <strong>turn natural language and voice into real actions inside Minecraft.</strong></p>
+
+      <h2>It Is Not Just a Chatbot</h2>
+
+      <p>After installing Blockwright, a player can send requests in several ways:</p>
+
+      <ul>
+        <li>Type <code>/bw ...</code> inside Minecraft chat</li>
+        <li>Open a local or LAN web page and type</li>
+        <li>Hold a microphone button on the web page and speak</li>
+        <li>Connect chat tools such as Element/Matrix, DingTalk, or local scripts</li>
+      </ul>
+
+      <p>For example, a player can say:</p>
+
+      <pre><code>Give me a stack of torches
+Make it daytime
+Stop the rain
+Build me a small wooden house with windows, a bed, and lights
+Replace the wall in front of me with stone bricks</code></pre>
+
+      <p>For a child, the important part is not that “AI is impressive.” The important part is that she no longer needs to read every item name, remember every command, or understand every menu before she can express what she wants to do.</p>
+
+      <p>She can say, “Give me torches,” get the torches, and then place them herself. Or she can ask for a simple house, use it as a starting point, then keep modifying it by hand: break a few blocks, add decorations, change materials, and make it her own.</p>
+
+      <p>That matters to me. I do not want AI to replace her play. I want it to help with the parts that block her from playing.</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-voice-web.png" alt="A phone and laptop voice interface connected to a Minecraft-style world">
+
+      <h2>The Use Cases I Care About Most</h2>
+
+      <p>The first use case is <strong>finding and giving items</strong>.</p>
+
+      <p>Young players often know what they want, but they cannot easily search through the creative inventory. Blockwright can turn a request like “give me a diamond sword,” “give me some glass,” or “give me a bed” into an actual item action, and it tries to make the item visible in the player's main hand.</p>
+
+      <p>The second use case is <strong>common world operations</strong>.</p>
+
+      <p>Changing the time, clearing the weather, giving night vision, changing game mode, teleporting, adding effects, or running other command-style operations are all possible in Minecraft, but most players should not have to memorize command syntax just to do simple things. Natural language is often a better interface.</p>
+
+      <p>The third use case is <strong>getting started with building</strong>.</p>
+
+      <p>Many players do want to build. The hard part is often the first step. Blockwright can create a playable starting structure: floor, walls, roof, entrance, two-block-high interior space, bed, lighting, windows, and a path you can actually use. Then the player can continue building from there.</p>
+
+      <p>The fourth use case is <strong>iterative editing</strong>.</p>
+
+      <p>For example, you can first say:</p>
+
+      <pre><code>Build me a small wooden cabin</code></pre>
+
+      <p>Then continue with:</p>
+
+      <pre><code>Make the roof taller
+Add more windows
+Put a bed and some lights inside
+Replace this wall with stone bricks</code></pre>
+
+      <p>That feels much closer to the real way people build in Minecraft: make a rough version, look at it, then keep adjusting.</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-give-item.png" alt="Voice input turning into a visible torch in a Minecraft-style player's hand">
+
+      <h2>Why I Made It a Local/LAN Web Interface</h2>
+
+      <p>My own setup is a local Minecraft world plus a web page available on my local network.</p>
+
+      <p>Inside Minecraft, the player can type:</p>
+
+      <pre><code>/bw web</code></pre>
+
+      <p>Then Blockwright shows the web address. On the same machine, it is usually:</p>
+
+      <pre><code>http://127.0.0.1:8765/web</code></pre>
+
+      <p>On a local network, another phone, tablet, or computer can open the same web interface. This means a child can keep Minecraft open and use another device to press the microphone button and speak.</p>
+
+      <p>For a family setup, this is very practical. The Minecraft world stays where it is. You do not need to move the map to a dedicated Paper server. A child does not need to understand command lines, API keys, or backend services.</p>
+
+      <p>The main installation path for Blockwright is a <strong>Fabric mod</strong> for Minecraft Java Edition 1.21.x, including single-player saves and LAN-opened worlds. Paper support exists too, but it is mainly for standalone server setups.</p>
+
+      <h2>What Happens Behind the Scenes</h2>
+
+      <p>Blockwright has two main parts:</p>
+
+      <ul>
+        <li>The Minecraft-side Fabric mod reads player state, scans nearby blocks, gives items, places blocks, runs commands, and reports results.</li>
+        <li>The local controller handles the web page, model configuration, task queues, blueprints, build records, MCP tools, and AI planning.</li>
+      </ul>
+
+      <p>I did not want this to become a black box where AI just runs random commands. For building tasks, Blockwright saves a blueprint and a build record first, then sends the same block list to the Minecraft execution side. After placement, the mod reads the world back block by block and returns a verification report.</p>
+
+      <p>In short: <strong>natural language comes in, controlled actions go out, and the result can be checked.</strong></p>
+
+      <p>That is important because Minecraft is not an image. Success is not whether the assistant wrote a nice response. Success is whether the blocks were actually placed, the item actually reached the player's hand, and the command actually changed the world.</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-build-iteration.png" alt="A simple Minecraft-style cabin evolving into a customized detailed build">
+
+      <h2>What Blockwright Supports Today</h2>
+
+      <p>Current input options include:</p>
+
+      <ul>
+        <li>Minecraft <code>/bw</code> command</li>
+        <li>Local web text chat</li>
+        <li>Web voice input</li>
+        <li>Element/Matrix</li>
+        <li>DingTalk robot</li>
+        <li>Local commands or custom scripts</li>
+      </ul>
+
+      <p>Current capabilities include:</p>
+
+      <ul>
+        <li>Reading player state: main hand, off hand, hotbar, and inventory</li>
+        <li>Scanning nearby world blocks</li>
+        <li>Giving items and trying to make them visible in the player's main hand</li>
+        <li>Running command-style operations such as time, weather, effects, and game mode changes</li>
+        <li>Placing buildings through blueprints</li>
+        <li>Editing based on existing build records</li>
+        <li>Saving blueprints and build records</li>
+        <li>Writing back verification reports after execution</li>
+      </ul>
+
+      <p>Supported model backends include:</p>
+
+      <ul>
+        <li>Codex CLI</li>
+        <li>OpenAI</li>
+        <li>DeepSeek</li>
+        <li>Doubao</li>
+        <li>Gemini</li>
+      </ul>
+
+      <h2>It Is Not a “Universal Minecraft AI”</h2>
+
+      <p>I do not want to oversell it.</p>
+
+      <p>Blockwright is currently best suited for:</p>
+
+      <ul>
+        <li>Children or new players who want to use voice or natural language for common operations</li>
+        <li>Creative-mode players who want to quickly get materials, adjust the environment, or start a build</li>
+        <li>Local single-player worlds and LAN-opened worlds</li>
+        <li>Players or server operators who want to connect Minecraft to web, voice, or chat tools</li>
+        <li>Developers interested in a Minecraft AI execution loop with records and verification</li>
+      </ul>
+
+      <p>There is still a lot to improve: more advanced building edits, undo/rollback, image-to-blueprint workflows, clearer failure reports, and more.</p>
+
+      <p>But for my daughter, the original problem is already partly solved. She does not need to read every word or memorize every command before she can express what she wants.</p>
+
+      <p>That is the part I care about most.</p>
+
+      <h2>Project Link</h2>
+
+      <p>Blockwright is open source:</p>
+
+      <p>GitHub: <a href="https://github.com/mari0w/blockwright">https://github.com/mari0w/blockwright</a></p>
+
+      <p>If you play Minecraft Java Edition, or if you have a young player at home who can say what they want but cannot yet read everything on the screen, this may be an interesting direction to try.</p>
+
+      <p>To me, Blockwright is not about letting AI play the game for a child. It is about giving the child a Minecraft helper that can hand her the right item, build the first wall, light up the room, and then leave the creative part to her.</p>
+    </article>
+  </main>
+
+  <script>
+    const button = document.getElementById("copyArticle");
+    const status = document.getElementById("copyStatus");
+    const article = document.getElementById("articleBody");
+
+    button.addEventListener("click", async () => {
+      try {
+        const html = article.innerHTML;
+        const text = article.innerText;
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([html], { type: "text/html" }),
+              "text/plain": new Blob([text], { type: "text/plain" })
+            })
+          ]);
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(article);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.execCommand("copy");
+          selection.removeAllRanges();
+        }
+        status.textContent = "Copied";
+      } catch (error) {
+        status.textContent = "Select and copy manually";
+      }
+    });
+  </script>
+</body>
+</html>
