@@ -646,7 +646,7 @@
       position: fixed;
       inset: 0;
       z-index: 20;
-      overflow: auto;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
     }
@@ -654,9 +654,11 @@
       display: none;
     }
     .config-shell {
-      min-height: 100%;
+      height: 100vh;
+      height: 100dvh;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
     }
     .config-header {
       display: grid;
@@ -682,11 +684,81 @@
       font-size: 13px;
     }
     .config-body {
-      width: min(760px, 100%);
+      width: min(1520px, 100%);
+      min-height: 0;
+      margin: 0 auto;
       padding: 20px;
+      overflow: hidden;
     }
     .config-form {
       display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 16px;
+      height: 100%;
+      min-height: 0;
+    }
+    .config-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+      gap: 18px;
+      min-height: 0;
+    }
+    .config-nav {
+      align-self: start;
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+    .config-tab {
+      display: grid;
+      gap: 4px;
+      width: 100%;
+      min-height: 70px;
+      padding: 12px 14px;
+      border-color: var(--line);
+      background: var(--panel);
+      color: var(--text);
+      text-align: left;
+    }
+    .config-tab:hover,
+    .config-tab:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+    }
+    .config-tab[aria-selected="true"] {
+      border-color: rgba(104, 211, 145, .72);
+      background: #17251d;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .config-tab strong {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+    .config-tab span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .config-content {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .config-pane {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+    .config-pane[hidden] {
+      display: none;
+    }
+    .config-section-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 16px;
     }
     .config-section {
@@ -785,6 +857,15 @@
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
+    }
+    .config-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding-top: 14px;
+      border-top: 1px solid rgba(48, 57, 65, .72);
+      background: var(--bg);
     }
     .config-actions button {
       width: auto;
@@ -1016,9 +1097,32 @@
       }
       .config-body {
         padding: 12px;
+        overflow: auto;
+      }
+      .config-form {
+        height: auto;
+        min-height: 100%;
+      }
+      .config-layout {
+        grid-template-columns: 1fr;
+      }
+      .config-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .config-tab {
+        min-height: 62px;
+        padding: 10px;
+      }
+      .config-content {
+        overflow: visible;
+        padding-right: 0;
+      }
+      .config-section-grid {
+        grid-template-columns: 1fr;
       }
       .permission-row,
-      .config-actions {
+      .config-actions,
+      .config-footer {
         grid-template-columns: 1fr;
       }
       .config-actions button {
@@ -1226,115 +1330,149 @@
         </button>
         <div class="config-title">
           <h2 data-i18n="settings">Settings</h2>
-          <p data-i18n="settingsIntro">Chat integrations and browser permissions are configured here.</p>
+          <p data-i18n="settingsIntro">Configuration is grouped by area. Use the section tabs to switch.</p>
         </div>
       </header>
       <div class="config-body">
         <form id="configForm" class="config-form">
-          <section class="config-section">
-            <h3 data-i18n="language">Language</h3>
-            <div class="language-choice" role="group" aria-label="Language" data-i18n-aria-label="language">
-              <button id="languageEnglish" class="language-choice-button" type="button" data-language="en" data-i18n="languageEnglish">English</button>
-              <button id="languageChinese" class="language-choice-button" type="button" data-language="zh" data-i18n="languageChinese">中文</button>
+          <div class="config-layout">
+            <nav class="config-nav" aria-label="Settings sections" data-i18n-aria-label="settingsSections" role="tablist">
+              <button id="configTabGeneral" class="config-tab" type="button" role="tab" aria-controls="configPaneGeneral" aria-selected="true" data-config-pane="general">
+                <strong data-i18n="settingsGeneral">General</strong>
+                <span data-i18n="settingsGeneralHelp">Language, player, and controller token.</span>
+              </button>
+              <button id="configTabModel" class="config-tab" type="button" role="tab" aria-controls="configPaneModel" aria-selected="false" data-config-pane="model">
+                <strong data-i18n="settingsModel">AI model</strong>
+                <span data-i18n="settingsModelHelp">Provider, model, API base URL, and key.</span>
+              </button>
+              <button id="configTabAccess" class="config-tab" type="button" role="tab" aria-controls="configPaneAccess" aria-selected="false" data-config-pane="access">
+                <strong data-i18n="settingsAccess">Access</strong>
+                <span data-i18n="settingsAccessHelp">Microphone permission and mobile HTTPS.</span>
+              </button>
+              <button id="configTabIntegrations" class="config-tab" type="button" role="tab" aria-controls="configPaneIntegrations" aria-selected="false" data-config-pane="integrations">
+                <strong data-i18n="settingsIntegrations">Integrations</strong>
+                <span data-i18n="settingsIntegrationsHelp">Matrix and future chat connectors.</span>
+              </button>
+            </nav>
+            <div class="config-content">
+              <section id="configPaneGeneral" class="config-pane" role="tabpanel" aria-labelledby="configTabGeneral" data-config-pane-panel="general">
+                <div class="config-section-grid">
+                  <section class="config-section">
+                    <h3 data-i18n="language">Language</h3>
+                    <div class="language-choice" role="group" aria-label="Language" data-i18n-aria-label="language">
+                      <button id="languageEnglish" class="language-choice-button" type="button" data-language="en" data-i18n="languageEnglish">English</button>
+                      <button id="languageChinese" class="language-choice-button" type="button" data-language="zh" data-i18n="languageChinese">中文</button>
+                    </div>
+                    <p data-i18n="languageHelp">Choose the language used by this browser. New browsers follow the browser language first.</p>
+                  </section>
+                  <section class="config-section">
+                    <h3 data-i18n="player">Player</h3>
+                    <label for="username">
+                      <span data-i18n="minecraftUsername">Minecraft username</span>
+                      <input id="username" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
+                    </label>
+                    <p data-i18n="playerHelp">Chat and voice commands are sent to this Minecraft player.</p>
+                  </section>
+                  <section class="config-section">
+                    <h3>Controller</h3>
+                    <label for="controllerToken">
+                      <span>Controller Token</span>
+                      <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
+                    </label>
+                  </section>
+                </div>
+              </section>
+              <section id="configPaneModel" class="config-pane" role="tabpanel" aria-labelledby="configTabModel" data-config-pane-panel="model" hidden>
+                <section class="config-section">
+                  <h3 data-i18n="llmSettings">AI model</h3>
+                  <label for="llmProvider">
+                    <span data-i18n="llmProvider">Model mode</span>
+                    <select id="llmProvider">
+                      <option value="codex_cli">Codex CLI</option>
+                      <option value="openai">OpenAI API</option>
+                      <option value="deepseek">DeepSeek API</option>
+                      <option value="doubao">Doubao API</option>
+                      <option value="gemini">Gemini API</option>
+                    </select>
+                  </label>
+                  <p id="llmCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
+                  <div id="llmApiFields" class="provider-fields" hidden>
+                    <label for="llmModel">
+                      <span data-i18n="llmModel">Model</span>
+                      <input id="llmModel" placeholder="gpt-4.1">
+                    </label>
+                    <label for="llmBaseUrl">
+                      <span data-i18n="llmBaseUrl">Base URL</span>
+                      <input id="llmBaseUrl" placeholder="https://api.openai.com/v1">
+                    </label>
+                    <label for="llmApiKey">
+                      <span data-i18n="llmApiKey">API Key</span>
+                      <input id="llmApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the existing key" data-i18n-placeholder="llmKeyPlaceholder">
+                    </label>
+                    <label class="config-checkbox" for="llmSupportsImages">
+                      <input id="llmSupportsImages" type="checkbox">
+                      <span data-i18n="llmSupportsImages">This model accepts image input</span>
+                    </label>
+                    <p id="llmApiHint" hidden></p>
+                  </div>
+                </section>
+              </section>
+              <section id="configPaneAccess" class="config-pane" role="tabpanel" aria-labelledby="configTabAccess" data-config-pane-panel="access" hidden>
+                <section class="config-section">
+                  <h3 data-i18n="browserPermissions">Browser permissions</h3>
+                  <div class="permission-row">
+                    <p id="permissionStatus" data-i18n="micChecking">Checking microphone permission...</p>
+                    <button id="permissionRequest" class="secondary-button" type="button" data-i18n="requestMicPermission">Request microphone permission</button>
+                  </div>
+                  <p id="permissionHelp"></p>
+                </section>
+                <section class="config-section">
+                  <h3 data-i18n="mobileHttps">Mobile HTTPS</h3>
+                  <p data-i18n="mobileHttpsIntro">The controller generates a local root certificate and LAN HTTPS address. Install and trust the certificate before using voice on a phone.</p>
+                  <p><span data-i18n="httpsAddressLabel">HTTPS address: </span><a id="httpsAccessUrl" href="#"></a></p>
+                  <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer" data-i18n="downloadCaFile">Download Blockwright local root certificate</a></p>
+                  <p data-i18n="iosCaHelp">On iPhone/iPad, open the certificate link in Safari. Install the downloaded profile from Settings, then enable full trust in Certificate Trust Settings.</p>
+                  <p data-i18n="androidCaHelp">On Android, saving through Files by Google or the file manager only downloads the certificate. Install it manually from Security or Privacy &gt; Encryption and credentials &gt; Install certificate &gt; CA certificate.</p>
+                  <p data-i18n="androidCaReminder">Android usually will not prompt again after the file is saved. Manually install the CA certificate, then reopen the HTTPS address and request microphone permission.</p>
+                </section>
+              </section>
+              <section id="configPaneIntegrations" class="config-pane" role="tabpanel" aria-labelledby="configTabIntegrations" data-config-pane-panel="integrations" hidden>
+                <section class="config-section">
+                  <h3>Element/Matrix</h3>
+                  <label class="config-checkbox" for="matrixEnabled">
+                    <input id="matrixEnabled" type="checkbox" checked>
+                    <span data-i18n="matrixEnabled">Enable Element/Matrix</span>
+                  </label>
+                  <label for="matrixHomeserver">
+                    <span data-i18n="matrixHomeserver">Matrix homeserver URL</span>
+                    <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
+                  </label>
+                  <label for="matrixAccessToken">
+                    <span>Matrix Access Token</span>
+                    <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="Leave blank to keep the existing token" data-i18n-placeholder="matrixTokenPlaceholder">
+                  </label>
+                  <label for="matrixAllowedSender">
+                    <span data-i18n="matrixAllowedSender">Matrix user allowed to send commands</span>
+                    <input id="matrixAllowedSender" placeholder="@user:matrix.org">
+                  </label>
+                  <label class="config-checkbox" for="matrixAllowOwn">
+                    <input id="matrixAllowOwn" type="checkbox" checked>
+                    <span data-i18n="matrixAllowOwn">Allow a personal token to handle your own messages</span>
+                  </label>
+                  <label class="config-checkbox" for="matrixAutoJoin">
+                    <input id="matrixAutoJoin" type="checkbox" checked>
+                    <span data-i18n="matrixAutoJoin">Auto-join invited rooms</span>
+                  </label>
+                </section>
+              </section>
             </div>
-            <p data-i18n="languageHelp">Choose the language used by this browser. New browsers follow the browser language first.</p>
-          </section>
-          <section class="config-section">
-            <h3 data-i18n="player">Player</h3>
-            <label for="username">
-              <span data-i18n="minecraftUsername">Minecraft username</span>
-              <input id="username" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
-            </label>
-            <p data-i18n="playerHelp">Chat and voice commands are sent to this Minecraft player.</p>
-          </section>
-          <section class="config-section">
-            <h3>Controller</h3>
-            <label for="controllerToken">
-              <span>Controller Token</span>
-              <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
-            </label>
-          </section>
-          <section class="config-section">
-            <h3 data-i18n="llmSettings">AI model</h3>
-            <label for="llmProvider">
-              <span data-i18n="llmProvider">Model mode</span>
-              <select id="llmProvider">
-                <option value="codex_cli">Codex CLI</option>
-                <option value="openai">OpenAI API</option>
-                <option value="deepseek">DeepSeek API</option>
-                <option value="doubao">Doubao API</option>
-                <option value="gemini">Gemini API</option>
-              </select>
-            </label>
-            <p id="llmCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
-            <div id="llmApiFields" class="provider-fields" hidden>
-              <label for="llmModel">
-                <span data-i18n="llmModel">Model</span>
-                <input id="llmModel" placeholder="gpt-4.1">
-              </label>
-              <label for="llmBaseUrl">
-                <span data-i18n="llmBaseUrl">Base URL</span>
-                <input id="llmBaseUrl" placeholder="https://api.openai.com/v1">
-              </label>
-              <label for="llmApiKey">
-                <span data-i18n="llmApiKey">API Key</span>
-                <input id="llmApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the existing key" data-i18n-placeholder="llmKeyPlaceholder">
-              </label>
-              <label class="config-checkbox" for="llmSupportsImages">
-                <input id="llmSupportsImages" type="checkbox">
-                <span data-i18n="llmSupportsImages">This model accepts image input</span>
-              </label>
-              <p id="llmApiHint" hidden></p>
+          </div>
+          <div class="config-footer">
+            <div id="configStatus" class="config-status"></div>
+            <div class="config-actions">
+              <button id="configSave" type="submit" data-i18n="saveConfig">Save configuration</button>
+              <button id="configClose" class="secondary-button" type="button" data-i18n="backToChat">Back to chat</button>
             </div>
-          </section>
-          <section class="config-section">
-            <h3 data-i18n="browserPermissions">Browser permissions</h3>
-            <div class="permission-row">
-              <p id="permissionStatus" data-i18n="micChecking">Checking microphone permission...</p>
-              <button id="permissionRequest" class="secondary-button" type="button" data-i18n="requestMicPermission">Request microphone permission</button>
-            </div>
-            <p id="permissionHelp"></p>
-          </section>
-          <section class="config-section">
-            <h3 data-i18n="mobileHttps">Mobile HTTPS</h3>
-            <p data-i18n="mobileHttpsIntro">The controller generates a local root certificate and LAN HTTPS address. Install and trust the certificate before using voice on a phone.</p>
-            <p><span data-i18n="httpsAddressLabel">HTTPS address: </span><a id="httpsAccessUrl" href="#"></a></p>
-            <p><a id="caDownloadLink" href="/web/blockwright-local-root-ca.cer" data-i18n="downloadCaFile">Download Blockwright local root certificate</a></p>
-            <p data-i18n="iosCaHelp">On iPhone/iPad, open the certificate link in Safari. Install the downloaded profile from Settings, then enable full trust in Certificate Trust Settings.</p>
-            <p data-i18n="androidCaHelp">On Android, saving through Files by Google or the file manager only downloads the certificate. Install it manually from Security or Privacy &gt; Encryption and credentials &gt; Install certificate &gt; CA certificate.</p>
-            <p data-i18n="androidCaReminder">Android usually will not prompt again after the file is saved. Manually install the CA certificate, then reopen the HTTPS address and request microphone permission.</p>
-          </section>
-          <section class="config-section">
-            <h3>Element/Matrix</h3>
-            <label class="config-checkbox" for="matrixEnabled">
-              <input id="matrixEnabled" type="checkbox" checked>
-              <span data-i18n="matrixEnabled">Enable Element/Matrix</span>
-            </label>
-            <label for="matrixHomeserver">
-              <span data-i18n="matrixHomeserver">Matrix homeserver URL</span>
-              <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
-            </label>
-            <label for="matrixAccessToken">
-              <span>Matrix Access Token</span>
-              <input id="matrixAccessToken" type="password" autocomplete="off" placeholder="Leave blank to keep the existing token" data-i18n-placeholder="matrixTokenPlaceholder">
-            </label>
-            <label for="matrixAllowedSender">
-              <span data-i18n="matrixAllowedSender">Matrix user allowed to send commands</span>
-              <input id="matrixAllowedSender" placeholder="@user:matrix.org">
-            </label>
-            <label class="config-checkbox" for="matrixAllowOwn">
-              <input id="matrixAllowOwn" type="checkbox" checked>
-              <span data-i18n="matrixAllowOwn">Allow a personal token to handle your own messages</span>
-            </label>
-            <label class="config-checkbox" for="matrixAutoJoin">
-              <input id="matrixAutoJoin" type="checkbox" checked>
-              <span data-i18n="matrixAutoJoin">Auto-join invited rooms</span>
-            </label>
-          </section>
-          <div id="configStatus" class="config-status"></div>
-          <div class="config-actions">
-            <button id="configSave" type="submit" data-i18n="saveConfig">Save configuration</button>
-            <button id="configClose" class="secondary-button" type="button" data-i18n="backToChat">Back to chat</button>
           </div>
         </form>
       </div>
@@ -1407,6 +1545,8 @@
     const configClose = document.getElementById('configClose');
     const configStatus = document.getElementById('configStatus');
     const configSave = document.getElementById('configSave');
+    const configTabs = [...document.querySelectorAll('[data-config-pane]')];
+    const configPanes = [...document.querySelectorAll('[data-config-pane-panel]')];
     const permissionStatus = document.getElementById('permissionStatus');
     const permissionRequest = document.getElementById('permissionRequest');
     const permissionHelp = document.getElementById('permissionHelp');
@@ -1505,7 +1645,16 @@
         modelSetupOpenSettings: '完整设置',
         backToChat: '返回聊天',
         settings: '设置',
-        settingsIntro: '聊天接入和浏览器权限都在这里处理。',
+        settingsIntro: '配置按用途分组，可通过分组按钮快速切换。',
+        settingsSections: '设置分组',
+        settingsGeneral: '常规',
+        settingsGeneralHelp: '语言、玩家和 controller token。',
+        settingsModel: 'AI 模型',
+        settingsModelHelp: '模型提供方、模型名、Base URL 和 key。',
+        settingsAccess: '访问权限',
+        settingsAccessHelp: '麦克风权限和手机 HTTPS。',
+        settingsIntegrations: '聊天接入',
+        settingsIntegrationsHelp: 'Matrix 和后续聊天连接器。',
         llmSettings: 'AI 模型',
         llmProvider: '模型模式',
         llmCodexHelp: 'Codex CLI 使用 controller 上配置的命令，这个模式不需要在这里填写 API Key。',
@@ -1671,7 +1820,16 @@
         modelSetupOpenSettings: 'Full settings',
         backToChat: 'Back to chat',
         settings: 'Settings',
-        settingsIntro: 'Chat integrations and browser permissions are configured here.',
+        settingsIntro: 'Configuration is grouped by area. Use the section tabs to switch.',
+        settingsSections: 'Settings sections',
+        settingsGeneral: 'General',
+        settingsGeneralHelp: 'Language, player, and controller token.',
+        settingsModel: 'AI model',
+        settingsModelHelp: 'Provider, model, base URL, and key.',
+        settingsAccess: 'Access',
+        settingsAccessHelp: 'Microphone permission and mobile HTTPS.',
+        settingsIntegrations: 'Integrations',
+        settingsIntegrationsHelp: 'Matrix and future chat connectors.',
         llmSettings: 'AI model',
         llmProvider: 'Model mode',
         llmCodexHelp: 'Codex CLI uses the command configured on the controller. API keys are not needed for this mode.',
@@ -2012,6 +2170,9 @@
     });
     languageButtons.forEach((button) => {
       button.addEventListener('click', () => setLanguage(button.dataset.language));
+    });
+    configTabs.forEach((button) => {
+      button.addEventListener('click', () => setConfigPane(button.dataset.configPane, true));
     });
     llmProvider.addEventListener('change', () => {
       rememberCurrentLlmProviderFields(lastLlmProvider);
@@ -2378,12 +2539,19 @@
       const matrixAccessTokenValue = matrixAccessToken.value.trim();
       const allowedSender = matrixAllowedSender.value.trim();
       if (!token) {
+        setConfigPane('general');
         setConfigStatus(t('configTokenRequired'), true);
         controllerToken.focus();
         return;
       }
       if (normalizeLlmProvider(llmProvider.value) !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
+        setConfigPane('model');
         setConfigStatus(t('llmConfigRequired'), true);
+        if (!llmModel.value.trim()) {
+          llmModel.focus();
+        } else {
+          llmBaseUrl.focus();
+        }
         return;
       }
       const shouldSaveMatrix = matrixEnabled.checked
@@ -2391,7 +2559,13 @@
         || allowedSender
         || localStorage.getItem('bw.matrixEnabled') === '0';
       if (matrixEnabled.checked && (!homeserver || !allowedSender)) {
+        setConfigPane('integrations');
         setConfigStatus(t('matrixRequired'), true);
+        if (!homeserver) {
+          matrixHomeserver.focus();
+        } else {
+          matrixAllowedSender.focus();
+        }
         return;
       }
 
@@ -2543,14 +2717,32 @@
       }
     }
 
+    function setConfigPane(pane, focusTab = false) {
+      const target = configPanes.some((panel) => panel.dataset.configPanePanel === pane) ? pane : 'general';
+      configTabs.forEach((button) => {
+        const isActive = button.dataset.configPane === target;
+        button.setAttribute('aria-selected', String(isActive));
+        button.classList.toggle('is-active', isActive);
+        button.tabIndex = isActive ? 0 : -1;
+        if (focusTab && isActive) {
+          button.focus();
+        }
+      });
+      configPanes.forEach((panel) => {
+        panel.hidden = panel.dataset.configPanePanel !== target;
+      });
+    }
+
     function openConfigPage(options = {}) {
       clearConfigStatus();
       configPage.hidden = false;
       refreshMicrophonePermission(true);
       if (options && options.focusLlm === true) {
+        setConfigPane('model');
         llmProvider.scrollIntoView({block: 'center'});
         llmProvider.focus();
       } else {
+        setConfigPane('general');
         configBack.focus();
       }
     }
