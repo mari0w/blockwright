@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我给 5 岁女儿做了一个 Minecraft AI 模组</title>
+  <meta name="description" content="Blockwright 知乎推广文章：从 5 岁女儿不会认字但会说需求的真实场景出发，介绍用语音和自然语言操作 Minecraft Java 版。">
+  <meta property="og:title" content="我给 5 岁女儿做了一个 Minecraft AI 模组">
+  <meta property="og:description" content="Blockwright 把自然语言和语音变成 Minecraft Java 版里的真实操作，支持 Fabric、本地 Web、语音、构建记录和校验。">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mari0w.github.io/blockwright/articles/blockwright-zhihu-final.zh-CN.html">
+  <meta property="og:site_name" content="Blockwright">
+  <meta property="og:image" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <meta property="og:image:secure_url" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="我给 5 岁女儿做了一个 Minecraft AI 模组">
+  <meta name="twitter:description" content="Blockwright 把自然语言和语音变成 Minecraft Java 版里的真实操作，支持 Fabric、本地 Web、语音、构建记录和校验。">
+  <meta name="twitter:image" content="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png">
+  <link rel="icon" href="../assets/social-preview.png">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --line: #d8dee4;
+      --panel: #f6f8fa;
+      --accent: #0969da;
+      --max: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.78;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .brand {
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 32px 0 72px;
+    }
+
+    .copy-tools {
+      margin: 0 0 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .copy-tools p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    button {
+      border: 1px solid #1f883d;
+      border-radius: 6px;
+      background: #1f883d;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 8px 12px;
+      white-space: nowrap;
+    }
+
+    button:focus-visible {
+      outline: 3px solid rgba(9, 105, 218, .25);
+      outline-offset: 2px;
+    }
+
+    article {
+      font-size: 17px;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      font-size: clamp(34px, 6vw, 52px);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 42px 0 12px;
+      font-size: 28px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    p,
+    li {
+      color: var(--text);
+      font-size: 17px;
+    }
+
+    ul {
+      padding-left: 1.35em;
+    }
+
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 22px 0 28px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px 16px;
+      white-space: pre-wrap;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", "PingFang SC", monospace;
+      font-size: .95em;
+    }
+
+    strong {
+      font-weight: 800;
+    }
+
+    .copy-status {
+      min-width: 72px;
+      color: #1f883d;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../index.zh-CN.html">Blockwright</a>
+      <nav class="links" aria-label="文章导航">
+        <a href="../index.zh-CN.html">首页</a>
+        <a href="../blog.zh-CN.html">文章</a>
+        <a href="blockwright-zhihu-final.zh-CN.md">Markdown</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="copy-tools">
+      <p>适合从网页复制到知乎的文章页。按钮只复制正文区域。</p>
+      <div>
+        <button type="button" id="copyArticle">复制文章</button>
+        <span class="copy-status" id="copyStatus" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <article id="articleBody">
+      <h1>我给 5 岁女儿做了一个 Minecraft AI 模组：她不会认字，也能开口玩我的世界</h1>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png" alt="孩子通过语音和 Minecraft 风格方块世界互动">
+
+      <p>我最近在做一个 Minecraft Java 版模组，名字叫 <strong>Blockwright</strong>。</p>
+
+      <p>它的起源很简单，不是什么宏大的 AI 改造游戏计划，而是我 5 岁的女儿。</p>
+
+      <p>她很喜欢玩《我的世界》，也知道很多东西应该怎么说。比如她知道自己想要火把、床、玻璃、门，也知道想让世界变成白天，或者想让旁边出现一个小房子。</p>
+
+      <p>但问题是，她识字不多。</p>
+
+      <p>Minecraft 里很多道具、菜单、命令和操作，对成年人来说只是“找一下”“搜一下”“输一下”，对一个 5 岁小朋友来说就不一样了。她可能知道“我要火把”，但不认识物品栏里的字；知道“我要盖房子”，但不知道从哪里开始；知道“我想把这里改一下”，但不知道应该怎么表达成游戏里的操作。</p>
+
+      <p>所以我当时想，既然她已经会说，能不能让 Minecraft 也听她说？</p>
+
+      <p>这就是 Blockwright 最早的想法：<strong>把自然语言和语音，变成 Minecraft 里的真实操作。</strong></p>
+
+      <h2>它不是一个“聊天机器人”</h2>
+
+      <p>Blockwright 装好之后，玩家可以通过几种方式发需求：</p>
+
+      <ul>
+        <li>在 Minecraft 聊天栏输入 <code>/bw ...</code></li>
+        <li>打开本地或局域网 Web 页面打字</li>
+        <li>在 Web 页面按住麦克风说话</li>
+        <li>接入 Element/Matrix、钉钉或本地脚本等聊天入口</li>
+      </ul>
+
+      <p>比如可以直接说：</p>
+
+      <pre><code>给我一组火把
+把时间调到白天
+不要下雨了
+帮我盖一个有窗户、床和灯的小木屋
+把我面前这面墙换成石砖</code></pre>
+
+      <p>对孩子来说，重点不是“AI 很厉害”，而是她终于不用先认识所有道具名字、菜单文字和命令格式，才能表达自己想做什么。</p>
+
+      <p>她可以先说“给我火把”，拿到火把之后再自己去插；也可以说“帮我盖一个小房子”，然后在 AI 搭出来的基础上继续改，拆一点、加一点、换材料、装饰一下。</p>
+
+      <p>这比直接生成一个完整作品更有意思。孩子不是被 AI 替代，而是多了一个能帮忙准备材料、搭基础、做重复操作的助手。</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-voice-web.png" alt="本地网页语音入口连接到 Minecraft 风格世界">
+
+      <h2>我最看重的几个场景</h2>
+
+      <p>第一个是 <strong>找物品和给物品</strong>。</p>
+
+      <p>小朋友经常知道自己想要什么，但不会在创造模式物品栏里搜索。Blockwright 可以把“给我一把钻石剑”“给我一些玻璃”“给我一张床”变成实际的物品发放，并尽量让物品出现在玩家主手可见的位置。</p>
+
+      <p>第二个是 <strong>常见世界操作</strong>。</p>
+
+      <p>比如白天、晴天、夜视、创造模式、传送、效果、经验、召唤等，本质上都可以通过 Minecraft 命令完成，但普通玩家没必要记命令格式。用自然语言说出来会更顺手。</p>
+
+      <p>第三个是 <strong>建筑起步</strong>。</p>
+
+      <p>很多人玩 Minecraft 的时候，不是不想建，而是不知道第一步怎么下手。Blockwright 可以先搭一个能玩的结构：地板、墙、屋顶、入口、两格高室内空间、床、照明、窗户和可达路径。玩家再基于这个结构继续二次创作。</p>
+
+      <p>第四个是 <strong>继续修改</strong>。</p>
+
+      <p>比如先说：</p>
+
+      <pre><code>帮我盖一个小木屋</code></pre>
+
+      <p>再接着说：</p>
+
+      <pre><code>把屋顶加高一点
+多加几扇窗
+里面放一张床和几盏灯
+把这面墙换成石砖</code></pre>
+
+      <p>这种交互更接近真实建造过程。先有一个雏形，然后边看边改。</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-give-item.png" alt="语音请求变成玩家手里的火把">
+
+      <h2>为什么我把它做成局域网 Web 端</h2>
+
+      <p>我自己的使用方式是本地 Minecraft 世界加局域网 Web 页面。</p>
+
+      <p>在游戏里输入：</p>
+
+      <pre><code>/bw web</code></pre>
+
+      <p>就可以打开 Blockwright 的 Web 地址。本机一般是：</p>
+
+      <pre><code>http://127.0.0.1:8765/web</code></pre>
+
+      <p>局域网里也可以让手机、平板或另一台电脑访问对应地址。这样小朋友可以不切出游戏，也可以用旁边的设备按住麦克风说话。</p>
+
+      <p>这个设计对家庭场景很实用：Minecraft 还在原来的存档里跑，不需要把地图搬到一台专门的 Paper 服务器，也不需要孩子理解什么是命令行、API key 或后端服务。</p>
+
+      <p>Blockwright 的主安装方式是 <strong>Fabric 模组</strong>，面向 Minecraft Java Edition 1.21.x、单人存档和局域网开放世界。Paper 插件也保留着，但主要给独立服务器场景使用。</p>
+
+      <h2>它背后的工作流</h2>
+
+      <p>Blockwright 大致分成两部分：</p>
+
+      <ul>
+        <li>Minecraft 侧的 Fabric 模组负责读取玩家状态、扫描附近方块、发物品、放置方块、执行命令和回写结果。</li>
+        <li>本地 controller 负责 Web 页面、模型配置、任务队列、蓝图、构建记录、MCP 工具和 AI 规划。</li>
+      </ul>
+
+      <p>我没有把它做成一个“AI 随便执行命令”的黑盒。尤其是建筑任务，它会先保存蓝图和构建记录，再把同一份方块清单交给 Minecraft 执行端。执行端放置后还会逐块读取世界状态，生成校验报告。</p>
+
+      <p>简单说就是：<strong>自然语言进来，受控动作出去，结果还能检查。</strong></p>
+
+      <p>这对我来说很重要。因为 Minecraft 不是一张图片，最终是否成功，要看世界里方块真的有没有被放对、物品有没有真的到玩家手上、命令有没有真的执行。</p>
+
+      <img src="https://mari0w.github.io/blockwright/assets/zhihu-blockwright-build-iteration.png" alt="Minecraft 风格小木屋从 AI 起步结构变成玩家二次创作建筑">
+
+      <h2>当前支持什么</h2>
+
+      <p>目前 Blockwright 支持的入口包括：</p>
+
+      <ul>
+        <li>Minecraft 内 <code>/bw</code> 命令</li>
+        <li>本地 Web 文字聊天</li>
+        <li>Web 语音输入</li>
+        <li>Element/Matrix</li>
+        <li>钉钉机器人</li>
+        <li>本地命令或自定义脚本入口</li>
+      </ul>
+
+      <p>支持的主要能力包括：</p>
+
+      <ul>
+        <li>读取玩家状态：主手、副手、快捷栏、背包</li>
+        <li>扫描玩家附近世界方块</li>
+        <li>发放物品，并尽量切到玩家主手可见位置</li>
+        <li>调整时间、天气、效果、模式等命令类操作</li>
+        <li>通过蓝图放置建筑</li>
+        <li>基于已有构建记录继续改造</li>
+        <li>保存蓝图和构建记录</li>
+        <li>执行后回写校验报告</li>
+      </ul>
+
+      <p>支持的模型后端包括：</p>
+
+      <ul>
+        <li>Codex CLI</li>
+        <li>OpenAI</li>
+        <li>DeepSeek</li>
+        <li>豆包 Doubao</li>
+        <li>Gemini</li>
+      </ul>
+
+      <h2>它现在还不是“万能 Minecraft AI”</h2>
+
+      <p>我不想把它宣传成万能工具。</p>
+
+      <p>Blockwright 现在更适合这些场景：</p>
+
+      <ul>
+        <li>孩子或新手用语音、文字完成常见操作</li>
+        <li>创造模式里快速拿材料、调环境、做建筑起步</li>
+        <li>单人存档或局域网开放世界里的本地助手</li>
+        <li>想把 Minecraft 接到 Web、语音或聊天工具里的玩家和服主</li>
+        <li>需要可记录、可校验的 Minecraft AI 执行链路的开发者</li>
+      </ul>
+
+      <p>它还在持续迭代。比如更复杂的建筑改造、撤销/回滚、图片到蓝图、更清晰的异常报告，这些都还可以继续做。</p>
+
+      <p>但对我女儿来说，最早那个问题已经被解决了一部分：她可以不用先学会所有字和所有命令，也能更自然地表达“我想要什么”。</p>
+
+      <p>这就是我觉得它有价值的地方。</p>
+
+      <h2>项目地址</h2>
+
+      <p>Blockwright 已经开源：</p>
+
+      <p>GitHub：<a href="https://github.com/mari0w/blockwright">https://github.com/mari0w/blockwright</a></p>
+
+      <p>如果你也在玩 Minecraft Java 版，或者你家里也有一个很会说、但还不太会认字的小玩家，可以试试看这个方向。</p>
+
+      <p>对我来说，Blockwright 不是为了让 AI 替孩子玩游戏，而是希望它能像一个懂 Minecraft 的小助手：帮她拿到道具、搭起第一面墙、点亮房间，然后把真正有创造力的部分留给她自己。</p>
+    </article>
+  </main>
+
+  <script>
+    const button = document.getElementById("copyArticle");
+    const status = document.getElementById("copyStatus");
+    const article = document.getElementById("articleBody");
+
+    button.addEventListener("click", async () => {
+      try {
+        const html = article.innerHTML;
+        const text = article.innerText;
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([html], { type: "text/html" }),
+              "text/plain": new Blob([text], { type: "text/plain" })
+            })
+          ]);
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(article);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.execCommand("copy");
+          selection.removeAllRanges();
+        }
+        status.textContent = "已复制";
+      } catch (error) {
+        status.textContent = "请手动选择复制";
+      }
+    });
+  </script>
+</body>
+</html>
