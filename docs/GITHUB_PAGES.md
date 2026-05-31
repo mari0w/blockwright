@@ -40,7 +40,7 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 
 ## README and Website Roles
 
-- `README.md`: English default overview for GitHub visitors, with quick start, Fabric installation, API examples, and test commands.
+- `README.md`: English default overview for GitHub visitors, with product positioning, supported models, command entrances, Fabric installation, and operation patterns.
 - `README.zh-CN.md`: Chinese README for Chinese readers.
 - `docs/index.html`: public project website for GitHub Pages, defaulting to English with an English/Chinese language switch.
 - `docs/user/JAVA_FABRIC_INSTALL.md`: detailed installation guide, linked from both README and the website.
@@ -52,7 +52,7 @@ The repository currently includes website and promotional assets:
 
 - `docs/assets/web-chat-mobile-preview.png`: mobile `/web` chat screenshot for tutorials and social posts.
 - `docs/assets/hero-ai-assistant.jpg`: generated wide hero background used by the website landing page.
-- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot for tutorials and intro-article UI examples.
+- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot for tutorials and product overview pages.
 - `docs/assets/web-model-provider-dropdown.png`: supported AI model dropdown screenshot.
 - `docs/assets/architecture-flow.svg`: English architecture diagram for the default website language.
 - `docs/assets/architecture-flow.zh-CN.svg`: Chinese architecture diagram used when the website language is switched to Chinese.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Blockwright social preview</title>
-  <desc id="desc">GitHub social preview for Blockwright, a Minecraft Java Edition AI assistant.</desc>
+  <desc id="desc">GitHub social preview for Blockwright, a production-oriented Minecraft Java Edition AI control layer.</desc>
   <defs>
     <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#07100c" stop-opacity="0.98"/>
@@ -27,16 +27,16 @@
   <rect width="1200" height="630" fill="url(#shade)"/>
   <rect width="1200" height="630" fill="url(#bottom)"/>
   <g transform="translate(78 105)">
-    <text x="0" y="0" class="eyebrow">Minecraft Java Edition AI assistant</text>
+    <text x="0" y="0" class="eyebrow">Production AI control</text>
     <text x="0" y="96" class="title">Blockwright</text>
-    <text x="4" y="158" class="subtitle">Controlled tools for real</text>
-    <text x="4" y="207" class="subtitle">Minecraft actions</text>
+    <text x="4" y="158" class="subtitle">Minecraft Java Edition</text>
+    <text x="4" y="207" class="subtitle">Commands, tools, records, verification</text>
     <g transform="translate(4 260)">
       <rect width="226" height="52" rx="8" fill="url(#green)"/>
-      <text x="22" y="34" class="tag">Fabric first</text>
+      <text x="22" y="34" class="tag">Fabric mod</text>
       <rect x="244" width="184" height="52" rx="8" fill="#e7b15d"/>
-      <text x="266" y="34" class="tag">MCP tools</text>
+      <text x="266" y="34" class="tag">AI models</text>
     </g>
-    <text x="4" y="382" class="small">World scans | Action queue | Build records | Verification</text>
+    <text x="4" y="382" class="small">World context | Command ops | Build records | Verification</text>
   </g>
 </svg>

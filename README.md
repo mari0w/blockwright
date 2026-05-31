@@ -17,7 +17,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Blockwright is an AI assistant for Minecraft Java Edition players. After installing the Fabric mod, you can describe what you want in natural language and let the assistant use controlled tools to read player and world state, run supported Minecraft actions, place or edit blocks, and verify the result.
+Blockwright is a production-oriented AI control layer for Minecraft Java Edition. After installing the Fabric mod, players and operators can describe an intent in natural language and let the assistant use controlled tools to read player and world state, run supported Minecraft command operations, place or edit blocks, manage build records, and verify the result.
 
 You can type on the Web page, hold the microphone button to talk, use the in-game `/bw` command, or connect chat tools such as Element/Matrix and DingTalk.
 
@@ -68,7 +68,7 @@ You can change it later from **Player > Minecraft username** in the Web settings
 
 ### 5. Choose an AI Model
 
-Open the Web settings and choose **AI model**. Blockwright currently supports:
+Open the Web settings and choose **AI model**. Supported model backends:
 
 - Codex CLI
 - OpenAI
@@ -80,13 +80,13 @@ After choosing a model and completing the settings shown on the page, you can st
 
 ### 6. Send Requests
 
-You can use three common entry points:
+Supported request entrances:
 
 - Type in the Web page.
 - Click the microphone button on the Web page, hold to talk, and release to send.
 - Type `/bw ...` in Minecraft chat.
 
-Examples:
+Supported request patterns:
 
 ```text
 /bw scan what I am looking at and tell me what block it is
@@ -116,7 +116,7 @@ Examples:
 
 - Players who want to control Minecraft with an AI assistant instead of memorizing every command.
 - Server owners or operators who want to connect Minecraft to Web, voice, or chat tools.
-- Anyone who wants to try AI-assisted Minecraft building and gameplay.
+- Teams and players that need an AI-operated Minecraft control layer with auditable execution.
 
 ## License
 

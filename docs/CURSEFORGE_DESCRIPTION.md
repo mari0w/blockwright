@@ -1,43 +1,43 @@
 # Blockwright
 
-**Talk to your Minecraft world. Let it answer with action.**
+**AI control for Minecraft Java Edition. Natural language in, verified world actions out.**
 
-Blockwright is an in-game assistant for Minecraft Java Edition that turns natural language into real gameplay actions. Use `/bw` in chat to ask for items, run commands, inspect the world around you, change time or weather, and create or edit builds while you play.
+Blockwright is a production-oriented Minecraft AI assistant for Java Edition. Use `/bw`, the local Web console, voice input, or connected chat tools to turn natural-language requests into controlled Minecraft operations.
 
-Instead of stopping to look up command syntax or switching between tools, describe what you want in plain language and let Blockwright handle the next step inside your world.
+The Fabric mod connects the game to a local controller. The controller handles model configuration, planning, tool selection, build records, task queues, and verification reports. The Minecraft-side mod performs the actual world actions through server-side APIs.
 
 ## What You Can Do
 
-- Ask for items and equipment
-- Change time, weather, game mode, or other command-driven gameplay details
-- Build simple structures from natural-language requests
-- Edit existing builds after scanning the nearby world
-- Check player and world context before taking action
-- Use a local web UI to configure the assistant and model provider
-- Keep building tasks tracked with blueprints, build records, and execution checks
+- Read player and world context, including inventory, held items, and nearby blocks
+- Run supported Minecraft command operations such as items, time, weather, effects, and mode changes
+- Build and edit structures through blueprint-backed placement
+- Save build records before execution and verify placed blocks afterward
+- Configure model backends from the local Web console
+- Route requests from `/bw`, Web text, Web voice, Matrix/DingTalk, or local scripts
 
-## Example Requests
+## Supported Request Patterns
 
 ```text
 /bw give me a diamond sword
 /bw make it daytime
 /bw clear the weather
-/bw build me a small wooden cabin
+/bw build a wooden cabin with windows, a bed, lights, and a reachable entrance
 /bw replace the windows of this house with blue glass
 /bw give me night vision
 ```
 
 ## Why Blockwright?
 
-Minecraft commands are powerful, but they are not always easy to remember while you are playing. Blockwright makes that power feel more natural: you ask for the outcome, and the assistant turns it into a controlled in-game action.
+Minecraft commands and world edits are powerful, but they are not always ergonomic while players are building or operating a world. Blockwright provides a controlled assistant layer: the user describes the desired outcome, the model selects supported tools, and Minecraft executes the action through the mod.
 
-It is especially useful for:
+Primary operating scenarios:
 
-- Players who want faster creative building
+- Players who want an AI assistant that can operate Minecraft, not only answer questions
+- Operators who want Web, voice, or chat-tool entrances for Minecraft actions
 - Local worlds and LAN sessions
-- Testing command-driven ideas without memorizing every command
-- Experimenting with AI-assisted building and world interaction
-- Turning rough ideas into playable Minecraft structures
+- Creative-mode build iteration with saved records
+- Command-heavy operations that should stay conversational but auditable
+- World-aware structure editing and verification
 
 ## Built for Java Edition
 
@@ -45,11 +45,11 @@ Blockwright is designed for Minecraft Java Edition with Fabric as the main insta
 
 The Fabric mod connects your game to a local controller. The controller handles assistant planning, configuration, blueprints, task queues, and build records, while the Minecraft-side mod performs the actual world actions.
 
-## Current Status
+## Operational Profile
 
-Blockwright is early, but already usable for local experimentation. The core loop is in place: ask in game, let the assistant plan, send controlled actions to Minecraft, and track build results.
+Blockwright ships the full assistant execution loop: request intake, model-backed planning, structured tool calls, Minecraft-side execution, build records, and verification reporting.
 
-Expect rapid iteration as more building workflows, world-reading tools, and assistant behaviors are refined.
+The main installation path is Fabric for Java Edition 1.21.x, including single-player saves and LAN-opened worlds. Paper support is available for standalone server setups.
 
 ## Requirements
 

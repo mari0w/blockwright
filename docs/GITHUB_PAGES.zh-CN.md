@@ -52,7 +52,7 @@ https://mari0w.github.io/blockwright/
 
 - `docs/assets/web-chat-mobile-preview.png`：移动端 `/web` 聊天窗口截图，用于教程和社媒宣传。
 - `docs/assets/hero-ai-assistant.jpg`：生成的宽幅首页背景图，用在官网首屏。
-- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用于教程和介绍文章里的界面示例。
+- `docs/assets/web-settings-preview.png`：真实 `/web` 配置页截图，用于教程和产品概览页面。
 - `docs/assets/web-model-provider-dropdown.png`：支持的大模型下拉选项截图。
 - `docs/assets/architecture-flow.svg`：默认英文官网架构图，解释 controller、Codex/MCP 和 Fabric/Paper 执行端之间的关系。
 - `docs/assets/architecture-flow.zh-CN.svg`：切换到中文时使用的官网架构图。

@@ -1,76 +1,58 @@
-# Blockwright: an open-source AI assistant that acts inside Minecraft Java
+# Blockwright: production-oriented AI control for Minecraft Java
 
-I have been building an open-source project called **Blockwright**.
+Blockwright is an open-source AI control layer for **Minecraft Java Edition**.
 
-It is an AI assistant for **Minecraft Java Edition**, but the goal is not to make another chatbot that only talks about the game. The goal is to let players describe what they want in natural language, then have the assistant turn that request into real actions inside the Minecraft world.
+The product is built around a simple operating model: players and operators describe intent in natural language, and the assistant turns that intent into controlled Minecraft operations through the controller and the Fabric mod.
 
-The first version is focused on the local Fabric experience. After installing the mod, a player can use the in-game `/bw` command, a local Web chat page, voice input from the Web UI, or connected chat tools.
+Supported entrances:
 
-For example:
+- in-game `/bw` requests
+- local Web text chat
+- Web voice input
+- Matrix / Element rooms
+- DingTalk bot messages
+- local commands or scripts for custom integrations
+
+Supported request patterns:
 
 ```text
 /bw give me a diamond sword
 /bw scan what I am looking at
 /bw set the time to day and stop the rain
-/bw build a wooden cabin with windows, a bed, and lights
+/bw build a wooden cabin with windows, a bed, lights, and a reachable entrance
 /bw replace the wall in front of me with stone bricks
 ```
 
-These are examples, but they point to the bigger idea: Minecraft already gives players a powerful creative world, while a lot of useful actions are still command-heavy, repetitive, or slow to prototype.
+This is not just item delivery or a building prompt. Blockwright is designed as a Minecraft AI assistant that can read context, operate supported commands, place and edit blocks, save records, and report what actually happened.
 
-Reading world context, giving items, changing time, clearing rain, building the first version of a room, replacing a wall, adding lights, or modifying part of a structure are not always the most interesting part of playing. They are often the setup work before the interesting part starts.
-
-Blockwright tries to make that setup work conversational.
-
-What makes the project interesting to me is the execution loop behind it.
-
-The assistant does not just return a paragraph of advice. The controller gives it a controlled tool layer for reading game context, saving plans, enqueueing actions, and sending those actions to the Minecraft side, where the Fabric mod executes them through the server/world API.
-
-For building, that means Blockwright is not trying to fake a player moving a mouse, opening inventory slots, and right-clicking blocks. It places blocks through the world API. Blueprints use relative coordinates. Build records are saved by the controller. The Minecraft execution side can read back world state and report what was actually placed.
-
-The direction is:
+The execution loop is:
 
 ```text
 natural language request
--> structured plan
--> Minecraft execution
--> verification/reporting
+-> model-backed planning
+-> structured tool call
+-> Minecraft-side execution
+-> build record / verification report
 ```
 
-This matters because a Minecraft AI assistant should eventually be able to reason about the world, not just generate text. If it builds something, it should know what it tried to build. If it edits something, it should know what structure it is editing. If placement fails, the result should be visible in a report instead of being hidden behind a friendly message.
+For building, Blockwright places blocks through the server/world API. It does not simulate a player moving a mouse, opening inventory slots, and right-clicking blocks. Blueprints use relative coordinates, build records are saved by the controller, and the Minecraft execution side can read back world state after placement.
 
-The current feature set includes:
+Supported model backends are configured from the Web settings page:
 
-- Minecraft Java Edition 1.21.x support
-- Fabric as the main install path
-- In-game `/bw` commands
-- A local Web chat UI
-- Voice input from the Web UI
-- Multiple model backends, including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini
-- Player, inventory, held-item, and nearby-world context tools
-- Controlled game actions, including items, time, weather, effects, mode changes, and supported commands
-- Building and structure-editing workflows
-- Saved blueprints and build records
-- Server-side block placement and verification
+- Codex CLI
+- OpenAI
+- DeepSeek
+- Doubao
+- Gemini
 
-Right now, the best use cases are local worlds, LAN worlds, creative-mode testing, world-aware assistant actions, build iteration, and experimenting with AI-assisted Minecraft workflows.
+The main installation path is Fabric for Minecraft Java Edition 1.21.x, including single-player saves and LAN-opened worlds. Paper support remains available for standalone server deployments.
 
-I am intentionally starting with the local Fabric path because that is where Minecraft Java players already are. I do not want players to move a single-player world to a separate server just to try an AI assistant. The mod should fit into the way people already play.
+The main operating scenarios are local worlds, LAN worlds, creative-mode build iteration, world-aware assistant actions, Web or voice control, and chat-tool entrances for Minecraft operations.
 
-There is still a lot to improve.
-
-Existing-world editing needs to become safer and less ambiguous. Build selection needs better UX. The assistant should ask follow-up questions when the target is unclear. More actions should become structured tools instead of prompt-only behavior. The planner needs to keep getting better at Minecraft-specific details like doors, beds, lighting, paths, and block states.
-
-But the core loop is already there, and that is the part I wanted to open up early.
+The engineering focus is reliability: safer existing-world edits, clearer build selection, stronger Minecraft-specific planning around doors, beds, lighting, paths, and block states, and more first-class tools for operations that should not live only in prompt text.
 
 Blockwright is MIT licensed and open source.
 
 GitHub:
 
 https://github.com/mari0w/blockwright
-
-If you are interested in Minecraft mods, local AI agents, game automation, or open-source tooling, I would love feedback on the project.
-
-The question I keep coming back to is:
-
-What should an AI assistant inside Minecraft be able to do, once it can actually act in the world instead of only talking about it?

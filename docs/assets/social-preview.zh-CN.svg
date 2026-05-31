@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Blockwright social preview</title>
-  <desc id="desc">Blockwright 面向 Minecraft Java 版 AI 助手的 GitHub 社交预览图。</desc>
+  <desc id="desc">Blockwright 面向 Minecraft Java 版生产级 AI 控制层的 GitHub 社交预览图。</desc>
   <defs>
     <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#07100c" stop-opacity="0.98"/>
@@ -27,16 +27,16 @@
   <rect width="1200" height="630" fill="url(#shade)"/>
   <rect width="1200" height="630" fill="url(#bottom)"/>
   <g transform="translate(78 105)">
-    <text x="0" y="0" class="eyebrow">Minecraft Java 版 AI 助手</text>
+    <text x="0" y="0" class="eyebrow">生产级 AI 控制层</text>
     <text x="0" y="96" class="title">Blockwright</text>
-    <text x="4" y="158" class="subtitle">用受控工具操作真实</text>
-    <text x="4" y="207" class="subtitle">Minecraft 世界</text>
+    <text x="4" y="158" class="subtitle">Minecraft Java 版</text>
+    <text x="4" y="207" class="subtitle">命令、工具、记录、校验</text>
     <g transform="translate(4 260)">
       <rect width="226" height="52" rx="8" fill="url(#green)"/>
-      <text x="22" y="34" class="tag">Fabric 优先</text>
+      <text x="22" y="34" class="tag">Fabric 模组</text>
       <rect x="244" width="184" height="52" rx="8" fill="#e7b15d"/>
-      <text x="266" y="34" class="tag">MCP 工具</text>
+      <text x="266" y="34" class="tag">模型后端</text>
     </g>
-    <text x="4" y="382" class="small">世界扫描 | 动作队列 | 构建记录 | 结果校验</text>
+    <text x="4" y="382" class="small">世界上下文 | 命令操作 | 构建记录 | 结果校验</text>
   </g>
 </svg>

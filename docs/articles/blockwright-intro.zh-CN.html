@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Blockwright：让 Minecraft 玩家用一句话完成游戏操作</title>
-  <meta name="description" content="一篇面向玩家和发布平台的 Blockwright 介绍文章：它能做什么、怎么使用、适合哪些 Minecraft Java 版玩家。">
-  <meta property="og:title" content="Blockwright：让 Minecraft 玩家用一句话完成游戏操作">
-  <meta property="og:description" content="Blockwright 是 Minecraft Java 版 AI 助手，支持 /bw、Web、语音、Element/Matrix、钉钉和本地脚本，让助手读取上下文、执行受控动作、建造、改造并校验结果。">
+  <title>Blockwright：面向 Minecraft Java 版的生产级 AI 控制层</title>
+  <meta name="description" content="一篇面向玩家和发布平台的 Blockwright 产品概览：能力、模型、命令入口、Minecraft 执行方式和校验行为。">
+  <meta property="og:title" content="Blockwright：面向 Minecraft Java 版的生产级 AI 控制层">
+  <meta property="og:description" content="Blockwright 是面向 Minecraft Java 版的生产级 AI 控制层，支持 /bw、Web、语音、Element/Matrix、钉钉和本地脚本入口，可以读取上下文、执行命令、建造、改造、记录并校验结果。">
   <meta property="og:type" content="article">
   <meta property="og:image" content="../assets/social-preview.zh-CN.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -193,9 +193,9 @@
   </header>
 
   <main>
-    <p class="kicker">Minecraft Java 版 AI 助手</p>
-    <h1>Blockwright：让 Minecraft 玩家用一句话完成游戏操作</h1>
-    <p class="lead">这是一篇可以直接分享的介绍文章：讲清楚 Blockwright 是什么、能做什么，以及玩家如何开始使用。</p>
+    <p class="kicker">面向 Minecraft Java 版的生产级 AI 控制层</p>
+    <h1>Blockwright：面向 Minecraft Java 版的生产级 AI 控制层</h1>
+    <p class="lead">这是一篇可以直接分享的产品概览：讲清楚 Blockwright 的能力、支持的模型、命令入口和 Minecraft 执行方式。</p>
 
     <article>
       <p>如果你经常玩 Minecraft Java 版，大概会遇到这样的时刻：脑子里已经知道要做什么，但还得停下来把想法翻译成命令。</p>
@@ -207,7 +207,7 @@
         <li>想让朋友在局域网世界里也能直接通过聊天发真实需求。</li>
       </ul>
 
-      <p>Blockwright 做的事情很直接：把这些 Minecraft 需求变成自然语言指令，再让 AI 助手通过受控的 Minecraft 工具执行。</p>
+      <p>Blockwright 做的事情很直接：把这些 Minecraft 需求变成自然语言指令，再让 Minecraft AI 助手通过受控工具、命令操作、构建记录和校验报告执行。</p>
 
       <pre><code>/bw 扫描我看着的地方，告诉我这是什么方块
 /bw 把时间调到白天并停止下雨
@@ -217,7 +217,7 @@
       <p>然后 Blockwright 会把玩家的意图交给 AI 助手理解，再通过 Fabric 模组读取世界、执行动作、放置或改造方块，并返回执行结果。</p>
 
       <h2>Blockwright 是什么？</h2>
-      <p>Blockwright 是一个面向 Minecraft Java 版玩家的 AI 助手。</p>
+      <p>Blockwright 是面向 Minecraft Java 版的生产级 AI 控制层。</p>
       <p>它的主安装方式是 Fabric 模组，适合 Java 版 1.21.x、单人存档和局域网开放世界。玩家不需要把原来的地图迁移到 Paper 服务端，也不需要为了使用 AI 助手改变自己的游玩方式。</p>
       <p>装好后，你可以通过几种方式和它说话：</p>
       <ul>
@@ -228,7 +228,7 @@
         <li>通过钉钉机器人发消息</li>
         <li>通过本地命令或脚本接入其他工具</li>
       </ul>
-      <p>它不是一个只会聊天的机器人，也不只是几个固定示例动作。它的目标是给 Minecraft AI 助手一层受控工具，让它能读取、操作、建造、改造和校验世界里的真实结果。</p>
+      <p>它不只是聊天回复、发物品或建一个小建筑。Blockwright 给 Minecraft AI 助手一层受控工具，让它能读取世界上下文、执行支持的命令操作、建造、改造，并校验世界里的真实结果。</p>
 
       <h2>它能做什么？</h2>
       <p><strong>读取玩家和世界上下文。</strong> 询问手持物、查看背包，或在操作前扫描附近方块。</p>
@@ -245,7 +245,7 @@
         <li>启动 Minecraft，进入世界。</li>
         <li>在游戏聊天栏输入 <code>/bw web</code>。</li>
       </ol>
-      <p>打开显示出来的 Web 地址后，填写自己的 Minecraft 用户名，再选择一个 AI 模型。目前支持 Codex CLI、OpenAI、DeepSeek、豆包 Doubao 和 Gemini。</p>
+      <p>打开显示出来的 Web 地址后，填写自己的 Minecraft 用户名，再选择一个 AI 模型。支持的模型后端包括 Codex CLI、OpenAI、DeepSeek、豆包 Doubao 和 Gemini。</p>
 
       <h2>界面截图</h2>
       <p>这些截图可以直接用于官网、教程、X/Twitter、论坛或其他平台的介绍配图。</p>
@@ -262,24 +262,24 @@
         <figcaption>支持的大模型选项：Codex CLI、OpenAI、DeepSeek、豆包 Doubao 和 Gemini。</figcaption>
       </figure>
 
-      <h2>为什么这件事有意思？</h2>
+      <h2>为什么这件事重要？</h2>
       <p>Minecraft 的魅力在于自由创造，但很多重复操作本质上只是准备工作或命令语法。</p>
-      <p>读取附近状态、拿物品、调时间、清雨、搭一个房间、替换一片墙、给房间补灯，这些事情都很常见。Blockwright 想做的是把这些操作变成和助手的一段对话，让玩家把注意力放回正在创造的世界。</p>
+      <p>读取附近状态、拿物品、调时间、清雨、搭一个房间、替换一片墙、给房间补灯，这些事情都很常见。Blockwright 把这些操作变成一套受控的助手工作流，让玩家和运营把注意力放回正在创造的世界，同时保留明确、可追踪的执行过程。</p>
 
       <h2>一眼看懂</h2>
-      <p>Blockwright 不是要替你玩 Minecraft。</p>
-      <p>它更像一个能听懂自然语言、也能调用受控工具的 Minecraft 助手：你负责提出想法，它负责把一部分重复、繁琐、命令化的操作变成游戏里的实际动作。</p>
+      <p>Blockwright 是一个能听懂自然语言、也能调用受控工具的 Minecraft AI 助手：你提出操作意图，它把重复、繁琐、命令化的工作变成游戏里的实际动作。</p>
+      <p>它面向 AI 操作 Minecraft 的工作流：读取上下文、执行支持动作、建造、改造、记录，并校验结果。</p>
 
       <section class="share-box">
         <h2>适合 X/Twitter 的短版</h2>
-        <p>我在做一个叫 Blockwright 的 Minecraft Java 版 AI 助手。</p>
+        <p>Blockwright 是面向 Minecraft Java 版的生产级 AI 控制层。</p>
         <p>装好 Fabric 模组后，玩家可以直接在游戏里输入：</p>
         <pre><code>/bw 给我一把钻石剑
 /bw 扫描我看着的地方
 /bw 帮我盖一个有灯和床的小屋
 /bw 把这面墙换成石砖</code></pre>
         <p>它支持 Web 文字、语音、游戏内 <code>/bw</code>、Element/Matrix、钉钉机器人，也支持 Codex CLI、OpenAI、DeepSeek、豆包和 Gemini。</p>
-        <p>目标不是替你玩 Minecraft，而是让 AI 助手通过受控工具操作 Minecraft：读取上下文、执行支持动作、建造、改造，并校验发生了什么。</p>
+        <p>它让 Minecraft AI 助手通过受控工具操作 Minecraft：读取上下文、执行支持动作、建造、改造、记录，并校验发生了什么。</p>
       </section>
     </article>
   </main>

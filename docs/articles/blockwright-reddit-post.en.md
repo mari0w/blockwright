@@ -1,10 +1,10 @@
-# I built Blockwright, an open-source AI assistant that can perform actions inside Minecraft Java
+# Blockwright: open-source AI control for Minecraft Java Edition
 
-Hey everyone, I have been building an open-source project called **Blockwright**.
+Blockwright is an open-source Minecraft Java Edition AI assistant that can turn natural-language requests into controlled in-game actions.
 
-It is an AI assistant for **Minecraft Java Edition**. The goal is to make an assistant that does more than talk about Minecraft. I want it to understand natural-language requests and turn them into real in-game actions.
+After installing the Fabric mod, players can use `/bw`, a local Web chat page, Web voice input, or connected chat tools. Supported model backends include Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
-After installing the Fabric mod, you can type commands like:
+Supported request patterns:
 
 ```text
 /bw give me a diamond sword
@@ -14,24 +14,20 @@ After installing the Fabric mod, you can type commands like:
 /bw replace the wall in front of me with stone bricks
 ```
 
-Blockwright currently supports Minecraft Java Edition 1.21.x, with Fabric as the main install path. You can use it from the in-game `/bw` command, a local Web chat page, voice input from the Web UI, or connected chat tools. It also supports multiple model backends, including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
+The important part is the execution model. Blockwright is not only a chatbot and it is not limited to item delivery or building prompts. It gives the assistant a controlled tool layer for player/world context reads, supported command operations, build and structure-editing workflows, saved blueprints, build records, and verification reports.
 
-The current feature set includes player/world context reads, controlled game actions, supported command actions, build and structure-editing workflows, saved blueprints, and build records. It sends structured actions to the Minecraft side for execution instead of pretending a chat reply changed the world.
-
-The part I care about most is making this more reliable than a chatbot that just writes commands. Block placement is done through the server/world API, not by simulating mouse clicks or inventory actions. Blueprints use relative coordinates, build records are saved by the controller, and the Minecraft execution side can verify placed blocks afterward.
-
-The project is still early, but the direction is:
+The core loop is:
 
 ```text
-natural language request -> structured plan -> Minecraft execution -> verification/reporting
+natural language request -> model-backed planning -> structured tool call -> Minecraft execution -> verification/reporting
 ```
 
-Right now the best use cases are local Minecraft Java worlds, LAN worlds, creative-mode testing, world-aware assistant actions, build iteration, and experimenting with AI-assisted Minecraft workflows.
+Block placement is done through the server/world API, not by simulating mouse clicks or inventory actions. Blueprints use relative coordinates, build records are saved by the controller, and the Minecraft execution side can verify placed blocks afterward.
+
+Primary use cases are local Minecraft Java worlds, LAN worlds, creative-mode build iteration, world-aware assistant actions, Web or voice control, and chat-tool entrances for Minecraft operations.
 
 GitHub:
 
 https://github.com/mari0w/blockwright
 
-I would love feedback from people who build mods, run servers, or experiment with Minecraft automation.
-
-The main things I am thinking about next are how to make existing-world edits safer, how to make build selection less ambiguous, and which Minecraft operations should become first-class tools next.
+The next engineering focus is safer existing-world edits, less ambiguous build selection, and more Minecraft operations represented as first-class tools.

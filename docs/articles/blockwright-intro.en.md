@@ -1,4 +1,4 @@
-# Blockwright: Run Minecraft Actions with One Sentence
+# Blockwright: Production AI Control for Minecraft Java Edition
 
 Minecraft is at its best when you are building, testing ideas, and shaping a world with friends. The friction usually starts when you have to stop playing and translate an idea into commands:
 
@@ -8,7 +8,7 @@ Minecraft is at its best when you are building, testing ideas, and shaping a wor
 - changing part of an existing build without manually replacing every block;
 - letting friends in a LAN world send real requests without learning command syntax.
 
-Blockwright turns those moments into natural-language instructions that an AI assistant can carry out through controlled Minecraft tools.
+Blockwright turns those moments into natural-language instructions that a Minecraft AI assistant can carry out through controlled tools, command operations, build records, and verification reports.
 
 You can type things like:
 
@@ -23,7 +23,7 @@ Blockwright sends the player's intent to an AI assistant, then uses the Fabric m
 
 ## What is Blockwright?
 
-Blockwright is an AI assistant for Minecraft Java Edition players.
+Blockwright is a production-oriented AI control layer for Minecraft Java Edition.
 
 The main installation path is a Fabric mod, designed for Java Edition 1.21.x, single-player saves, and LAN-opened worlds. You do not need to move your map to a Paper server or change how you normally play Minecraft.
 
@@ -36,7 +36,7 @@ After installing it, you can talk to Blockwright through:
 - DingTalk bot messages;
 - local commands or scripts for custom integrations.
 
-It is not meant to be a chatbot that only replies with text, and it is not limited to a few canned examples. The goal is to give a Minecraft AI assistant a controlled tool layer for reading, acting, building, editing, and verifying inside the world.
+It is not limited to chat replies, item delivery, or building prompts. Blockwright gives a Minecraft AI assistant a controlled tool layer for reading world context, operating supported commands, building, editing, and verifying real results inside the world.
 
 ## What can it do?
 
@@ -92,7 +92,7 @@ This makes the interaction feel closer to pointing at something in the world and
 
 ### 5. Continue the Conversation
 
-You do not have to write a perfect request on the first try. You can continue step by step:
+You do not have to compress the entire operation into one message. You can continue step by step:
 
 ```text
 /bw build a cabin
@@ -101,11 +101,11 @@ You do not have to write a perfect request on the first try. You can continue st
 /bw change the roof to dark wood
 ```
 
-That is closer to how players actually build: try a first version, react to it, then refine it.
+That matches how players actually build: place a structure, inspect it in the world, then refine it through follow-up requests.
 
 ## How do you start?
 
-The player-facing flow is intentionally simple:
+The player-facing flow:
 
 1. Prepare Minecraft Java Edition 1.21.x.
 2. Install Fabric Loader 0.16.14 or newer.
@@ -121,7 +121,7 @@ The player-facing flow is intentionally simple:
 
 Open the displayed Web address, set your current Minecraft player name, then choose an AI model.
 
-Current model options include:
+Supported model backends:
 
 - Codex CLI
 - OpenAI
@@ -147,31 +147,29 @@ The Web settings screenshot shows the player name, language, Controller Token, a
 
 The AI model dropdown shows Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
-## Why is this interesting?
+## Why this matters
 
 Minecraft is about creative freedom, but many repeated actions are just setup work or command syntax.
 
-Reading local world state, giving items, changing time, clearing rain, drafting a room, replacing a wall, or adding light to a build are common tasks. Blockwright tries to make those tasks feel like one conversation with an assistant, so players can spend more attention on the world they are shaping.
+Reading local world state, giving items, changing time, clearing rain, drafting a room, replacing a wall, or adding light to a build are common tasks. Blockwright turns those tasks into one controlled assistant workflow, so players and operators can spend more attention on the world they are shaping while still keeping execution explicit and traceable.
 
 It is useful for:
 
-- quickly trying ideas in a single-player save;
+- operating a single-player save with AI-assisted world context;
 - letting friends send requests in a LAN world;
-- drafting the first version of a build in creative mode;
+- creating and refining builds in creative mode;
 - connecting Minecraft to Web, voice, or chat tools;
-- experimenting with AI-assisted Minecraft gameplay.
+- running Minecraft actions through a controlled AI assistant workflow.
 
 ## One-Sentence Summary
 
-Blockwright is not trying to play Minecraft for you.
+Blockwright is a Minecraft AI assistant that understands natural language and can use a controlled tool layer: you describe what you want, and it turns repetitive, command-heavy work into real actions in the world.
 
-It is a Minecraft assistant that understands natural language and can use a controlled tool layer: you describe what you want, and it turns part of the repetitive, command-heavy work into real actions in the world.
-
-If you want a Minecraft AI assistant that can read context, run supported actions, build, edit, and verify results, Blockwright is built for that direction.
+It is designed for AI-operated Minecraft workflows where context reads, supported commands, building, editing, records, and verification all matter.
 
 ## Short Version for X/Twitter
 
-I am building Blockwright, an AI assistant for Minecraft Java Edition.
+Blockwright is a production-oriented AI control layer for Minecraft Java Edition.
 
 After installing the Fabric mod, players can type:
 
@@ -184,4 +182,4 @@ After installing the Fabric mod, players can type:
 
 It supports Web text, voice, in-game `/bw`, Element/Matrix, DingTalk, and model options including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
-The goal is not to play Minecraft for you. It is to let an AI assistant operate Minecraft through controlled tools: read context, run supported actions, build, edit, and verify what changed.
+It lets a Minecraft AI assistant operate through controlled tools: read context, run supported actions, build, edit, record, and verify what changed.
