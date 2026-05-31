@@ -268,27 +268,34 @@ fn codex_failure_reply_for_language(error: &str, language: ResponseLanguage) -> 
         match language {
             ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
                 "Reason: the controller startup environment cannot find the codex command."
+                    .to_string()
             }
-            _ => "具体原因：controller 启动环境找不到 codex 命令。",
+            _ => "具体原因：controller 启动环境找不到 codex 命令。".to_string(),
         }
+    } else if let Some(detail) = llm_api_failure_detail(error, language) {
+        detail
     } else if error.contains("LLM API") || error.contains("missing API key") {
         match language {
             ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
                 "Reason: the LLM API configuration is unavailable. Check the provider, model name, Base URL, and API key."
+                    .to_string()
             }
-            _ => "具体原因：大模型 API 配置不可用，请检查提供商、模型名、Base URL 和 API Key。",
+            _ => "具体原因：大模型 API 配置不可用，请检查提供商、模型名、Base URL 和 API Key。"
+                .to_string(),
         }
     } else {
         match language {
             ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
                 "Ask an administrator to check the LLM configuration, model access, network connection, Codex login status, or CLI version."
+                    .to_string()
             }
-            _ => "请管理员检查大模型配置、模型权限、网络连接、Codex 登录状态或 CLI 版本。",
+            _ => "请管理员检查大模型配置、模型权限、网络连接、Codex 登录状态或 CLI 版本。"
+                .to_string(),
         }
     };
     codex_failure_reply_with_log_hint_for_language(
         error,
-        detail,
+        &detail,
         controller_log_hint().as_deref(),
         language,
     )
@@ -340,6 +347,65 @@ fn codex_failure_reply_with_log_hint_for_language(
         _ => format!(
             "Minecraft AI 助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}"
         ),
+    }
+}
+
+fn llm_api_failure_detail(error: &str, language: ResponseLanguage) -> Option<String> {
+    let summary = extract_llm_api_error_summary(error)?;
+    let lower = summary.to_ascii_lowercase();
+    let detail = match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            if lower.contains("402")
+                && (lower.contains("payment required") || lower.contains("insufficient balance"))
+            {
+                format!(
+                    "Reason: the LLM API account has insufficient balance. Upstream returned {summary}."
+                )
+            } else if lower.contains("401") {
+                format!(
+                    "Reason: the LLM API key was rejected. Upstream returned {summary}. Check whether the API key is correct."
+                )
+            } else if lower.contains("429") {
+                format!(
+                    "Reason: the LLM API rate limit was reached. Upstream returned {summary}. Retry later or reduce request frequency."
+                )
+            } else if lower.contains("400") || lower.contains("422") {
+                format!(
+                    "Reason: the LLM API rejected the request parameters. Upstream returned {summary}. Check the model name, Base URL, and provider-specific options."
+                )
+            } else {
+                format!("Reason: the LLM API request failed. Upstream returned {summary}.")
+            }
+        }
+        _ => {
+            if lower.contains("402")
+                && (lower.contains("payment required") || lower.contains("insufficient balance"))
+            {
+                format!("具体原因：大模型 API 账号余额不足，上游返回 {summary}。请确认账号余额或充值后重试。")
+            } else if lower.contains("401") {
+                format!("具体原因：大模型 API Key 认证失败，上游返回 {summary}。请检查 API Key 是否正确。")
+            } else if lower.contains("429") {
+                format!("具体原因：大模型 API 请求达到限速，上游返回 {summary}。请稍后重试或降低请求频率。")
+            } else if lower.contains("400") || lower.contains("422") {
+                format!("具体原因：大模型 API 请求参数被上游拒绝，上游返回 {summary}。请检查模型名、Base URL 和供应商参数。")
+            } else {
+                format!("具体原因：大模型 API 请求失败，上游返回 {summary}。")
+            }
+        }
+    };
+    Some(detail)
+}
+
+fn extract_llm_api_error_summary(error: &str) -> Option<&str> {
+    let marker = "LLM API returned ";
+    let start = error.find(marker)? + marker.len();
+    let rest = &error[start..];
+    let end = rest.find('\n').unwrap_or(rest.len());
+    let summary = rest[..end].trim().trim_end_matches('.');
+    if summary.is_empty() {
+        None
+    } else {
+        Some(summary)
     }
 }
 
@@ -3641,7 +3707,7 @@ cat "$plan_file" > "$last_message"
         Planner::new(CodexClient::new(CodexConfig {
             enabled: true,
             command: script_path.to_string_lossy().to_string(),
-            timeout_seconds: 5,
+            timeout_seconds: 30,
         }))
     }
 
@@ -3674,7 +3740,7 @@ exit 1
         Planner::new(CodexClient::new(CodexConfig {
             enabled: true,
             command: script_path.to_string_lossy().to_string(),
-            timeout_seconds: 5,
+            timeout_seconds: 30,
         }))
     }
 
@@ -3856,7 +3922,7 @@ BLOCKWRIGHT_JSON
             CodexConfig {
                 enabled: true,
                 command: script_path.to_string_lossy().to_string(),
-                timeout_seconds: 5,
+                timeout_seconds: 30,
             },
             dir.join("sessions.json"),
         ));
@@ -4029,6 +4095,32 @@ BLOCKWRIGHT_JSON
         assert!(reply.contains("没有发送到 Minecraft"));
         assert!(reply.contains("找不到 codex 命令"));
         assert!(reply.contains("详细日志"));
+    }
+
+    #[test]
+    fn llm_payment_failure_mentions_balance_instead_of_config() {
+        let reply = codex_failure_reply(
+            "llm_trace_id=llm-8281-1: LLM API returned 402 Payment Required: Insufficient Balance",
+        );
+
+        assert!(reply.contains("没有发送到 Minecraft"));
+        assert!(reply.contains("余额不足"));
+        assert!(reply.contains("402 Payment Required: Insufficient Balance"));
+        assert!(reply.contains("llm_trace_id=llm-8281-1"));
+        assert!(!reply.contains("配置不可用"));
+    }
+
+    #[test]
+    fn english_llm_auth_failure_mentions_api_key() {
+        let reply = codex_failure_reply_for_language(
+            "llm_trace_id=llm-1-2: LLM API returned 401 Unauthorized: invalid api key",
+            ResponseLanguage::English,
+        );
+
+        assert!(reply.contains("nothing has been sent to Minecraft"));
+        assert!(reply.contains("API key was rejected"));
+        assert!(reply.contains("401 Unauthorized: invalid api key"));
+        assert!(reply.contains("llm_trace_id=llm-1-2"));
     }
 
     #[test]

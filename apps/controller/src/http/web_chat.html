@@ -362,11 +362,17 @@
       width: 19px;
       height: 19px;
     }
-    .language-toggle span {
-      margin-left: 2px;
-      font-size: 11px;
-      font-weight: 720;
-      line-height: 1;
+    .clear-chat {
+      border-color: transparent;
+      background: rgba(34, 40, 46, .72);
+      color: var(--muted);
+      box-shadow: none;
+      backdrop-filter: blur(8px);
+    }
+    .clear-chat:hover,
+    .clear-chat:focus-visible {
+      border-color: rgba(255, 107, 107, .5);
+      color: #ffdede;
     }
     .voice-toggle.active {
       border-color: var(--accent);
@@ -790,6 +796,27 @@
       color: var(--muted);
       font-size: 13px;
     }
+    .select-field {
+      position: relative;
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .select-field label {
+      display: block;
+      margin: 0;
+    }
+    .native-dropdown-source:not([hidden]) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: 0;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
     .config-checkbox {
       grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
@@ -799,11 +826,237 @@
       width: auto;
       margin: 0;
     }
+    .integration-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .integration-choice {
+      position: relative;
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      align-items: center;
+      min-height: 74px;
+      gap: 12px;
+      padding: 13px 14px;
+      border: 1px solid rgba(48, 57, 65, .95);
+      border-radius: 7px;
+      background: rgba(34, 40, 46, .7);
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    .integration-choice:hover,
+    .integration-choice:has(input:focus-visible) {
+      border-color: rgba(232, 177, 90, .62);
+      outline: none;
+    }
+    .integration-choice.selected,
+    .integration-choice:has(input:checked) {
+      border-color: rgba(104, 211, 145, .72);
+      background: #17251d;
+      box-shadow: inset 0 0 0 1px rgba(104, 211, 145, .12);
+    }
+    .integration-choice::before {
+      content: "";
+      display: block;
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(154, 168, 162, .72);
+      border-radius: 6px;
+      background: rgba(16, 18, 20, .64);
+      box-shadow: inset 0 0 0 2px rgba(16, 18, 20, .72);
+    }
+    .integration-choice.selected::before,
+    .integration-choice:has(input:checked)::before {
+      border-color: var(--accent);
+      background: var(--accent);
+      box-shadow: none;
+    }
+    .integration-choice::after {
+      content: "";
+      position: absolute;
+      left: 21px;
+      top: calc(50% - 4px);
+      width: 9px;
+      height: 5px;
+      border-left: 2px solid #06100a;
+      border-bottom: 2px solid #06100a;
+      opacity: 0;
+      transform: rotate(-45deg);
+    }
+    .integration-choice.selected::after,
+    .integration-choice:has(input:checked)::after {
+      opacity: 1;
+    }
+    .integration-choice input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .integration-choice span {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .integration-choice strong {
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 680;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .integration-choice small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .chat-tool-panel[hidden] {
+      display: none;
+    }
     .provider-fields {
       display: grid;
       gap: 12px;
     }
     .provider-fields[hidden] {
+      display: none;
+    }
+    .model-field {
+      display: grid;
+      gap: 8px;
+    }
+    .model-field > span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .custom-select {
+      position: relative;
+      width: 100%;
+      color: var(--text);
+    }
+    .custom-select[hidden],
+    .model-picker[hidden] {
+      display: none;
+    }
+    .custom-select.open {
+      z-index: 45;
+    }
+    .custom-select-button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding: 10px 12px;
+      border-color: var(--line);
+      background: var(--panel-soft);
+      color: var(--text);
+      text-align: left;
+      font-weight: 520;
+    }
+    .custom-select-button:hover,
+    .custom-select-button:focus-visible {
+      border-color: var(--accent-warm);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(232, 177, 90, .1);
+    }
+    .custom-select.open .custom-select-button,
+    .custom-select-button[aria-expanded="true"] {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(123, 183, 255, .14);
+    }
+    .custom-select-value {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .custom-select.placeholder .custom-select-value {
+      color: var(--muted);
+    }
+    .custom-select-chevron {
+      flex: 0 0 auto;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      opacity: .75;
+      transform: translateY(-2px) rotate(45deg);
+      transition: transform .16s ease;
+    }
+    .custom-select.open .custom-select-chevron {
+      transform: translateY(2px) rotate(225deg);
+    }
+    .custom-select-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      z-index: 60;
+      display: grid;
+      gap: 4px;
+      max-height: min(284px, calc(100dvh - 160px));
+      padding: 6px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      border: 1px solid rgba(66, 78, 88, .95);
+      border-radius: 8px;
+      background: #151a1e;
+      box-shadow: var(--shadow);
+    }
+    .custom-select-menu[hidden] {
+      display: none;
+    }
+    .custom-select-option {
+      display: grid;
+      grid-template-columns: minmax(0, .72fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      min-height: 40px;
+      padding: 9px 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-weight: 520;
+    }
+    .custom-select-option:hover,
+    .custom-select-option:focus-visible {
+      border-color: rgba(232, 177, 90, .55);
+      background: rgba(232, 177, 90, .08);
+      outline: none;
+    }
+    .custom-select-option[aria-selected="true"] {
+      border-color: rgba(104, 211, 145, .62);
+      background: rgba(104, 211, 145, .12);
+    }
+    .custom-select-option-label,
+    .custom-select-option-value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .custom-select-option-value {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .custom-select-option-value:empty {
+      display: none;
+    }
+    .custom-select-option,
+    .custom-select:not(.model-picker-dropdown) .custom-select-option {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .custom-select-option-value,
+    .custom-select:not(.model-picker-dropdown) .custom-select-option-value {
       display: none;
     }
     .model-setup-form {
@@ -1193,7 +1446,15 @@
             <path d="M2 12h20"></path>
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"></path>
           </svg>
-          <span id="languageToggleLabel" aria-hidden="true">中</span>
+        </button>
+        <button id="clearChat" class="icon-button clear-chat" type="button" title="Clear chat history" aria-label="Clear chat history" data-i18n-title="clearChatHistory" data-i18n-aria-label="clearChatHistory">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 6h18"></path>
+            <path d="M8 6V4h8v2"></path>
+            <path d="m19 6-1 14H6L5 6"></path>
+            <path d="M10 11v5"></path>
+            <path d="M14 11v5"></path>
+          </svg>
         </button>
         <button id="configOpen" class="icon-button config-open" type="button" title="Open settings" aria-label="Open settings" data-i18n-title="openSettings" data-i18n-aria-label="openSettings">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1299,22 +1560,39 @@
         <h2 id="modelSetupTitle" data-i18n="modelSetupTitle">Configure the AI model</h2>
         <p data-i18n="modelSetupIntro">Choose the model Blockwright should use for planning. You can change this later from settings.</p>
       </div>
-      <label for="modelSetupProvider">
-        <span data-i18n="llmProvider">Model mode</span>
-        <select id="modelSetupProvider">
+      <div class="select-field">
+        <label id="modelSetupProviderLabel" for="modelSetupProvider">
+          <span data-i18n="llmProvider">Model mode</span>
+        </label>
+        <select id="modelSetupProvider" class="native-dropdown-source" aria-hidden="true" tabindex="-1">
           <option value="codex_cli">Codex CLI</option>
           <option value="openai">OpenAI API</option>
           <option value="deepseek">DeepSeek API</option>
           <option value="doubao">Doubao API</option>
           <option value="gemini">Gemini API</option>
         </select>
-      </label>
+        <div id="modelSetupProviderDropdown" class="custom-select" data-select-source="modelSetupProvider">
+          <button id="modelSetupProviderDropdownButton" class="custom-select-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSetupProviderDropdownMenu" aria-labelledby="modelSetupProviderLabel modelSetupProviderDropdownValue">
+            <span id="modelSetupProviderDropdownValue" class="custom-select-value" data-custom-select-value></span>
+            <span class="custom-select-chevron" aria-hidden="true"></span>
+          </button>
+          <div id="modelSetupProviderDropdownMenu" class="custom-select-menu" role="listbox" hidden></div>
+        </div>
+      </div>
       <p id="modelSetupCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
       <div id="modelSetupApiFields" class="provider-fields" hidden>
-        <label for="modelSetupModel">
-          <span data-i18n="llmModel">Model</span>
-          <input id="modelSetupModel" placeholder="gpt-4.1">
-        </label>
+        <div class="model-field">
+          <span id="modelSetupModelLabel" data-i18n="llmModel">Model version</span>
+          <input id="modelSetupModel" type="hidden" autocomplete="off">
+          <select id="modelSetupModelPicker" class="model-picker native-dropdown-source" aria-hidden="true" tabindex="-1" hidden></select>
+          <div id="modelSetupModelPickerDropdown" class="custom-select model-picker-dropdown" data-select-source="modelSetupModelPicker" data-placeholder-key="llmModelPickerPlaceholder" hidden>
+            <button id="modelSetupModelPickerDropdownButton" class="custom-select-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSetupModelPickerDropdownMenu" aria-labelledby="modelSetupModelLabel modelSetupModelPickerDropdownValue">
+              <span id="modelSetupModelPickerDropdownValue" class="custom-select-value" data-custom-select-value>Choose a model version</span>
+              <span class="custom-select-chevron" aria-hidden="true"></span>
+            </button>
+            <div id="modelSetupModelPickerDropdownMenu" class="custom-select-menu" role="listbox" hidden></div>
+          </div>
+        </div>
         <label for="modelSetupBaseUrl">
           <span data-i18n="llmBaseUrl">Base URL</span>
           <input id="modelSetupBaseUrl" placeholder="https://api.openai.com/v1">
@@ -1394,22 +1672,39 @@
               <section id="configPaneModel" class="config-pane" role="tabpanel" aria-labelledby="configTabModel" data-config-pane-panel="model" hidden>
                 <section class="config-section">
                   <h3 data-i18n="llmSettings">AI model</h3>
-                  <label for="llmProvider">
-                    <span data-i18n="llmProvider">Model mode</span>
-                    <select id="llmProvider">
+                  <div class="select-field">
+                    <label id="llmProviderLabel" for="llmProvider">
+                      <span data-i18n="llmProvider">Model mode</span>
+                    </label>
+                    <select id="llmProvider" class="native-dropdown-source" aria-hidden="true" tabindex="-1">
                       <option value="codex_cli">Codex CLI</option>
                       <option value="openai">OpenAI API</option>
                       <option value="deepseek">DeepSeek API</option>
                       <option value="doubao">Doubao API</option>
                       <option value="gemini">Gemini API</option>
                     </select>
-                  </label>
+                    <div id="llmProviderDropdown" class="custom-select" data-select-source="llmProvider">
+                      <button id="llmProviderDropdownButton" class="custom-select-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="llmProviderDropdownMenu" aria-labelledby="llmProviderLabel llmProviderDropdownValue">
+                        <span id="llmProviderDropdownValue" class="custom-select-value" data-custom-select-value></span>
+                        <span class="custom-select-chevron" aria-hidden="true"></span>
+                      </button>
+                      <div id="llmProviderDropdownMenu" class="custom-select-menu" role="listbox" hidden></div>
+                    </div>
+                  </div>
                   <p id="llmCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
                   <div id="llmApiFields" class="provider-fields" hidden>
-                    <label for="llmModel">
-                      <span data-i18n="llmModel">Model</span>
-                      <input id="llmModel" placeholder="gpt-4.1">
-                    </label>
+                    <div class="model-field">
+                      <span id="llmModelLabel" data-i18n="llmModel">Model version</span>
+                      <input id="llmModel" type="hidden" autocomplete="off">
+                      <select id="llmModelPicker" class="model-picker native-dropdown-source" aria-hidden="true" tabindex="-1" hidden></select>
+                      <div id="llmModelPickerDropdown" class="custom-select model-picker-dropdown" data-select-source="llmModelPicker" data-placeholder-key="llmModelPickerPlaceholder" hidden>
+                        <button id="llmModelPickerDropdownButton" class="custom-select-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="llmModelPickerDropdownMenu" aria-labelledby="llmModelLabel llmModelPickerDropdownValue">
+                          <span id="llmModelPickerDropdownValue" class="custom-select-value" data-custom-select-value>Choose a model version</span>
+                          <span class="custom-select-chevron" aria-hidden="true"></span>
+                        </button>
+                        <div id="llmModelPickerDropdownMenu" class="custom-select-menu" role="listbox" hidden></div>
+                      </div>
+                    </div>
                     <label for="llmBaseUrl">
                       <span data-i18n="llmBaseUrl">Base URL</span>
                       <input id="llmBaseUrl" placeholder="https://api.openai.com/v1">
@@ -1447,11 +1742,28 @@
               </section>
               <section id="configPaneIntegrations" class="config-pane" role="tabpanel" aria-labelledby="configTabIntegrations" data-config-pane-panel="integrations" hidden>
                 <section class="config-section">
+                  <h3 data-i18n="chatTools">Chat tools</h3>
+                  <p data-i18n="chatToolsHelp">Choose the chat tools Blockwright should listen to. Only selected tools show configuration below.</p>
+                  <div class="integration-picker" role="group" aria-label="Chat tools" data-i18n-aria-label="chatTools">
+                    <label class="config-checkbox integration-choice" for="chatToolMatrix">
+                      <input id="chatToolMatrix" type="checkbox" data-chat-tool="matrix">
+                      <span>
+                        <strong>Element/Matrix</strong>
+                        <small data-i18n="chatToolMatrixHelp">Polling room messages.</small>
+                      </span>
+                    </label>
+                    <label class="config-checkbox integration-choice" for="chatToolDingtalk">
+                      <input id="chatToolDingtalk" type="checkbox" data-chat-tool="dingtalk">
+                      <span>
+                        <strong data-i18n="chatToolDingtalk">DingTalk bot</strong>
+                        <small data-i18n="chatToolDingtalkHelp">Stream bot messages.</small>
+                      </span>
+                    </label>
+                  </div>
+                  <p id="chatToolsNone" data-i18n="chatToolsNone">No external chat tool is selected.</p>
+                </section>
+                <section id="matrixToolPanel" class="config-section chat-tool-panel" data-tool-panel="matrix" hidden>
                   <h3>Element/Matrix</h3>
-                  <label class="config-checkbox" for="matrixEnabled">
-                    <input id="matrixEnabled" type="checkbox" checked>
-                    <span data-i18n="matrixEnabled">Enable Element/Matrix</span>
-                  </label>
                   <label for="matrixHomeserver">
                     <span data-i18n="matrixHomeserver">Matrix homeserver URL</span>
                     <input id="matrixHomeserver" placeholder="https://matrix-client.matrix.org">
@@ -1471,6 +1783,21 @@
                   <label class="config-checkbox" for="matrixAutoJoin">
                     <input id="matrixAutoJoin" type="checkbox" checked>
                     <span data-i18n="matrixAutoJoin">Auto-join invited rooms</span>
+                  </label>
+                </section>
+                <section id="dingtalkToolPanel" class="config-section chat-tool-panel" data-tool-panel="dingtalk" hidden>
+                  <h3 data-i18n="dingtalkSettings">DingTalk bot</h3>
+                  <label for="dingtalkRobotCode">
+                    <span data-i18n="dingtalkRobotCode">Robot code</span>
+                    <input id="dingtalkRobotCode" placeholder="dingxxxxxxxx">
+                  </label>
+                  <label for="dingtalkClientId">
+                    <span data-i18n="dingtalkClientId">Client ID</span>
+                    <input id="dingtalkClientId" type="password" autocomplete="off" placeholder="Leave blank to keep the existing client ID" data-i18n-placeholder="dingtalkClientIdPlaceholder">
+                  </label>
+                  <label for="dingtalkClientSecret">
+                    <span data-i18n="dingtalkClientSecret">Client Secret</span>
+                    <input id="dingtalkClientSecret" type="password" autocomplete="off" placeholder="Leave blank to keep the existing client secret" data-i18n-placeholder="dingtalkClientSecretPlaceholder">
                   </label>
                 </section>
               </section>
@@ -1526,6 +1853,51 @@
       doubao: {model: 'doubao-seed-2-0-lite-260215', base_url: 'https://ark.cn-beijing.volces.com/api/v3', supports_images: true, key_placeholder: 'ARK_API_KEY'},
       gemini: {model: 'gemini-2.5-flash', base_url: 'https://generativelanguage.googleapis.com/v1beta', supports_images: true, key_placeholder: 'GEMINI_API_KEY'}
     };
+    const LLM_PROVIDER_MODEL_SUGGESTIONS = {
+      openai: [
+        {value: 'gpt-5.5', label: 'GPT-5.5'},
+        {value: 'gpt-5.4', label: 'GPT-5.4'},
+        {value: 'gpt-5.4-mini', label: 'GPT-5.4 mini'},
+        {value: 'gpt-5.4-nano', label: 'GPT-5.4 nano'},
+        {value: 'gpt-4.1', label: 'GPT-4.1'},
+        {value: 'gpt-4.1-mini', label: 'GPT-4.1 mini'},
+        {value: 'gpt-4.1-nano', label: 'GPT-4.1 nano'},
+        {value: 'gpt-4o', label: 'GPT-4o'},
+        {value: 'gpt-4o-mini', label: 'GPT-4o mini'},
+        {value: 'o3', label: 'o3'},
+        {value: 'o4-mini', label: 'o4-mini'}
+      ],
+      deepseek: [
+        {value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash'},
+        {value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro'},
+        {value: 'deepseek-chat', label: 'DeepSeek Chat legacy alias'},
+        {value: 'deepseek-reasoner', label: 'DeepSeek Reasoner legacy alias'}
+      ],
+      doubao: [
+        {value: 'doubao-seed-2-0-lite-260428', label: 'Doubao Seed 2.0 Lite'},
+        {value: 'doubao-seed-2-0-mini-260428', label: 'Doubao Seed 2.0 Mini'},
+        {value: 'doubao-seed-2-0-pro-260215', label: 'Doubao Seed 2.0 Pro'},
+        {value: 'doubao-seed-2-0-lite-260215', label: 'Doubao Seed 2.0 Lite'},
+        {value: 'doubao-seed-2-0-mini-260215', label: 'Doubao Seed 2.0 Mini'},
+        {value: 'doubao-seed-2-0-code-preview-260215', label: 'Doubao Seed 2.0 Code Preview'},
+        {value: 'doubao-seed-1-8-251228', label: 'Doubao Seed 1.8'},
+        {value: 'doubao-seed-code-preview-251028', label: 'Doubao Seed Code Preview'},
+        {value: 'doubao-seed-1-6-251015', label: 'Doubao Seed 1.6'},
+        {value: 'doubao-seed-1-6-250615', label: 'Doubao Seed 1.6'},
+        {value: 'doubao-seed-1-6-flash-250828', label: 'Doubao Seed 1.6 Flash'},
+        {value: 'doubao-seed-1-6-flash-250615', label: 'Doubao Seed 1.6 Flash'}
+      ],
+      gemini: [
+        {value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash'},
+        {value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview'},
+        {value: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro Preview custom tools'},
+        {value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview'},
+        {value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite'},
+        {value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro'},
+        {value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash'},
+        {value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite'}
+      ]
+    };
     const API_LLM_PROVIDERS = ['openai', 'deepseek', 'doubao', 'gemini'];
     const username = document.getElementById('username');
     const usernameGate = document.getElementById('usernameGate');
@@ -1538,6 +1910,8 @@
     const modelSetupCodexHint = document.getElementById('modelSetupCodexHint');
     const modelSetupApiFields = document.getElementById('modelSetupApiFields');
     const modelSetupModel = document.getElementById('modelSetupModel');
+    const modelSetupModelSuggestions = document.getElementById('modelSetupModelSuggestions');
+    const modelSetupModelPicker = document.getElementById('modelSetupModelPicker');
     const modelSetupBaseUrl = document.getElementById('modelSetupBaseUrl');
     const modelSetupApiKey = document.getElementById('modelSetupApiKey');
     const modelSetupSupportsImages = document.getElementById('modelSetupSupportsImages');
@@ -1546,8 +1920,8 @@
     const modelSetupSubmit = document.getElementById('modelSetupSubmit');
     const modelSetupOpenSettings = document.getElementById('modelSetupOpenSettings');
     const languageToggle = document.getElementById('languageToggle');
-    const languageToggleLabel = document.getElementById('languageToggleLabel');
     const languageButtons = [...document.querySelectorAll('[data-language]')];
+    const clearChat = document.getElementById('clearChat');
     const configOpen = document.getElementById('configOpen');
     const configPage = document.getElementById('configPage');
     const configBack = document.getElementById('configBack');
@@ -1575,11 +1949,19 @@
     const llmCodexHint = document.getElementById('llmCodexHint');
     const llmApiFields = document.getElementById('llmApiFields');
     const llmModel = document.getElementById('llmModel');
+    const llmModelSuggestions = document.getElementById('llmModelSuggestions');
+    const llmModelPicker = document.getElementById('llmModelPicker');
     const llmBaseUrl = document.getElementById('llmBaseUrl');
     const llmApiKey = document.getElementById('llmApiKey');
     const llmSupportsImages = document.getElementById('llmSupportsImages');
     const llmApiHint = document.getElementById('llmApiHint');
     const llmProviderConfigCache = {};
+    const chatConfigState = {
+      matrixTokenConfigured: false,
+      dingtalkClientIdConfigured: false,
+      dingtalkClientSecretConfigured: false
+    };
+    const customSelectState = new Map();
     let lastLlmProvider = 'codex_cli';
     let modelSetupLastLlmProvider = 'codex_cli';
     const settingsLlmControls = {
@@ -1587,6 +1969,8 @@
       codexHint: llmCodexHint,
       apiFields: llmApiFields,
       model: llmModel,
+      modelSuggestions: llmModelSuggestions,
+      modelPicker: llmModelPicker,
       baseUrl: llmBaseUrl,
       apiKey: llmApiKey,
       supportsImages: llmSupportsImages,
@@ -1597,17 +1981,26 @@
       codexHint: modelSetupCodexHint,
       apiFields: modelSetupApiFields,
       model: modelSetupModel,
+      modelSuggestions: modelSetupModelSuggestions,
+      modelPicker: modelSetupModelPicker,
       baseUrl: modelSetupBaseUrl,
       apiKey: modelSetupApiKey,
       supportsImages: modelSetupSupportsImages,
       apiHint: modelSetupApiHint
     };
-    const matrixEnabled = document.getElementById('matrixEnabled');
+    const chatToolOptions = [...document.querySelectorAll('[data-chat-tool]')];
+    const chatToolPanels = [...document.querySelectorAll('[data-tool-panel]')];
+    const chatToolsNone = document.getElementById('chatToolsNone');
+    const chatToolMatrix = document.getElementById('chatToolMatrix');
+    const chatToolDingtalk = document.getElementById('chatToolDingtalk');
     const matrixHomeserver = document.getElementById('matrixHomeserver');
     const matrixAccessToken = document.getElementById('matrixAccessToken');
     const matrixAllowedSender = document.getElementById('matrixAllowedSender');
     const matrixAllowOwn = document.getElementById('matrixAllowOwn');
     const matrixAutoJoin = document.getElementById('matrixAutoJoin');
+    const dingtalkRobotCode = document.getElementById('dingtalkRobotCode');
+    const dingtalkClientId = document.getElementById('dingtalkClientId');
+    const dingtalkClientSecret = document.getElementById('dingtalkClientSecret');
     const cameraImage = document.getElementById('cameraImage');
     const libraryImages = document.getElementById('libraryImages');
     const preview = document.getElementById('preview');
@@ -1630,13 +2023,16 @@
     const I18N = {
       zh: {
         languageName: '中文',
-        languageToggleLabel: 'EN',
         languageToggleTitle: 'Switch to English',
         language: '显示语言',
         languageEnglish: 'English',
         languageChinese: '中文',
         languageHelp: '选择这个浏览器使用的页面语言。新的浏览器首次会跟随浏览器语言。',
         openSettings: '打开设置',
+        clearChatHistory: '清空聊天记录',
+        clearChatHistoryConfirm: '确定清空这个浏览器里的聊天记录吗？正在恢复的任务状态也会停止显示。',
+        chatHistoryCleared: '聊天记录已清空。',
+        chatHistoryAlreadyClear: '当前没有聊天记录。',
         composerPlaceholder: '说你想建什么、改什么。',
         send: '发送',
         more: '更多',
@@ -1659,20 +2055,22 @@
         settingsGeneral: '常规',
         settingsGeneralHelp: '语言和玩家身份。',
         settingsModel: 'AI 模型',
-        settingsModelHelp: '模型提供方、模型名、Base URL 和 key。',
+        settingsModelHelp: '模型提供方、模型版本、Base URL 和 key。',
         settingsAccess: '访问权限',
         settingsAccessHelp: '麦克风权限和手机 HTTPS。',
         settingsIntegrations: '聊天接入',
-        settingsIntegrationsHelp: 'Matrix 和后续聊天连接器。',
+        settingsIntegrationsHelp: '选择并配置外部聊天工具。',
         llmSettings: 'AI 模型',
         llmProvider: '模型模式',
         llmCodexHelp: 'Codex CLI 使用 controller 上配置的命令，这个模式不需要在这里填写 API Key。',
-        llmModel: '模型名',
+        llmModel: '模型版本',
+        llmModelPicker: '选择模型版本',
+        llmModelPickerPlaceholder: '选择模型版本',
         llmBaseUrl: 'Base URL',
         llmApiKey: 'API Key',
         llmKeyPlaceholder: '留空表示保留已有 key',
         llmSupportsImages: '这个模型支持图片输入',
-        llmConfigRequired: '请填写模型名和 Base URL。',
+        llmConfigRequired: '请选择模型版本并填写 Base URL。',
         llmConfigSaved: '大模型配置已保存。',
         player: '玩家',
         playerHelp: '这里填游戏里的用户名，聊天和语音都会发给这个玩家。',
@@ -1686,12 +2084,23 @@
         iosCaHelp: 'iPhone/iPad 请用 Safari 打开证书下载链接。下载后看“设置”顶部的“已下载描述文件”，或进入“设置 > 通用 > VPN 与设备管理/描述文件”安装；安装后还要到“关于本机 > 证书信任设置”打开完全信任。',
         androidCaHelp: 'Android 看到 Files by Google、Google 文件或文件管理器的保存提示是正常的，只是把证书文件保存到手机，不是安装完成。保存后进入“设置 > 安全/隐私 > 加密与凭据 > 安装证书 > CA 证书”，从下载目录选择 Blockwright-Local-Root-CA.cer。',
         androidCaReminder: 'Android 进入设置后不会自动提醒你安装这个文件，需要手动选择“安装证书/CA 证书”。完成安装和信任后，再重新打开 HTTPS 地址申请麦克风权限。',
-        matrixEnabled: '启用 Element/Matrix',
+        chatTools: '聊天工具',
+        chatToolsHelp: '选择要让 Blockwright 监听的聊天工具。只有选中的工具会在下面显示配置。',
+        chatToolMatrixHelp: '通过 polling 读取房间消息。',
+        chatToolDingtalk: '钉钉机器人',
+        chatToolDingtalkHelp: '通过 Stream 模式接收机器人消息。',
+        chatToolsNone: '当前没有选择外部聊天工具。',
         matrixHomeserver: 'Matrix 主服务器 URL',
         matrixTokenPlaceholder: '留空表示保留已有 token',
         matrixAllowedSender: '允许发指令的 Matrix 用户',
         matrixAllowOwn: '个人 token 允许处理自己发出的消息',
         matrixAutoJoin: '自动加入邀请房间',
+        dingtalkSettings: '钉钉机器人',
+        dingtalkRobotCode: '机器人编码',
+        dingtalkClientId: 'Client ID',
+        dingtalkClientSecret: 'Client Secret',
+        dingtalkClientIdPlaceholder: '留空表示保留已有 Client ID',
+        dingtalkClientSecretPlaceholder: '留空表示保留已有 Client Secret',
         saveConfig: '保存配置',
         close: '关闭',
         httpsGuideTitle: '手机语音需要 HTTPS',
@@ -1727,6 +2136,7 @@
         imageAddedLibraryMany: '已从相册添加 {count} 张图片。',
         imageAddedGeneric: '已添加 {count} 张图片。',
         matrixRequired: 'Matrix 主服务器 URL 和允许发指令的用户不能为空。',
+        chatConfigSaved: '聊天接入配置已保存。',
         savingConfig: '正在保存配置...',
         saveFailed: '保存失败',
         configSaved: '配置已保存。',
@@ -1804,13 +2214,16 @@
       },
       en: {
         languageName: 'English',
-        languageToggleLabel: '中',
         languageToggleTitle: 'Switch to Chinese',
         language: 'Language',
         languageEnglish: 'English',
         languageChinese: 'Chinese',
         languageHelp: 'Choose the language used by this browser. New browsers follow the browser language first.',
         openSettings: 'Open settings',
+        clearChatHistory: 'Clear chat history',
+        clearChatHistoryConfirm: 'Clear the chat history in this browser? Any restored job status will stop showing.',
+        chatHistoryCleared: 'Chat history cleared.',
+        chatHistoryAlreadyClear: 'No chat history to clear.',
         composerPlaceholder: 'Describe what to build or change.',
         send: 'Send',
         more: 'More',
@@ -1833,20 +2246,22 @@
         settingsGeneral: 'General',
         settingsGeneralHelp: 'Language and player identity.',
         settingsModel: 'AI model',
-        settingsModelHelp: 'Provider, model, base URL, and key.',
+        settingsModelHelp: 'Provider, model version, base URL, and key.',
         settingsAccess: 'Access',
         settingsAccessHelp: 'Microphone permission and mobile HTTPS.',
         settingsIntegrations: 'Integrations',
-        settingsIntegrationsHelp: 'Matrix and future chat connectors.',
+        settingsIntegrationsHelp: 'Choose and configure external chat tools.',
         llmSettings: 'AI model',
         llmProvider: 'Model mode',
         llmCodexHelp: 'Codex CLI uses the command configured on the controller. API keys are not needed for this mode.',
-        llmModel: 'Model',
+        llmModel: 'Model version',
+        llmModelPicker: 'Choose a model version',
+        llmModelPickerPlaceholder: 'Choose a model version',
         llmBaseUrl: 'Base URL',
         llmApiKey: 'API Key',
         llmKeyPlaceholder: 'Leave blank to keep the existing key',
         llmSupportsImages: 'This model accepts image input',
-        llmConfigRequired: 'Enter the model and Base URL.',
+        llmConfigRequired: 'Choose a model version and enter the Base URL.',
         llmConfigSaved: 'LLM configuration saved.',
         player: 'Player',
         playerHelp: 'Chat and voice commands are sent to this Minecraft player.',
@@ -1860,12 +2275,23 @@
         iosCaHelp: 'On iPhone/iPad, open the certificate link in Safari. Install the downloaded profile from Settings, then enable full trust in Certificate Trust Settings.',
         androidCaHelp: 'On Android, saving through Files by Google or the file manager only downloads the certificate. Install it manually from Security or Privacy > Encryption and credentials > Install certificate > CA certificate.',
         androidCaReminder: 'Android usually will not prompt again after the file is saved. Manually install the CA certificate, then reopen the HTTPS address and request microphone permission.',
-        matrixEnabled: 'Enable Element/Matrix',
+        chatTools: 'Chat tools',
+        chatToolsHelp: 'Choose the chat tools Blockwright should listen to. Only selected tools show configuration below.',
+        chatToolMatrixHelp: 'Poll room messages.',
+        chatToolDingtalk: 'DingTalk bot',
+        chatToolDingtalkHelp: 'Receive bot messages through Stream mode.',
+        chatToolsNone: 'No external chat tool is selected.',
         matrixHomeserver: 'Matrix homeserver URL',
         matrixTokenPlaceholder: 'Leave blank to keep the existing token',
         matrixAllowedSender: 'Matrix user allowed to send commands',
         matrixAllowOwn: 'Allow a personal token to handle your own messages',
         matrixAutoJoin: 'Auto-join invited rooms',
+        dingtalkSettings: 'DingTalk bot',
+        dingtalkRobotCode: 'Robot code',
+        dingtalkClientId: 'Client ID',
+        dingtalkClientSecret: 'Client Secret',
+        dingtalkClientIdPlaceholder: 'Leave blank to keep the existing Client ID',
+        dingtalkClientSecretPlaceholder: 'Leave blank to keep the existing Client Secret',
         saveConfig: 'Save configuration',
         close: 'Close',
         httpsGuideTitle: 'Mobile voice requires HTTPS',
@@ -1901,6 +2327,7 @@
         imageAddedLibraryMany: 'Added {count} images from photos.',
         imageAddedGeneric: 'Added {count} images.',
         matrixRequired: 'Matrix homeserver URL and allowed sender are required.',
+        chatConfigSaved: 'Chat integration configuration saved.',
         savingConfig: 'Saving configuration...',
         saveFailed: 'Save failed',
         configSaved: 'Configuration saved.',
@@ -1997,6 +2424,7 @@
     let microphonePermissionWatcher = null;
     let httpsGuideStep = 0;
     let lastTouchEndAt = 0;
+    let chatHistoryVersion = 0;
 
     function initialLanguage() {
       let stored = null;
@@ -2047,7 +2475,6 @@
       document.querySelectorAll('[data-i18n-aria-label]').forEach((node) => {
         node.setAttribute('aria-label', t(node.dataset.i18nAriaLabel));
       });
-      languageToggleLabel.textContent = t('languageToggleLabel');
       languageToggle.title = t('languageToggleTitle');
       languageToggle.setAttribute('aria-label', t('languageToggleTitle'));
       languageButtons.forEach((button) => {
@@ -2060,6 +2487,8 @@
       renderHttpsGuideStep();
       updateLlmProviderFields(settingsLlmControls);
       updateLlmProviderFields(modelSetupLlmControls);
+      updateChatToolPanels(false);
+      updateChatSecretPlaceholders();
     }
 
     function setLanguage(language) {
@@ -2067,6 +2496,243 @@
       localStorage.setItem('bw.language', currentLanguage);
       applyLanguage();
       refreshMicrophonePermission(false);
+    }
+
+    function setupCustomSelects() {
+      document.querySelectorAll('[data-select-source]').forEach((root) => {
+        const select = document.getElementById(root.dataset.selectSource || '');
+        const button = root.querySelector('.custom-select-button');
+        const value = root.querySelector('[data-custom-select-value]');
+        const menu = root.querySelector('.custom-select-menu');
+        if (!select || !button || !value || !menu) {
+          return;
+        }
+        const state = {root, select, button, value, menu};
+        customSelectState.set(select, state);
+        button.addEventListener('click', () => toggleCustomSelect(state));
+        button.addEventListener('keydown', (event) => handleCustomSelectButtonKeydown(event, state));
+        menu.addEventListener('click', (event) => {
+          const option = event.target instanceof Element
+            ? event.target.closest('[data-custom-select-option]')
+            : null;
+          if (!option || !menu.contains(option)) {
+            return;
+          }
+          chooseCustomSelectValue(state, option.dataset.value || '');
+          closeCustomSelect(state);
+          button.focus();
+        });
+        menu.addEventListener('keydown', (event) => handleCustomSelectMenuKeydown(event, state));
+        root.addEventListener('focusout', () => {
+          requestAnimationFrame(() => {
+            if (!root.contains(document.activeElement)) {
+              closeCustomSelect(state);
+            }
+          });
+        });
+        select.addEventListener('input', () => syncCustomSelect(select));
+        select.addEventListener('change', () => syncCustomSelect(select));
+        syncCustomSelect(select);
+      });
+      document.addEventListener('pointerdown', (event) => {
+        customSelectState.forEach((state) => {
+          if (!state.root.contains(event.target)) {
+            closeCustomSelect(state);
+          }
+        });
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+          return;
+        }
+        customSelectState.forEach((state) => {
+          if (state.root.classList.contains('open')) {
+            closeCustomSelect(state);
+            state.button.focus();
+          }
+        });
+      });
+    }
+
+    function syncCustomSelect(select) {
+      const state = customSelectState.get(select);
+      if (!state) {
+        return;
+      }
+      const hidden = Boolean(select.hidden || select.disabled);
+      state.root.hidden = hidden;
+      state.button.disabled = hidden;
+      if (hidden) {
+        closeCustomSelect(state);
+        return;
+      }
+      const options = customSelectOptions(select);
+      state.menu.replaceChildren(...options.map((option, index) => customSelectOptionNode(state, option, index)));
+      const selectedOption = options.find((option) => option.value === select.value);
+      const hasSelectedOption = Boolean(selectedOption);
+      state.value.textContent = hasSelectedOption
+        ? customSelectButtonText(state, selectedOption)
+        : customSelectPlaceholder(state);
+      state.root.classList.toggle('placeholder', !hasSelectedOption);
+      state.root.dataset.value = hasSelectedOption ? select.value : '';
+    }
+
+    function customSelectOptions(select) {
+      return [...select.options].filter((option) => !option.disabled && option.value !== '');
+    }
+
+    function customSelectOptionNode(state, option, index) {
+      const node = document.createElement('button');
+      node.type = 'button';
+      node.id = `${state.root.id}Option${index}`;
+      node.className = 'custom-select-option';
+      node.dataset.customSelectOption = 'true';
+      node.dataset.value = option.value;
+      node.setAttribute('role', 'option');
+      node.setAttribute('aria-selected', option.value === state.select.value ? 'true' : 'false');
+
+      const label = document.createElement('span');
+      label.className = 'custom-select-option-label';
+      label.textContent = state.root.classList.contains('model-picker-dropdown')
+        ? option.value
+        : customSelectOptionLabel(option);
+      node.appendChild(label);
+
+      const value = document.createElement('span');
+      value.className = 'custom-select-option-value';
+      value.textContent = '';
+      node.appendChild(value);
+
+      return node;
+    }
+
+    function customSelectOptionLabel(option) {
+      return option.dataset.modelLabel || option.label || option.textContent.trim() || option.value;
+    }
+
+    function customSelectButtonText(state, option) {
+      if (state.root.classList.contains('model-picker-dropdown')) {
+        return option.value;
+      }
+      const label = customSelectOptionLabel(option);
+      return label || option.value;
+    }
+
+    function customSelectPlaceholder(state) {
+      const key = state.root.dataset.placeholderKey;
+      return key ? t(key) : '';
+    }
+
+    function toggleCustomSelect(state) {
+      if (state.root.classList.contains('open')) {
+        closeCustomSelect(state);
+      } else {
+        openCustomSelect(state, false);
+      }
+    }
+
+    function openCustomSelect(state, focusOption, preferLast = false) {
+      if (state.button.disabled || state.root.hidden) {
+        return;
+      }
+      closeAllCustomSelects(state);
+      state.root.classList.add('open');
+      state.button.setAttribute('aria-expanded', 'true');
+      state.menu.hidden = false;
+      if (focusOption) {
+        focusCustomSelectOption(state, preferLast ? 'last' : 'selected');
+      }
+    }
+
+    function closeCustomSelect(state) {
+      state.root.classList.remove('open');
+      state.button.setAttribute('aria-expanded', 'false');
+      state.menu.hidden = true;
+    }
+
+    function closeAllCustomSelects(exceptState) {
+      customSelectState.forEach((state) => {
+        if (state !== exceptState) {
+          closeCustomSelect(state);
+        }
+      });
+    }
+
+    function chooseCustomSelectValue(state, value) {
+      if (!value) {
+        return;
+      }
+      state.select.value = value;
+      state.select.dispatchEvent(new Event('input', {bubbles: true}));
+      state.select.dispatchEvent(new Event('change', {bubbles: true}));
+      syncCustomSelect(state.select);
+    }
+
+    function handleCustomSelectButtonKeydown(event, state) {
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openCustomSelect(state, true);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        openCustomSelect(state, true, true);
+      }
+    }
+
+    function handleCustomSelectMenuKeydown(event, state) {
+      const options = [...state.menu.querySelectorAll('[data-custom-select-option]')];
+      if (!options.length) {
+        return;
+      }
+      const currentIndex = Math.max(0, options.indexOf(document.activeElement));
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        options[Math.min(options.length - 1, currentIndex + 1)].focus();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        options[Math.max(0, currentIndex - 1)].focus();
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        options[0].focus();
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        options[options.length - 1].focus();
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        const option = options[currentIndex];
+        if (option) {
+          option.click();
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCustomSelect(state);
+        state.button.focus();
+      } else if (event.key === 'Tab') {
+        closeCustomSelect(state);
+      }
+    }
+
+    function focusCustomSelectOption(state, target) {
+      const options = [...state.menu.querySelectorAll('[data-custom-select-option]')];
+      if (!options.length) {
+        return;
+      }
+      let index = options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+      if (target === 'last' && index < 0) {
+        index = options.length - 1;
+      } else if (index < 0) {
+        index = 0;
+      }
+      options[index].focus();
+    }
+
+    function focusSelectControl(select) {
+      const state = customSelectState.get(select);
+      (state ? state.button : select).focus();
+    }
+
+    function scrollSelectControlIntoView(select, options) {
+      const state = customSelectState.get(select);
+      (state ? state.root : select).scrollIntoView(options);
     }
 
     document.addEventListener('gesturestart', preventViewportZoom, {passive: false});
@@ -2091,6 +2757,7 @@
       lastTouchEndAt = now;
     }, {passive: false});
 
+    setupCustomSelects();
     applyLanguage();
     setUsername(localStorage.getItem('bw.username') || '');
     llmProvider.value = normalizeLlmProvider(localStorage.getItem('bw.llmProvider') || 'codex_cli');
@@ -2100,11 +2767,13 @@
     llmSupportsImages.checked = localStorage.getItem('bw.llmSupportsImages') === '1';
     applyLlmDefaults(localStorage.getItem('bw.llmProvider') || 'codex_cli');
     syncModelSetupFromLlmSettings();
+    applyChatToolsFromLocalStorage();
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
     matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
-    matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') === '1';
     matrixAllowOwn.checked = localStorage.getItem('bw.matrixAllowOwn') !== '0';
     matrixAutoJoin.checked = localStorage.getItem('bw.matrixAutoJoin') !== '0';
+    dingtalkRobotCode.value = localStorage.getItem('bw.dingtalkRobotCode') || '';
+    updateChatToolPanels(false);
 
     username.addEventListener('input', () => setUsername(username.value));
     usernameGateInput.addEventListener('input', () => {
@@ -2115,19 +2784,27 @@
       [llmModel, 'bw.llmModel'],
       [llmBaseUrl, 'bw.llmBaseUrl'],
       [matrixHomeserver, 'bw.matrixHomeserver'],
-      [matrixAllowedSender, 'bw.matrixAllowedSender']
+      [matrixAllowedSender, 'bw.matrixAllowedSender'],
+      [dingtalkRobotCode, 'bw.dingtalkRobotCode']
     ].forEach(([input, key]) => {
       input.addEventListener('input', () => localStorage.setItem(key, input.value));
     });
+    llmModel.addEventListener('input', () => syncModelPickerValue(settingsLlmControls));
+    modelSetupModel.addEventListener('input', () => syncModelPickerValue(modelSetupLlmControls));
+    llmModelPicker.addEventListener('change', () => applyPickedModel(settingsLlmControls));
+    modelSetupModelPicker.addEventListener('change', () => applyPickedModel(modelSetupLlmControls));
     [
-      [matrixEnabled, 'bw.matrixEnabled'],
       [llmSupportsImages, 'bw.llmSupportsImages'],
       [matrixAllowOwn, 'bw.matrixAllowOwn'],
       [matrixAutoJoin, 'bw.matrixAutoJoin']
     ].forEach(([input, key]) => {
       input.addEventListener('change', () => localStorage.setItem(key, input.checked ? '1' : '0'));
     });
+    chatToolOptions.forEach((option) => {
+      option.addEventListener('change', () => updateChatToolPanels());
+    });
     loadLlmConfig();
+    loadChatConfig();
     renderHttpsAccessInfo();
     setVoicePanel(!voiceUnavailable && localStorage.getItem('bw.voiceEnabled') === '1');
     restoreChatHistory();
@@ -2177,6 +2854,7 @@
     languageToggle.addEventListener('click', () => {
       setLanguage(currentLanguage === 'zh' ? 'en' : 'zh');
     });
+    clearChat.addEventListener('click', clearChatHistory);
     languageButtons.forEach((button) => {
       button.addEventListener('click', () => setLanguage(button.dataset.language));
     });
@@ -2443,7 +3121,10 @@
 
     function updateLlmProviderFields(controls = settingsLlmControls) {
       const provider = normalizeLlmProvider(controls.provider.value);
+      controls.provider.value = provider;
+      syncCustomSelect(controls.provider);
       const isApi = provider !== 'codex_cli';
+      updateModelSuggestions(controls, provider);
       controls.apiFields.hidden = !isApi;
       controls.codexHint.hidden = isApi;
       controls.apiHint.hidden = true;
@@ -2452,9 +3133,71 @@
         return;
       }
       const settings = llmProviderSettings(provider);
+      controls.model.placeholder = settings.model || 'gpt-4.1';
       controls.apiKey.placeholder = settings.api_key_configured
         ? t('llmKeyPlaceholder')
         : (settings.api_key_env || settings.key_placeholder || t('llmKeyPlaceholder'));
+    }
+
+    function updateModelSuggestions(controls, provider) {
+      const suggestions = LLM_PROVIDER_MODEL_SUGGESTIONS[normalizeLlmProvider(provider)] || [];
+      if (controls.modelSuggestions) {
+        const options = suggestions.map((model) => {
+          const option = document.createElement('option');
+          option.value = model.value;
+          option.label = model.label;
+          return option;
+        });
+        controls.modelSuggestions.replaceChildren(...options);
+      }
+      if (controls.modelPicker) {
+        const pickerOptions = suggestions.map((model) => {
+          const option = document.createElement('option');
+          option.value = model.value;
+          option.dataset.modelLabel = model.label || model.value;
+          option.textContent = model.label && model.label !== model.value
+            ? `${model.label} - ${model.value}`
+            : model.value;
+          return option;
+        });
+        controls.modelPicker.replaceChildren(...pickerOptions);
+        controls.modelPicker.hidden = suggestions.length === 0;
+        controls.modelPicker.disabled = suggestions.length === 0;
+      }
+      syncModelPickerValue(controls);
+    }
+
+    function applyPickedModel(controls) {
+      const picked = controls.modelPicker ? controls.modelPicker.value : '';
+      if (!picked) {
+        return;
+      }
+      controls.model.value = picked;
+      controls.model.dispatchEvent(new Event('input', {bubbles: true}));
+      syncModelPickerValue(controls);
+    }
+
+    function syncModelPickerValue(controls) {
+      if (!controls.modelPicker) {
+        return;
+      }
+      const value = controls.model.value.trim();
+      const hasOption = [...controls.modelPicker.options].some((option) => option.value === value);
+      const fallback = modelSelectionFallback(controls);
+      const selected = hasOption ? value : fallback;
+      controls.model.value = selected;
+      controls.modelPicker.value = selected;
+      syncCustomSelect(controls.modelPicker);
+    }
+
+    function modelSelectionFallback(controls) {
+      const options = [...controls.modelPicker.options].filter((option) => option.value);
+      if (!options.length) {
+        return '';
+      }
+      const defaults = llmProviderSettings(controls.provider.value);
+      const defaultOption = options.find((option) => option.value === defaults.model);
+      return defaultOption ? defaultOption.value : options[0].value;
     }
 
     function persistLlmLocalState() {
@@ -2505,8 +3248,151 @@
       return ['codex_cli', 'openai', 'deepseek', 'doubao', 'gemini'].includes(provider) ? provider : 'codex_cli';
     }
 
+    function normalizeChatTool(tool) {
+      return ['matrix', 'dingtalk'].includes(tool) ? tool : '';
+    }
+
+    function selectedChatTools() {
+      return chatToolOptions
+        .filter((option) => option.checked)
+        .map((option) => normalizeChatTool(option.dataset.chatTool))
+        .filter(Boolean);
+    }
+
+    function setChatToolSelection(tools, persist = true) {
+      const selected = new Set((tools || []).map(normalizeChatTool).filter(Boolean));
+      chatToolOptions.forEach((option) => {
+        option.checked = selected.has(normalizeChatTool(option.dataset.chatTool));
+      });
+      updateChatToolPanels(persist);
+    }
+
+    function applyChatToolsFromLocalStorage() {
+      let tools = [];
+      try {
+        tools = JSON.parse(localStorage.getItem('bw.chatTools') || '[]');
+      } catch (_) {
+        tools = [];
+      }
+      if (!Array.isArray(tools) && localStorage.getItem('bw.matrixEnabled') === '1') {
+        tools = ['matrix'];
+      }
+      if (Array.isArray(tools) && tools.length === 0 && localStorage.getItem('bw.matrixEnabled') === '1') {
+        tools = ['matrix'];
+      }
+      setChatToolSelection(Array.isArray(tools) ? tools : [], false);
+    }
+
+    function updateChatToolPanels(persist = true) {
+      const selected = new Set(selectedChatTools());
+      chatToolPanels.forEach((panel) => {
+        panel.hidden = !selected.has(normalizeChatTool(panel.dataset.toolPanel));
+      });
+      chatToolOptions.forEach((option) => {
+        option.closest('.integration-choice')?.classList.toggle('selected', option.checked);
+      });
+      chatToolsNone.hidden = selected.size > 0;
+      if (persist) {
+        localStorage.setItem('bw.chatTools', JSON.stringify([...selected]));
+      }
+    }
+
+    function persistChatLocalState() {
+      localStorage.setItem('bw.chatTools', JSON.stringify(selectedChatTools()));
+      localStorage.setItem('bw.matrixHomeserver', matrixHomeserver.value);
+      localStorage.setItem('bw.matrixAllowedSender', matrixAllowedSender.value);
+      localStorage.setItem('bw.matrixAllowOwn', matrixAllowOwn.checked ? '1' : '0');
+      localStorage.setItem('bw.matrixAutoJoin', matrixAutoJoin.checked ? '1' : '0');
+      localStorage.setItem('bw.dingtalkRobotCode', dingtalkRobotCode.value);
+    }
+
+    function updateChatSecretPlaceholders() {
+      matrixAccessToken.placeholder = t('matrixTokenPlaceholder');
+      dingtalkClientId.placeholder = t('dingtalkClientIdPlaceholder');
+      dingtalkClientSecret.placeholder = t('dingtalkClientSecretPlaceholder');
+    }
+
+    async function loadChatConfig() {
+      const token = controllerTokenValue();
+      try {
+        const response = await fetch('/api/chat/config', {
+          headers: {'x-blockwright-token': token}
+        });
+        if (!response.ok) {
+          updateChatToolPanels(false);
+          updateChatSecretPlaceholders();
+          return;
+        }
+        applyChatConfig(await response.json());
+      } catch (_) {
+        updateChatToolPanels(false);
+        updateChatSecretPlaceholders();
+      }
+    }
+
+    function applyChatConfig(payload) {
+      setChatToolSelection(payload.enabled_tools || [], false);
+      if (payload.matrix) {
+        matrixHomeserver.value = payload.matrix.homeserver_url || matrixHomeserver.value;
+        matrixAllowedSender.value = payload.matrix.allowed_sender || '';
+        matrixAllowOwn.checked = payload.matrix.allow_own_user_messages !== false;
+        matrixAutoJoin.checked = payload.matrix.auto_join_invites !== false;
+        chatConfigState.matrixTokenConfigured = Boolean(payload.matrix.token_configured);
+      }
+      if (payload.dingtalk) {
+        dingtalkRobotCode.value = payload.dingtalk.robot_code || '';
+        chatConfigState.dingtalkClientIdConfigured = Boolean(payload.dingtalk.client_id_configured);
+        chatConfigState.dingtalkClientSecretConfigured = Boolean(payload.dingtalk.client_secret_configured);
+      }
+      updateChatSecretPlaceholders();
+      persistChatLocalState();
+      updateChatToolPanels(false);
+    }
+
+    async function saveChatConfig(token) {
+      const body = {
+        enabled_tools: selectedChatTools(),
+        matrix: {
+          enabled: chatToolMatrix.checked,
+          homeserver_url: matrixHomeserver.value.trim(),
+          access_token: matrixAccessToken.value.trim(),
+          allowed_sender: matrixAllowedSender.value.trim(),
+          allow_own_user_messages: matrixAllowOwn.checked,
+          auto_join_invites: matrixAutoJoin.checked,
+          default_target_player: username.value.trim() || null
+        },
+        dingtalk: {
+          enabled: chatToolDingtalk.checked,
+          client_id: dingtalkClientId.value.trim(),
+          client_secret: dingtalkClientSecret.value.trim(),
+          robot_code: dingtalkRobotCode.value.trim() || null,
+          default_target_player: username.value.trim() || null
+        }
+      };
+      const response = await fetch('/api/chat/config', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-blockwright-token': token
+        },
+        body: JSON.stringify(body)
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
+      }
+      matrixAccessToken.value = '';
+      dingtalkClientId.value = '';
+      dingtalkClientSecret.value = '';
+      applyChatConfig(payload);
+      return payload;
+    }
+
     async function saveLlmConfig(token, controls = settingsLlmControls) {
       const provider = normalizeLlmProvider(controls.provider.value);
+      if (provider !== 'codex_cli') {
+        syncModelPickerValue(controls);
+      }
       if (provider !== 'codex_cli' && (!controls.model.value.trim() || !controls.baseUrl.value.trim())) {
         throw new Error(t('llmConfigRequired'));
       }
@@ -2540,23 +3426,21 @@
       event.preventDefault();
       const token = controllerTokenValue();
       const homeserver = matrixHomeserver.value.trim();
-      const matrixAccessTokenValue = matrixAccessToken.value.trim();
       const allowedSender = matrixAllowedSender.value.trim();
+      if (normalizeLlmProvider(llmProvider.value) !== 'codex_cli') {
+        syncModelPickerValue(settingsLlmControls);
+      }
       if (normalizeLlmProvider(llmProvider.value) !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
         setConfigPane('model');
         setConfigStatus(t('llmConfigRequired'), true);
         if (!llmModel.value.trim()) {
-          llmModel.focus();
+          focusSelectControl(llmModelPicker);
         } else {
           llmBaseUrl.focus();
         }
         return;
       }
-      const shouldSaveMatrix = matrixEnabled.checked
-        || matrixAccessTokenValue
-        || allowedSender
-        || localStorage.getItem('bw.matrixEnabled') === '0';
-      if (matrixEnabled.checked && (!homeserver || !allowedSender)) {
+      if (chatToolMatrix.checked && (!homeserver || !allowedSender)) {
         setConfigPane('integrations');
         setConfigStatus(t('matrixRequired'), true);
         if (!homeserver) {
@@ -2571,30 +3455,9 @@
       setConfigStatus(t('savingConfig'), false);
       try {
         await saveLlmConfig(token);
-        if (shouldSaveMatrix) {
-          const response = await fetch('/api/chat/matrix/local-config', {
-            method: 'PUT',
-            headers: {
-              'content-type': 'application/json',
-              'x-blockwright-token': token
-            },
-            body: JSON.stringify({
-              enabled: matrixEnabled.checked,
-              homeserver_url: homeserver,
-              access_token: matrixAccessTokenValue,
-              allowed_sender: allowedSender,
-              allow_own_user_messages: matrixAllowOwn.checked,
-              auto_join_invites: matrixAutoJoin.checked,
-              default_target_player: username.value.trim() || null
-            })
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
-          }
-        }
+        await saveChatConfig(token);
         markModelSetupComplete();
-        setConfigStatus(`${t('llmConfigSaved')} ${t('configSaved')}`, false);
+        setConfigStatus(`${t('llmConfigSaved')} ${t('chatConfigSaved')}`, false);
       } catch (error) {
         setConfigStatus(error.message || t('saveFailed'), true);
       } finally {
@@ -2642,7 +3505,7 @@
       syncModelSetupFromLlmSettings();
       setModelSetupStatus('', false);
       modelSetupGate.hidden = false;
-      modelSetupProvider.focus();
+      focusSelectControl(modelSetupProvider);
     }
 
     function closeModelSetupGate() {
@@ -2733,8 +3596,8 @@
       refreshMicrophonePermission(true);
       if (options && options.focusLlm === true) {
         setConfigPane('model');
-        llmProvider.scrollIntoView({block: 'center'});
-        llmProvider.focus();
+        scrollSelectControlIntoView(llmProvider, {block: 'center'});
+        focusSelectControl(llmProvider);
       } else {
         setConfigPane('general');
         configBack.focus();
@@ -3580,6 +4443,32 @@
       localStorage.removeItem(ACTIVE_JOB_KEY);
     }
 
+    function hasChatHistoryToClear() {
+      return Boolean(messages.querySelector('.message'))
+        || savedChatHistory().length > 0
+        || Boolean(savedActiveJob())
+        || Boolean(send.disabled);
+    }
+
+    function clearChatHistory() {
+      if (!hasChatHistoryToClear()) {
+        setStatus(t('chatHistoryAlreadyClear'), false);
+        return;
+      }
+      if (!window.confirm(t('clearChatHistoryConfirm'))) {
+        return;
+      }
+      chatHistoryVersion += 1;
+      stopJobPolling({clearSavedJob: true});
+      localStorage.removeItem(CHAT_HISTORY_KEY);
+      messages.replaceChildren();
+      setStatus(t('chatHistoryCleared'), false);
+    }
+
+    function isActiveChatView(version) {
+      return version === chatHistoryVersion;
+    }
+
     function resumeSavedJobPolling() {
       const active = savedActiveJob();
       if (!active) {
@@ -3627,6 +4516,7 @@
       send.disabled = true;
       voiceHold.disabled = true;
       stopJobPolling({clearSavedJob: true});
+      const requestHistoryVersion = chatHistoryVersion;
       setStatus(t('sendingToBlockwright'), false);
       let assistantMessage = null;
       let progressTimers = [];
@@ -3635,6 +4525,9 @@
         const currentImages = [...pendingImages];
         clearComposer();
         const uploads = await Promise.all(currentImages.map((entry) => readImage(entry.file)));
+        if (!isActiveChatView(requestHistoryVersion)) {
+          return;
+        }
         const body = {
           username: name,
           target_player: name,
@@ -3645,7 +4538,7 @@
         assistantMessage = addMessage('assistant', 'Blockwright', t('receivingMessage'), []);
         assistantMessage.classList.add('pending');
         persistChatHistory();
-        progressTimers = startRequestProgress(assistantMessage, uploads.length);
+        progressTimers = startRequestProgress(assistantMessage, uploads.length, requestHistoryVersion);
         const response = await fetch('/web/message', {
           method: 'POST',
           headers: {'content-type': 'application/json'},
@@ -3656,19 +4549,25 @@
           throw new Error(payload.message || payload.error || await response.text() || t('requestFailed'));
         }
         stopTimers(progressTimers);
+        if (!isActiveChatView(requestHistoryVersion)) {
+          return;
+        }
         assistantMessage.classList.remove('pending');
         updateMessageBody(assistantMessage, payload.reply || '');
         if (payload.queued_job_id) {
           const queuedText = t('queuedStatus', {imageStatus: imageStatus(uploads.length)});
           setStatus(queuedText, false);
           setMessageProgress(assistantMessage, queuedText, false);
-          startJobPolling(payload.queued_job_id, assistantMessage);
+          startJobPolling(payload.queued_job_id, assistantMessage, requestHistoryVersion);
         } else {
           setStatus(t('repliedStatus', {imageStatus: imageStatus(uploads.length)}), false);
           clearMessageProgress(assistantMessage);
         }
       } catch (error) {
         stopTimers(progressTimers);
+        if (!isActiveChatView(requestHistoryVersion)) {
+          return;
+        }
         const message = error.message || String(error);
         setStatus(message, true);
         if (assistantMessage) {
@@ -3756,7 +4655,7 @@
       statusEl.classList.toggle('error', Boolean(isError));
     }
 
-    function startRequestProgress(item, imageCount) {
+    function startRequestProgress(item, imageCount, historyVersion) {
       const imageHint = imageCount > 0 ? t('requestProgressImageHint') : '';
       const phases = [
         {delay: 0, text: t('requestProgressReceiving', {imageHint})},
@@ -3766,6 +4665,9 @@
         {delay: 15000, text: t('requestProgressWaiting')}
       ];
       return phases.map((phase) => setTimeout(() => {
+        if (!isActiveChatView(historyVersion)) {
+          return;
+        }
         updateMessageBody(item, phase.text);
         setStatus(phase.text, false);
       }, phase.delay));
@@ -3785,17 +4687,28 @@
       }
     }
 
-    function startJobPolling(jobId, item) {
+    function startJobPolling(jobId, item, historyVersion = chatHistoryVersion) {
       stopJobPolling();
+      if (!isActiveChatView(historyVersion)) {
+        return;
+      }
       saveActiveJob(jobId, item);
       item.classList.add('pending');
       item.classList.remove('error');
       persistChatHistory();
       let attempts = 0;
       const poll = async () => {
+        if (!isActiveChatView(historyVersion) || !item.isConnected) {
+          stopJobPolling({clearSavedJob: true});
+          return;
+        }
         attempts += 1;
         try {
           const response = await fetch(`/web/jobs/${encodeURIComponent(jobId)}/status`);
+          if (!isActiveChatView(historyVersion) || !item.isConnected) {
+            stopJobPolling({clearSavedJob: true});
+            return;
+          }
           if (response.status === 404) {
             const message = t('jobNotFound');
             item.classList.remove('pending');
@@ -3823,6 +4736,10 @@
             stopJobPolling({clearSavedJob: true});
           }
         } catch (error) {
+          if (!isActiveChatView(historyVersion) || !item.isConnected) {
+            stopJobPolling({clearSavedJob: true});
+            return;
+          }
           if (attempts >= 3) {
             const message = error.message || String(error);
             setStatus(message, true);

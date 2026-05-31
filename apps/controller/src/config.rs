@@ -283,6 +283,18 @@ pub fn load_chat_runtime_config(
     Ok(config)
 }
 
+pub fn write_chat_runtime_config(
+    path: &Path,
+    config: &ChatRuntimeConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    validate_chat_runtime_config(config)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, yaml_serde::to_string(config)?)?;
+    Ok(())
+}
+
 pub fn load_llm_runtime_config(
     path: &Path,
 ) -> Result<LlmRuntimeConfig, Box<dyn std::error::Error + Send + Sync>> {

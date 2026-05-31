@@ -2,7 +2,7 @@
 
 [English](GITHUB_PAGES.md) | [简体中文](GITHUB_PAGES.zh-CN.md)
 
-These notes configure Blockwright as a GitHub project with a website, README, and preview image. The repository already includes a static site entrypoint:
+These notes configure Blockwright as a GitHub project with a website, blog, README, and preview image. The repository already includes a static site entrypoint:
 
 ```text
 docs/index.html
@@ -43,6 +43,8 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 - `README.md`: English default overview for GitHub visitors, with product positioning, supported models, command entrances, Fabric installation, and operation patterns.
 - `README.zh-CN.md`: Chinese README for Chinese readers.
 - `docs/index.html`: public project website for GitHub Pages, defaulting to English with an English/Chinese language switch.
+- `docs/blog.html` and `docs/blog.zh-CN.html`: public article index for launch posts, product notes, and stable links from X, Reddit, Modrinth, CurseForge, and other platforms.
+- `docs/articles/`: article pages and Markdown drafts. Add new public posts here, then link them from the blog index.
 - `docs/user/JAVA_FABRIC_INSTALL.md`: detailed installation guide, linked from both README and the website.
 - `docs/ARCHITECTURE.md` and `docs/MCP.md`: developer-facing architecture and MCP documentation.
 

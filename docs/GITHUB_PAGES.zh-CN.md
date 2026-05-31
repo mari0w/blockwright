@@ -2,7 +2,7 @@
 
 [English](GITHUB_PAGES.md) | [简体中文](GITHUB_PAGES.zh-CN.md)
 
-这份说明用于把 Blockwright 仓库配置成“有官网、有 README、有配图”的 GitHub 项目页。仓库已经准备好静态站点入口：
+这份说明用于把 Blockwright 仓库配置成“有官网、有 Blog、有 README、有配图”的 GitHub 项目页。仓库已经准备好静态站点入口：
 
 ```text
 docs/index.html
@@ -43,6 +43,8 @@ https://mari0w.github.io/blockwright/
 - `README.md`：默认英文入口，给 GitHub 访问者快速判断项目是什么、怎么跑、怎么安装 Fabric 模组、开发者怎么测试。
 - `README.zh-CN.md`：中文 README。
 - `docs/index.html`：面向公开展示的项目官网，默认英文，并支持中英文切换。
+- `docs/blog.html`、`docs/blog.zh-CN.html`：公开文章列表，用来放发布文章、产品介绍和外部平台稳定回链。
+- `docs/articles/`：文章页和 Markdown 草稿。后续新增公开文章时，先放这里，再从 Blog 页加链接。
 - `docs/user/JAVA_FABRIC_INSTALL.md`：保留详细安装步骤，README 和官网都链接到这里。
 - `docs/ARCHITECTURE.md`、`docs/MCP.md`：给开发者和后续接入者阅读。
 

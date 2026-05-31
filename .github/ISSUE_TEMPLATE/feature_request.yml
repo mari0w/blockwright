@@ -1,5 +1,5 @@
 name: Feature request
-description: 提议 Blockwright 的新能力或改进
+description: Suggest a new Blockwright capability or improvement
 title: "[Feature]: "
 labels:
   - enhancement
@@ -7,30 +7,30 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: 你想解决什么问题
-      description: 请从玩家、服主、开发者或运营视角描述真实场景。
+      label: Problem
+      description: Describe the real scenario from a player, server owner, developer, or operator perspective.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: 建议方案
-      description: 如果已经有想法，请描述希望的交互、API 或行为。
+      label: Proposed solution
+      description: If you already have an idea, describe the desired interaction, API, or behavior.
     validations:
       required: true
   - type: dropdown
     id: component
     attributes:
-      label: 影响组件
+      label: Affected component
       options:
         - apps/controller
         - plugins/fabric
         - plugins/paper
         - docs
-        - 不确定
+        - Not sure
     validations:
       required: true
   - type: textarea
     id: notes
     attributes:
-      label: 补充信息
+      label: Additional context

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright: an open-source AI assistant that acts inside Minecraft Java</title>
+  <meta name="description" content="A launch article for Blockwright, an open-source AI assistant that turns natural-language requests into real actions inside Minecraft Java Edition.">
+  <meta property="og:title" content="Blockwright: an open-source AI assistant that acts inside Minecraft Java">
+  <meta property="og:description" content="Blockwright connects natural-language AI requests to controlled Minecraft Java Edition actions through Fabric, a Rust controller, build records, and verification.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mari0w.github.io/blockwright/articles/blockwright-x-article.html">
+  <meta property="og:site_name" content="Blockwright">
+  <meta property="og:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:secure_url" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
+  <meta itemprop="image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blockwright: an open-source AI assistant that acts inside Minecraft Java">
+  <meta name="twitter:description" content="Blockwright connects natural-language AI requests to controlled Minecraft Java Edition actions through Fabric, a Rust controller, build records, and verification.">
+  <meta name="twitter:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta name="twitter:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
+  <link rel="icon" href="../assets/social-preview.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --panel: #151c18;
+      --text: #f3f6f0;
+      --muted: #b8c4bc;
+      --line: #354239;
+      --green: #3cc77a;
+      --amber: #e7b15d;
+      --max: 820px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.78;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      color: var(--amber);
+      outline: none;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 14, 12, 0.9);
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .brand {
+      color: var(--text);
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 54px 0 72px;
+    }
+
+    .kicker {
+      margin: 0 0 14px;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(36px, 7vw, 58px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 22px 0 0;
+      color: #d6e2da;
+      font-size: 20px;
+    }
+
+    article {
+      margin-top: 46px;
+    }
+
+    h2 {
+      margin: 42px 0 14px;
+      font-size: 28px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    ul {
+      padding-left: 1.4em;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #101511;
+      color: #e8f1ea;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: #e8f1ea;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="../index.html">Blockwright</a>
+      <nav class="links" aria-label="Article navigation">
+        <a href="../index.html">Home</a>
+        <a href="../blog.html">Blog</a>
+        <a href="blockwright-x-article.en.md">Markdown</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="kicker">Launch article</p>
+    <h1>Blockwright: an open-source AI assistant that acts inside Minecraft Java</h1>
+    <p class="lead">A project-owned article for sharing Blockwright on X, developer communities, mod platforms, and open-source directories.</p>
+
+    <article>
+      <p>I have been building an open-source project called <strong>Blockwright</strong>.</p>
+
+      <p>It is an AI assistant for <strong>Minecraft Java Edition</strong>, but the goal is not to make another chatbot that only talks about the game. The goal is to let players describe what they want in natural language, then have the assistant turn that request into real actions inside the Minecraft world.</p>
+
+      <p>The first version is focused on the local Fabric experience. After installing the mod, a player can use the in-game <code>/bw</code> command, a local Web chat page, or voice input from the Web UI.</p>
+
+      <p>For example:</p>
+
+      <pre><code>/bw give me a diamond sword
+/bw give me a stack of torches
+/bw make it daytime
+/bw build a small wooden cabin with windows and a bed
+/bw replace the wall in front of me with glass</code></pre>
+
+      <p>These are small examples, but they point to the bigger idea: Minecraft already gives players a powerful creative world, but a lot of common actions are still command-heavy, repetitive, or slow to prototype.</p>
+
+      <p>Giving items, changing time, clearing rain, building the first version of a small room, replacing a wall, adding lights, or modifying part of a structure are not always the most interesting part of playing. They are often the setup work before the interesting part starts.</p>
+
+      <p>Blockwright tries to make that setup work conversational.</p>
+
+      <p>What makes the project interesting to me is the execution loop behind it.</p>
+
+      <p>The assistant does not just return a paragraph of advice. The controller takes a natural-language request and turns it into structured actions. Those actions are sent to the Minecraft side, where the Fabric mod executes them through the server/world API.</p>
+
+      <p>For building, that means Blockwright is not trying to fake a player moving a mouse, opening inventory slots, and right-clicking blocks. It places blocks through the world API. Blueprints use relative coordinates. Build records are saved by the controller. The Minecraft execution side can read back world state and report what was actually placed.</p>
+
+      <p>The direction is:</p>
+
+      <pre><code>natural language request
+-> structured plan
+-> Minecraft execution
+-> verification/reporting</code></pre>
+
+      <p>This matters because a Minecraft AI assistant should eventually be able to reason about the world, not just generate text. If it builds something, it should know what it tried to build. If it edits something, it should know what structure it is editing. If placement fails, the result should be visible in a report instead of being hidden behind a friendly message.</p>
+
+      <p>The current feature set includes:</p>
+
+      <ul>
+        <li>Minecraft Java Edition 1.21.x support</li>
+        <li>Fabric as the main install path</li>
+        <li>In-game <code>/bw</code> commands</li>
+        <li>A local Web chat UI</li>
+        <li>Voice input from the Web UI</li>
+        <li>Multiple model backends, including Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini</li>
+        <li>Basic item giving</li>
+        <li>Time and weather changes</li>
+        <li>Small structure generation</li>
+        <li>Early structure-editing workflows</li>
+        <li>Saved blueprints and build records</li>
+        <li>Server-side block placement and verification</li>
+      </ul>
+
+      <p>Right now, the best use cases are local worlds, LAN worlds, creative-mode testing, small builds, quick item requests, and experimenting with AI-assisted building workflows.</p>
+
+      <p>I am intentionally starting with the local Fabric path because that is where Minecraft Java players already are. I do not want players to move a single-player world to a separate server just to try an AI assistant. The mod should fit into the way people already play.</p>
+
+      <p>There is still a lot to improve.</p>
+
+      <p>Existing-world editing needs to become safer and less ambiguous. Build selection needs better UX. The assistant should ask follow-up questions when the target is unclear. More actions should become structured tools instead of prompt-only behavior. The planner needs to get better at Minecraft-specific details like doors, beds, lighting, paths, and block states.</p>
+
+      <p>But the core loop is already there, and that is the part I wanted to open up early.</p>
+
+      <p>Blockwright is MIT licensed and open source.</p>
+
+      <p>GitHub:</p>
+
+      <p><a href="https://github.com/mari0w/blockwright">https://github.com/mari0w/blockwright</a></p>
+
+      <p>If you are interested in Minecraft mods, local AI agents, game automation, or open-source tooling, I would love feedback on the project.</p>
+
+      <p>The question I keep coming back to is:</p>
+
+      <p>What should an AI assistant inside Minecraft be able to do, once it can actually act in the world instead of only talking about it?</p>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blockwright Blog</title>
+  <meta name="description" content="Blockwright articles, launch posts, and product notes for Minecraft Java Edition AI control.">
+  <meta property="og:title" content="Blockwright Blog">
+  <meta property="og:description" content="Articles and launch posts for Blockwright, an open-source AI assistant that acts inside Minecraft Java Edition.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mari0w.github.io/blockwright/blog.html">
+  <meta property="og:site_name" content="Blockwright">
+  <meta property="og:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:secure_url" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
+  <meta itemprop="image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blockwright Blog">
+  <meta name="twitter:description" content="Articles and launch posts for Blockwright, an open-source AI assistant that acts inside Minecraft Java Edition.">
+  <meta name="twitter:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta name="twitter:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
+  <link rel="icon" href="assets/social-preview.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --panel: #151c18;
+      --panel-2: #1d261f;
+      --text: #f3f6f0;
+      --muted: #b8c4bc;
+      --line: #354239;
+      --green: #3cc77a;
+      --amber: #e7b15d;
+      --max: 960px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.72;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      color: var(--amber);
+      outline: none;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 14, 12, 0.9);
+    }
+
+    .topbar-inner {
+      width: min(calc(100% - 32px), var(--max));
+      min-height: 58px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .brand {
+      color: var(--text);
+    }
+
+    .links {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      color: var(--muted);
+    }
+
+    main {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+      padding: 58px 0 76px;
+    }
+
+    .kicker {
+      margin: 0 0 12px;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(40px, 8vw, 64px);
+      line-height: 1.06;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 780px;
+      margin: 22px 0 0;
+      color: #d6e2da;
+      font-size: 20px;
+    }
+
+    .article-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 44px;
+    }
+
+    .article-card {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 22px;
+    }
+
+    .article-card.primary {
+      grid-column: 1 / -1;
+      background: var(--panel-2);
+    }
+
+    .article-card time,
+    .article-card .label {
+      color: var(--amber);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .article-card h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.24;
+      letter-spacing: 0;
+    }
+
+    .article-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .article-card a {
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .note {
+      margin-top: 40px;
+      border-top: 1px solid var(--line);
+      padding-top: 24px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    @media (max-width: 700px) {
+      .topbar-inner {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 0;
+      }
+
+      .links {
+        justify-content: flex-start;
+      }
+
+      .article-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .article-card.primary {
+        grid-column: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html">Blockwright</a>
+      <nav class="links" aria-label="Blog navigation">
+        <a href="index.html">Home</a>
+        <a href="blog.zh-CN.html">简体中文</a>
+        <a href="https://github.com/mari0w/blockwright">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <p class="kicker">Blog</p>
+    <h1>Blockwright Articles</h1>
+    <p class="lead">A public home for product introductions, launch posts, publishing links, and future notes about AI-controlled Minecraft Java Edition workflows.</p>
+
+    <section class="article-grid" aria-label="Articles">
+      <article class="article-card primary">
+        <time datetime="2026-05-31">May 31, 2026</time>
+        <h2><a href="articles/blockwright-intro.html">Blockwright: Production AI Control for Minecraft Java Edition</a></h2>
+        <p>The main product overview: what Blockwright does, how the Fabric path works, supported model backends, command entrances, controlled execution, build records, and verification.</p>
+        <p><a href="articles/blockwright-intro.html">Read the article</a></p>
+      </article>
+
+      <article class="article-card">
+        <span class="label">Launch article</span>
+        <h2><a href="articles/blockwright-x-article.html">Blockwright: an open-source AI assistant that acts inside Minecraft Java</a></h2>
+        <p>A shareable launch article for X, developer communities, and platforms that need a stable project-owned URL.</p>
+        <p><a href="articles/blockwright-x-article.html">Read the article</a></p>
+      </article>
+
+      <article class="article-card">
+        <span class="label">Plain text</span>
+        <h2><a href="articles/blockwright-intro.en.md">Markdown overview</a></h2>
+        <p>A plain Markdown version of the product overview for README references, release notes, and external publishing drafts.</p>
+        <p><a href="articles/blockwright-intro.en.md">Open Markdown</a></p>
+      </article>
+    </section>
+
+    <p class="note">New public articles should live in <code>docs/articles/</code> and be linked from this page so Reddit, X, Modrinth, CurseForge, and other platforms can point back to the project website.</p>
+  </main>
+</body>
+</html>

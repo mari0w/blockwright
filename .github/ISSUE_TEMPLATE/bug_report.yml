@@ -1,5 +1,5 @@
 name: Bug report
-description: 报告 Blockwright 的缺陷或异常行为
+description: Report a Blockwright defect or unexpected behavior
 title: "[Bug]: "
 labels:
   - bug
@@ -7,47 +7,47 @@ body:
   - type: textarea
     id: summary
     attributes:
-      label: 问题描述
-      description: 简要说明发生了什么。
+      label: Summary
+      description: Briefly describe what happened.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: 复现步骤
-      description: 请写出最小复现步骤。
+      label: Reproduction steps
+      description: Provide the smallest set of steps that reproduces the issue.
       placeholder: |
-        1. 启动 controller
-        2. 在 Minecraft 输入 /bw ...
-        3. 观察到 ...
+        1. Start the controller
+        2. Enter /bw ... in Minecraft
+        3. Observe ...
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: 期望结果
+      label: Expected result
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: 实际结果
+      label: Actual result
     validations:
       required: true
   - type: dropdown
     id: component
     attributes:
-      label: 影响组件
+      label: Affected component
       options:
         - apps/controller
         - plugins/fabric
         - plugins/paper
         - docs
-        - 不确定
+        - Not sure
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: 相关日志
+      label: Relevant logs
       render: text

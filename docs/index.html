@@ -9,8 +9,19 @@
   <meta property="og:description" content="Connect Minecraft Java Edition to AI backends with controlled commands, world context, server-side execution, build records, and verification.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mari0w.github.io/blockwright/">
-  <meta property="og:image" content="assets/social-preview.png">
+  <meta property="og:site_name" content="Blockwright">
+  <meta property="og:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:secure_url" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
+  <meta itemprop="image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blockwright - Production AI Control for Minecraft Java Edition">
+  <meta name="twitter:description" content="Connect Minecraft Java Edition to AI backends with controlled commands, world context, server-side execution, build records, and verification.">
+  <meta name="twitter:image" content="https://mari0w.github.io/blockwright/assets/social-preview.png">
+  <meta name="twitter:image:alt" content="Blockwright production AI control for Minecraft Java Edition">
   <link rel="icon" href="assets/social-preview.png">
   <style>
     :root {
@@ -675,6 +686,7 @@
           <a href="#models" data-i18n="nav.models">Models</a>
           <a href="#commands" data-i18n="nav.commands">Commands</a>
           <a href="#start" data-i18n="nav.start">How to use</a>
+          <a href="blog.html" data-href-en="blog.html" data-href-zh="blog.zh-CN.html" data-i18n="nav.blog">Blog</a>
         </div>
         <a class="repo-link" href="https://github.com/mari0w/blockwright" data-i18n="nav.github">GitHub</a>
         <div class="language-switch" aria-label="Language" data-i18n-aria="language.label">
@@ -695,6 +707,7 @@
           <div class="hero-actions">
             <a class="button primary" href="https://github.com/mari0w/blockwright" data-i18n="hero.github">View on GitHub</a>
             <a class="button" href="https://github.com/mari0w/blockwright/blob/main/docs/user/JAVA_FABRIC_INSTALL.md" data-i18n="hero.install">Deployment guide</a>
+            <a class="button" href="blog.html" data-href-en="blog.html" data-href-zh="blog.zh-CN.html" data-i18n="hero.blog">Read the blog</a>
             <a class="button" href="#commands" data-i18n="hero.commands">View commands</a>
           </div>
           <div class="badges" aria-label="Project highlights" data-i18n-aria="hero.badges">
@@ -850,13 +863,14 @@
     <section id="article" class="band">
       <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="article.kicker">Product overview</p>
-          <h2 data-i18n="article.title">Read the complete overview for capabilities, architecture, and operation.</h2>
-          <p class="section-copy" data-i18n="article.copy">The overview explains model backends, command entrances, Minecraft execution, build records, and verification behavior.</p>
+          <p class="section-kicker" data-i18n="article.kicker">Blog and articles</p>
+          <h2 data-i18n="article.title">Use the blog as the public home for launch posts, product notes, and platform links.</h2>
+          <p class="section-copy" data-i18n="article.copy">The blog collects shareable articles that explain Blockwright and give outside platforms a stable GitHub Pages URL to link back to.</p>
         </div>
         <div class="hero-actions">
-          <a class="button primary" href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="article.read">Read the article</a>
-          <a class="button" href="articles/blockwright-intro.en.md" data-href-en="articles/blockwright-intro.en.md" data-href-zh="articles/blockwright-intro.zh-CN.md" data-i18n="article.markdown">Markdown version</a>
+          <a class="button primary" href="blog.html" data-href-en="blog.html" data-href-zh="blog.zh-CN.html" data-i18n="article.read">Open the blog</a>
+          <a class="button" href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="article.overview">Read the overview</a>
+          <a class="button" href="articles/blockwright-x-article.html" data-i18n="article.launch">Launch article</a>
         </div>
       </div>
     </section>
@@ -894,6 +908,10 @@
         </div>
         <div class="config-grid">
           <article class="config-item">
+            <h3><a href="blog.html" data-href-en="blog.html" data-href-zh="blog.zh-CN.html" data-i18n="docs.blogTitle">Blog</a></h3>
+            <p data-i18n="docs.blogCopy">Stable article links for product introductions, launch posts, and platform announcements.</p>
+          </article>
+          <article class="config-item">
             <h3><a href="articles/blockwright-intro.html" data-href-en="articles/blockwright-intro.html" data-href-zh="articles/blockwright-intro.zh-CN.html" data-i18n="docs.articleTitle">Product overview</a></h3>
             <p data-i18n="docs.articleCopy">A fuller explanation of the assistant runtime, supported operations, and Minecraft execution model.</p>
           </article>
@@ -928,7 +946,9 @@
           title: "Blockwright - Production AI Control for Minecraft Java Edition",
           description: "Blockwright is a production-oriented AI control layer for Minecraft Java Edition: model backends, /bw commands, Web and chat entrances, controlled execution, build records, and verification.",
           ogTitle: "Blockwright - Production AI Control for Minecraft Java Edition",
-          ogDescription: "Connect Minecraft Java Edition to AI backends with controlled commands, world context, server-side execution, build records, and verification."
+          ogDescription: "Connect Minecraft Java Edition to AI backends with controlled commands, world context, server-side execution, build records, and verification.",
+          ogImage: "https://mari0w.github.io/blockwright/assets/social-preview.png",
+          ogImageAlt: "Blockwright production AI control for Minecraft Java Edition"
         },
         nav: {
           label: "Main navigation",
@@ -937,6 +957,7 @@
           models: "Models",
           commands: "Commands",
           start: "How to use",
+          blog: "Blog",
           article: "Intro article",
           docs: "Tutorials",
           github: "GitHub"
@@ -951,6 +972,7 @@
           lead: "Blockwright connects Minecraft Java Edition to AI backends through a controlled execution layer. Use <code>/bw</code>, Web, voice, Matrix/DingTalk, or local scripts to read world context, run approved actions, manage build records, and verify results.",
           github: "View on GitHub",
           install: "Deployment guide",
+          blog: "Read the blog",
           commands: "View commands",
           badges: "Project highlights",
           badgeFabric: "Fabric deployment",
@@ -1015,11 +1037,12 @@
           requestCopy: "Submit requests through <code>/bw</code>, Web text, voice, or a connected chat tool. The controller routes them through typed tools and records execution results."
         },
         article: {
-          kicker: "Product overview",
-          title: "Read the complete overview for capabilities, architecture, and operation.",
-          copy: "The overview explains model backends, command entrances, Minecraft execution, build records, and verification behavior.",
-          read: "Read the overview",
-          markdown: "Markdown overview"
+          kicker: "Blog and articles",
+          title: "Use the blog as the public home for launch posts, product notes, and platform links.",
+          copy: "The blog collects shareable articles that explain Blockwright and give outside platforms a stable GitHub Pages URL to link back to.",
+          read: "Open the blog",
+          overview: "Read the overview",
+          launch: "Launch article"
         },
         showcase: {
           kicker: "Product surface",
@@ -1036,6 +1059,8 @@
           kicker: "Documentation",
           title: "Use these references to install, operate, and evaluate Blockwright.",
           copy: "Player-facing setup lives beside technical references for the controller, Minecraft execution layer, MCP tools, and release artifacts.",
+          blogTitle: "Blog",
+          blogCopy: "Stable article links for product introductions, launch posts, and platform announcements.",
           articleTitle: "Product overview",
           articleCopy: "A fuller explanation of the assistant runtime, supported operations, and Minecraft execution model.",
           markdownTitle: "Markdown overview",
@@ -1055,7 +1080,9 @@
           title: "Blockwright - Minecraft Java 版生产级 AI 控制层",
           description: "Blockwright 是面向 Minecraft Java 版的生产级 AI 控制层，提供模型后端、/bw 命令、Web 和聊天入口、受控执行、构建记录和结果校验。",
           ogTitle: "Blockwright - Minecraft Java 版生产级 AI 控制层",
-          ogDescription: "把 Minecraft Java 版接入 AI 后端，并通过受控命令、世界上下文、服务端执行、构建记录和校验报告完成操作。"
+          ogDescription: "把 Minecraft Java 版接入 AI 后端，并通过受控命令、世界上下文、服务端执行、构建记录和校验报告完成操作。",
+          ogImage: "https://mari0w.github.io/blockwright/assets/social-preview.zh-CN.png",
+          ogImageAlt: "Blockwright 面向 Minecraft Java 版的生产级 AI 控制层"
         },
         nav: {
           label: "主导航",
@@ -1064,6 +1091,7 @@
           models: "模型",
           commands: "命令",
           start: "怎么用",
+          blog: "Blog",
           article: "介绍文章",
           docs: "教程",
           github: "GitHub"
@@ -1078,6 +1106,7 @@
           lead: "Blockwright 通过受控执行层把 Minecraft Java 版接入 AI 后端。你可以用 <code>/bw</code>、Web、语音、Matrix/钉钉或本地脚本读取世界上下文、执行授权动作、管理构建记录并校验结果。",
           github: "查看 GitHub",
           install: "部署指南",
+          blog: "阅读 Blog",
           commands: "查看命令",
           badges: "项目关键特性",
           badgeFabric: "Fabric 部署",
@@ -1142,11 +1171,12 @@
           requestCopy: "通过 <code>/bw</code>、Web 文字、语音或已接入的聊天工具提交请求。controller 会把请求路由到类型化工具，并记录执行结果。"
         },
         article: {
-          kicker: "产品概览",
-          title: "阅读完整概览，了解能力、架构和运行方式。",
-          copy: "概览会说明模型后端、命令入口、Minecraft 执行、构建记录和校验行为。",
-          read: "阅读概览",
-          markdown: "Markdown 概览"
+          kicker: "Blog 和文章",
+          title: "把 Blog 作为发布文章、产品介绍和外部平台链接回来的公开入口。",
+          copy: "Blog 会集中放可以分享的文章，后续 X、Reddit、Modrinth、CurseForge 或其他平台都可以链接到这里。",
+          read: "打开 Blog",
+          overview: "阅读概览",
+          launch: "发布文章"
         },
         showcase: {
           kicker: "产品界面",
@@ -1163,6 +1193,8 @@
           kicker: "文档",
           title: "使用这些文档安装、运行和评估 Blockwright。",
           copy: "玩家侧安装说明和 controller、Minecraft 执行层、MCP 工具、发布产物等技术参考放在一起维护。",
+          blogTitle: "Blog",
+          blogCopy: "放产品介绍、发布文章和外部平台公告的稳定链接。",
           articleTitle: "产品概览",
           articleCopy: "更完整地说明助手运行时、支持的操作和 Minecraft 执行模型。",
           markdownTitle: "Markdown 概览",
@@ -1192,6 +1224,14 @@
       document.querySelector('meta[name="description"]').setAttribute("content", meta.description);
       document.querySelector('meta[property="og:title"]').setAttribute("content", meta.ogTitle);
       document.querySelector('meta[property="og:description"]').setAttribute("content", meta.ogDescription);
+      document.querySelector('meta[property="og:image"]').setAttribute("content", meta.ogImage);
+      document.querySelector('meta[property="og:image:secure_url"]').setAttribute("content", meta.ogImage);
+      document.querySelector('meta[property="og:image:alt"]').setAttribute("content", meta.ogImageAlt);
+      document.querySelector('meta[itemprop="image"]').setAttribute("content", meta.ogImage);
+      document.querySelector('meta[name="twitter:title"]').setAttribute("content", meta.ogTitle);
+      document.querySelector('meta[name="twitter:description"]').setAttribute("content", meta.ogDescription);
+      document.querySelector('meta[name="twitter:image"]').setAttribute("content", meta.ogImage);
+      document.querySelector('meta[name="twitter:image:alt"]').setAttribute("content", meta.ogImageAlt);
 
       document.querySelectorAll("[data-i18n]").forEach((element) => {
         element.textContent = valueFor(activeLanguage, element.dataset.i18n);

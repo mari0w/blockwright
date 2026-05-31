@@ -533,10 +533,17 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("bw.activeJob.v1"));
     assert!(page_body.contains("function restoreChatHistory"));
     assert!(page_body.contains("function resumeSavedJobPolling"));
+    assert!(page_body.contains("id=\"clearChat\""));
+    assert!(page_body.contains("Clear chat history"));
+    assert!(page_body.contains("清空聊天记录"));
+    assert!(page_body.contains("function clearChatHistory"));
+    assert!(page_body.contains("localStorage.removeItem(CHAT_HISTORY_KEY)"));
+    assert!(page_body.contains("chatHistoryVersion"));
     assert!(page_body.contains("restoringJobStatus"));
     assert!(page_body.contains("viewport-fit=cover"));
     assert!(page_body.contains("手机语音需要 HTTPS 地址"));
     assert!(page_body.contains("id=\"languageToggle\""));
+    assert!(!page_body.contains("languageToggleLabel"));
     assert!(page_body.contains("id=\"languageEnglish\""));
     assert!(page_body.contains("id=\"languageChinese\""));
     assert!(page_body.contains("Choose the language used by this browser"));
@@ -580,6 +587,10 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("id=\"modelSetupGate\""));
     assert!(page_body.contains("配置 AI 模型"));
     assert!(page_body.contains("id=\"modelSetupProvider\""));
+    assert!(page_body.contains("id=\"modelSetupModel\" type=\"hidden\""));
+    assert!(!page_body.contains("id=\"modelSetupModelSuggestions\""));
+    assert!(page_body.contains("id=\"modelSetupModelPicker\""));
+    assert!(page_body.contains("id=\"modelSetupModelPickerDropdown\""));
     assert!(page_body.contains("bw.modelSetupPending.v1"));
     assert!(page_body.contains("function showModelSetupGate"));
     assert!(page_body.contains("function syncLlmSettingsFromModelSetup"));
@@ -591,6 +602,21 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("M21 4h-7"));
     assert!(page_body.contains("id=\"configPage\""));
     assert!(page_body.contains("id=\"llmProvider\""));
+    assert!(page_body.contains("id=\"llmModel\" type=\"hidden\""));
+    assert!(!page_body.contains("id=\"llmModelSuggestions\""));
+    assert!(page_body.contains("id=\"llmModelPicker\""));
+    assert!(page_body.contains("id=\"llmModelPickerDropdown\""));
+    assert!(page_body.contains("function setupCustomSelects"));
+    assert!(page_body.contains("LLM_PROVIDER_MODEL_SUGGESTIONS"));
+    assert!(page_body.contains("function updateModelSuggestions"));
+    assert!(page_body.contains("function applyPickedModel"));
+    assert!(page_body.contains("function syncModelPickerValue"));
+    assert!(page_body.contains("选择模型版本"));
+    assert!(page_body.contains("Choose a model version"));
+    assert!(page_body.contains("gpt-5.5"));
+    assert!(page_body.contains("deepseek-v4-pro"));
+    assert!(page_body.contains("doubao-seed-2-0-pro-260215"));
+    assert!(page_body.contains("gemini-3.5-flash"));
     assert!(page_body.contains("OpenAI API"));
     assert!(page_body.contains("DeepSeek API"));
     assert!(page_body.contains("Doubao API"));
@@ -620,7 +646,14 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("我已信任证书"));
     assert!(page_body.contains("function certificateInstallHelp"));
     assert!(page_body.contains("function certificateTrustHelp"));
-    assert!(page_body.contains("/api/chat/matrix/local-config"));
+    assert!(page_body.contains("/api/chat/config"));
+    assert!(page_body.contains("id=\"chatToolMatrix\""));
+    assert!(page_body.contains("id=\"chatToolDingtalk\""));
+    assert!(page_body.contains("data-tool-panel=\"matrix\""));
+    assert!(page_body.contains("data-tool-panel=\"dingtalk\""));
+    assert!(page_body.contains("function updateChatToolPanels"));
+    assert!(page_body.contains("function saveChatConfig"));
+    assert!(page_body.contains("bw.chatTools"));
     assert!(page_body.contains("text.hidden = active"));
     assert!(page_body.contains("function composerControlHeight"));
     assert!(page_body.contains(
@@ -634,9 +667,7 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("function setAddPanel"));
     assert!(page_body.contains("Sent to Minecraft and waiting for execution"));
     assert!(page_body.contains("操作已交给 Minecraft"));
-    assert!(page_body
-        .contains("matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') === '1';"));
-    assert!(page_body.contains("if (matrixEnabled.checked && (!homeserver || !allowedSender))"));
+    assert!(page_body.contains("if (chatToolMatrix.checked && (!homeserver || !allowedSender))"));
     assert!(!page_body.contains("我已经准备好方案，正在等 Minecraft 接手"));
     assert!(page_body.contains("切换到文字输入"));
     assert!(page_body.contains("navigator.mediaDevices.getUserMedia"));
@@ -2026,6 +2057,79 @@ async fn matrix_local_config_endpoint_allows_disabled_without_sender_or_token() 
     assert!(chat_source.contains("element-local"));
     assert!(chat_source.contains("enabled: false"));
     assert!(!env_path.exists());
+}
+
+#[tokio::test]
+async fn chat_config_endpoint_writes_selected_tools_without_secret_leaks() {
+    std::env::remove_var("DINGTALK_CLIENT_ID");
+    std::env::remove_var("DINGTALK_CLIENT_SECRET");
+    std::env::remove_var("MATRIX_ACCESS_TOKEN");
+    let chat_path = temp_dir("chat-local-config").join("chat.local.yaml");
+    let env_path = chat_path.parent().unwrap().join(".env");
+    let state = AppState::new(config_with_chat_path(true, chat_path.clone()))
+        .await
+        .unwrap();
+    let app = app::build_app(state);
+
+    let response = app
+        .clone()
+        .oneshot(request(
+            "PUT",
+            "/api/chat/config",
+            Some(json!({
+                "enabled_tools": ["dingtalk"],
+                "matrix": {
+                    "enabled": false,
+                    "homeserver_url": "https://matrix-client.matrix.org",
+                    "access_token": "",
+                    "allowed_sender": "",
+                    "allow_own_user_messages": true,
+                    "auto_join_invites": true,
+                    "default_target_player": "Charles"
+                },
+                "dingtalk": {
+                    "enabled": true,
+                    "client_id": "ding-client-id",
+                    "client_secret": "ding-client-secret",
+                    "robot_code": "dingxxx",
+                    "default_target_player": "Charles"
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["enabled_tools"], json!(["dingtalk"]));
+    assert_eq!(body["matrix"]["enabled"], false);
+    assert_eq!(body["dingtalk"]["enabled"], true);
+    assert_eq!(body["dingtalk"]["robot_code"], "dingxxx");
+    assert_eq!(body["dingtalk"]["client_id_configured"], true);
+    assert_eq!(body["dingtalk"]["client_secret_configured"], true);
+    assert!(!body.to_string().contains("ding-client-secret"));
+
+    let chat_source = std::fs::read_to_string(&chat_path).unwrap();
+    let env_source = std::fs::read_to_string(&env_path).unwrap();
+    assert!(chat_source.contains("element-local"));
+    assert!(chat_source.contains("enabled: false"));
+    assert!(chat_source.contains("dingtalk-local"));
+    assert!(chat_source.contains("enabled: true"));
+    assert!(chat_source.contains("DINGTALK_CLIENT_ID"));
+    assert!(chat_source.contains("DINGTALK_CLIENT_SECRET"));
+    assert!(!chat_source.contains("ding-client-id"));
+    assert!(!chat_source.contains("ding-client-secret"));
+    assert!(env_source.contains("DINGTALK_CLIENT_ID=ding-client-id"));
+    assert!(env_source.contains("DINGTALK_CLIENT_SECRET=ding-client-secret"));
+
+    let response = app
+        .oneshot(request("GET", "/api/chat/config", None, Some("test-token")))
+        .await
+        .unwrap();
+    let body = response_json(response).await;
+    assert_eq!(body["enabled_tools"], json!(["dingtalk"]));
+    assert!(!body.to_string().contains("ding-client-secret"));
 }
 
 #[tokio::test]

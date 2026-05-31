@@ -6,6 +6,15 @@ The project follows a pragmatic early-stage versioning model. Breaking changes a
 
 ## Unreleased
 
+## 0.1.29 - 2026-05-31
+
+- Added a unified Web chat-tools settings flow for Element/Matrix and DingTalk, including persistent local config, secret-safe environment updates, and Matrix polling startup.
+- Reworked AI model selection in the Web setup and settings pages with provider-specific model pickers and clearer first-run configuration controls.
+- Added a browser-side clear-chat action that resets saved chat history and restored job status.
+- Improved LLM API failure messages so upstream DeepSeek and compatible-provider errors such as insufficient balance or invalid API keys are shown directly instead of being reported as generic configuration failures.
+- Added a public GitHub Pages blog, a shareable launch article, and stronger Open Graph/Twitter metadata for docs and project pages.
+- Switched contributor and issue templates to English for public project workflows.
+
 ## 0.1.28 - 2026-05-31
 
 - Added first-run AI model setup in the Web UI and browser-language-aware UI defaults.

@@ -1,12 +1,20 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{get, put},
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    config::{ChatInboundMode, ChatPlatform, ChatRuntimeConfig, ChatToolConfig, MatrixChatConfig},
+    config::{
+        self, ChatInboundMode, ChatPlatform, ChatRuntimeConfig, ChatToolConfig, DingTalkChatConfig,
+        MatrixChatConfig,
+    },
     domain::types::{ChatAttachment, ChatAttachmentKind, ChatAttachmentSource},
     http::robot::{queue_chat_message, RobotMessageResponse},
     integrations::matrix,
@@ -15,6 +23,9 @@ use crate::{
 };
 
 const DINGTALK_BOT_MESSAGE_TOPIC: &str = "/v1.0/im/bot/messages/get";
+const DINGTALK_LOCAL_TOOL_NAME: &str = "dingtalk-local";
+const DINGTALK_CLIENT_ID_ENV: &str = "DINGTALK_CLIENT_ID";
+const DINGTALK_CLIENT_SECRET_ENV: &str = "DINGTALK_CLIENT_SECRET";
 const MATRIX_LOCAL_TOOL_NAME: &str = "element-local";
 const MATRIX_ACCESS_TOKEN_ENV: &str = "MATRIX_ACCESS_TOKEN";
 
@@ -32,7 +43,52 @@ pub struct ChatAdapterInfo {
     pub local_friendly: bool,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub enum ChatToolSelection {
+    #[serde(rename = "matrix", alias = "element")]
+    Matrix,
+    #[serde(rename = "dingtalk", alias = "ding_talk")]
+    DingTalk,
+}
+
 #[derive(Debug, Deserialize)]
+pub struct ChatLocalConfigRequest {
+    #[serde(default)]
+    pub enabled_tools: Vec<ChatToolSelection>,
+    #[serde(default)]
+    pub matrix: Option<MatrixLocalConfigRequest>,
+    #[serde(default)]
+    pub dingtalk: Option<DingTalkLocalConfigRequest>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChatLocalConfigResponse {
+    pub ok: bool,
+    pub message: String,
+    pub enabled_tools: Vec<ChatToolSelection>,
+    pub config_path: String,
+    pub env_path: String,
+    pub matrix: MatrixLocalConfigView,
+    pub dingtalk: DingTalkLocalConfigView,
+    pub poller_started: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MatrixLocalConfigView {
+    pub enabled: bool,
+    pub homeserver_url: String,
+    pub room_id: Option<String>,
+    pub allowed_sender: String,
+    pub allow_own_user_messages: bool,
+    pub auto_join_invites: bool,
+    pub default_server_id: Option<String>,
+    pub default_target_player: Option<String>,
+    pub poll_interval_seconds: Option<u64>,
+    pub sync_timeout_seconds: Option<u64>,
+    pub token_configured: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct MatrixLocalConfigRequest {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -54,6 +110,32 @@ pub struct MatrixLocalConfigRequest {
     pub poll_interval_seconds: Option<u64>,
     #[serde(default)]
     pub sync_timeout_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DingTalkLocalConfigView {
+    pub enabled: bool,
+    pub robot_code: Option<String>,
+    pub default_server_id: Option<String>,
+    pub default_target_player: Option<String>,
+    pub client_id_configured: bool,
+    pub client_secret_configured: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DingTalkLocalConfigRequest {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default)]
+    pub robot_code: Option<String>,
+    #[serde(default)]
+    pub default_server_id: Option<String>,
+    #[serde(default)]
+    pub default_target_player: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -116,13 +198,109 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat/adapters", get(list_adapters))
         .route(
-            "/chat/matrix/local-config",
-            axum::routing::put(save_matrix_local_config),
+            "/chat/config",
+            get(get_chat_local_config).put(save_chat_local_config),
         )
+        .route("/chat/matrix/local-config", put(save_matrix_local_config))
         .route(
             "/chat/dingtalk/stream",
             axum::routing::post(handle_dingtalk_stream),
         )
+}
+
+async fn get_chat_local_config(
+    State(state): State<AppState>,
+) -> Result<Json<ChatLocalConfigResponse>, (StatusCode, String)> {
+    let config = config::load_chat_runtime_config(&state.config.chat.config_path)
+        .map_err(internal_error_response)?;
+
+    Ok(Json(chat_local_config_response(
+        &state,
+        &config,
+        "Chat configuration loaded.".to_string(),
+        false,
+    )))
+}
+
+async fn save_chat_local_config(
+    State(state): State<AppState>,
+    Json(request): Json<ChatLocalConfigRequest>,
+) -> Result<Json<ChatLocalConfigResponse>, (StatusCode, String)> {
+    let enabled_tools = normalized_enabled_tools(&request.enabled_tools);
+    let matrix_enabled = enabled_tools.contains(&ChatToolSelection::Matrix);
+    let dingtalk_enabled = enabled_tools.contains(&ChatToolSelection::DingTalk);
+    let mut runtime_config = config::load_chat_runtime_config(&state.config.chat.config_path)
+        .map_err(internal_error_response)?;
+
+    let mut matrix_request = request
+        .matrix
+        .unwrap_or_else(|| matrix_request_from_config(&runtime_config, matrix_enabled));
+    matrix_request.enabled = matrix_enabled;
+    let matrix_tool = matrix_tool_from_request(&matrix_request)?;
+
+    let mut dingtalk_request = request
+        .dingtalk
+        .unwrap_or_else(|| dingtalk_request_from_config(&runtime_config, dingtalk_enabled));
+    dingtalk_request.enabled = dingtalk_enabled;
+    let dingtalk_tool = dingtalk_tool_from_request(&dingtalk_request)?;
+
+    let env_path = state.config.chat.env_path.clone();
+    let matrix_token = matrix_request.access_token.trim();
+    let mut matrix_token_configured = env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV)
+        || env_var_exists(MATRIX_ACCESS_TOKEN_ENV);
+    if matrix_enabled && matrix_token.is_empty() && !matrix_token_configured {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Matrix access token is required. If a token is already configured, leave this field blank to keep it.".to_string(),
+        ));
+    }
+
+    upsert_chat_tool_in_config(&mut runtime_config, matrix_tool.clone());
+    upsert_chat_tool_in_config(&mut runtime_config, dingtalk_tool);
+    config::write_chat_runtime_config(&state.config.chat.config_path, &runtime_config)
+        .map_err(internal_error_response)?;
+
+    if !matrix_token.is_empty() {
+        ensure_env_value(&env_path, MATRIX_ACCESS_TOKEN_ENV, matrix_token)
+            .map_err(internal_error_response)?;
+        std::env::set_var(MATRIX_ACCESS_TOKEN_ENV, matrix_token);
+        matrix_token_configured = true;
+    }
+
+    let dingtalk_client_id = dingtalk_request.client_id.trim();
+    if !dingtalk_client_id.is_empty() {
+        ensure_env_value(&env_path, DINGTALK_CLIENT_ID_ENV, dingtalk_client_id)
+            .map_err(internal_error_response)?;
+        std::env::set_var(DINGTALK_CLIENT_ID_ENV, dingtalk_client_id);
+    }
+    let dingtalk_client_secret = dingtalk_request.client_secret.trim();
+    if !dingtalk_client_secret.is_empty() {
+        ensure_env_value(
+            &env_path,
+            DINGTALK_CLIENT_SECRET_ENV,
+            dingtalk_client_secret,
+        )
+        .map_err(internal_error_response)?;
+        std::env::set_var(DINGTALK_CLIENT_SECRET_ENV, dingtalk_client_secret);
+    }
+
+    let poller_started = if matrix_enabled && matrix_token_configured {
+        matrix::spawn_tool_poller(state.clone(), matrix_tool)
+    } else {
+        false
+    };
+    let message = if poller_started {
+        "Chat configuration was saved and Matrix polling has started.".to_string()
+    } else {
+        "Chat configuration was saved.".to_string()
+    };
+
+    Ok(Json(chat_local_config_response(
+        &state,
+        &runtime_config,
+        message,
+        poller_started,
+    )))
 }
 
 async fn save_matrix_local_config(
@@ -132,7 +310,8 @@ async fn save_matrix_local_config(
     let tool = matrix_tool_from_request(&request)?;
     let token = request.access_token.trim();
     let env_path = state.config.chat.env_path.clone();
-    let mut token_configured = env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV);
+    let mut token_configured = env_key_exists(&env_path, MATRIX_ACCESS_TOKEN_ENV)
+        || env_var_exists(MATRIX_ACCESS_TOKEN_ENV);
     if request.enabled && token.is_empty() && !token_configured {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -392,6 +571,161 @@ fn dingtalk_content_attachment(
     })
 }
 
+fn normalized_enabled_tools(tools: &[ChatToolSelection]) -> Vec<ChatToolSelection> {
+    [ChatToolSelection::Matrix, ChatToolSelection::DingTalk]
+        .into_iter()
+        .filter(|selection| tools.contains(selection))
+        .collect()
+}
+
+fn chat_local_config_response(
+    state: &AppState,
+    config: &ChatRuntimeConfig,
+    message: String,
+    poller_started: bool,
+) -> ChatLocalConfigResponse {
+    let matrix = matrix_view_from_config(config, &state.config.chat.env_path);
+    let dingtalk = dingtalk_view_from_config(config, &state.config.chat.env_path);
+    let mut enabled_tools = Vec::new();
+    if matrix.enabled {
+        enabled_tools.push(ChatToolSelection::Matrix);
+    }
+    if dingtalk.enabled {
+        enabled_tools.push(ChatToolSelection::DingTalk);
+    }
+
+    ChatLocalConfigResponse {
+        ok: true,
+        message,
+        enabled_tools,
+        config_path: state.config.chat.config_path.display().to_string(),
+        env_path: state.config.chat.env_path.display().to_string(),
+        matrix,
+        dingtalk,
+        poller_started,
+    }
+}
+
+fn matrix_view_from_config(
+    config: &ChatRuntimeConfig,
+    env_path: &PathBuf,
+) -> MatrixLocalConfigView {
+    let tool = matrix_tool_from_config(config);
+    let matrix = tool.and_then(|tool| tool.matrix.as_ref());
+    let access_token_env = matrix
+        .map(|matrix| matrix.access_token_env.as_str())
+        .unwrap_or(MATRIX_ACCESS_TOKEN_ENV);
+
+    MatrixLocalConfigView {
+        enabled: tool.map(|tool| tool.enabled).unwrap_or(false),
+        homeserver_url: matrix
+            .map(|matrix| matrix.homeserver_url.clone())
+            .unwrap_or_else(|| "https://matrix-client.matrix.org".to_string()),
+        room_id: matrix.and_then(|matrix| matrix.room_id.clone()),
+        allowed_sender: matrix
+            .and_then(|matrix| matrix.allowed_senders.first().cloned())
+            .unwrap_or_default(),
+        allow_own_user_messages: matrix
+            .and_then(|matrix| matrix.allow_own_user_messages)
+            .unwrap_or(true),
+        auto_join_invites: matrix
+            .and_then(|matrix| matrix.auto_join_invites)
+            .unwrap_or(true),
+        default_server_id: tool.and_then(|tool| tool.default_server_id.clone()),
+        default_target_player: tool.and_then(|tool| tool.default_target_player.clone()),
+        poll_interval_seconds: matrix.and_then(|matrix| matrix.poll_interval_seconds),
+        sync_timeout_seconds: matrix.and_then(|matrix| matrix.sync_timeout_seconds),
+        token_configured: env_key_exists(env_path, access_token_env)
+            || env_var_exists(access_token_env),
+    }
+}
+
+fn dingtalk_view_from_config(
+    config: &ChatRuntimeConfig,
+    env_path: &PathBuf,
+) -> DingTalkLocalConfigView {
+    let tool = dingtalk_tool_from_config(config);
+    let dingtalk = tool.and_then(|tool| tool.dingtalk.as_ref());
+    let client_id_env = dingtalk
+        .map(|dingtalk| dingtalk.client_id_env.as_str())
+        .unwrap_or(DINGTALK_CLIENT_ID_ENV);
+    let client_secret_env = dingtalk
+        .map(|dingtalk| dingtalk.client_secret_env.as_str())
+        .unwrap_or(DINGTALK_CLIENT_SECRET_ENV);
+
+    DingTalkLocalConfigView {
+        enabled: tool.map(|tool| tool.enabled).unwrap_or(false),
+        robot_code: dingtalk.and_then(|dingtalk| dingtalk.robot_code.clone()),
+        default_server_id: tool.and_then(|tool| tool.default_server_id.clone()),
+        default_target_player: tool.and_then(|tool| tool.default_target_player.clone()),
+        client_id_configured: env_key_exists(env_path, client_id_env)
+            || env_var_exists(client_id_env),
+        client_secret_configured: env_key_exists(env_path, client_secret_env)
+            || env_var_exists(client_secret_env),
+    }
+}
+
+fn matrix_request_from_config(
+    config: &ChatRuntimeConfig,
+    enabled: bool,
+) -> MatrixLocalConfigRequest {
+    let view = matrix_view_from_config(config, &PathBuf::new());
+    MatrixLocalConfigRequest {
+        enabled,
+        homeserver_url: view.homeserver_url,
+        access_token: String::new(),
+        room_id: view.room_id,
+        allowed_sender: view.allowed_sender,
+        allow_own_user_messages: view.allow_own_user_messages,
+        auto_join_invites: view.auto_join_invites,
+        default_server_id: view.default_server_id,
+        default_target_player: view.default_target_player,
+        poll_interval_seconds: view.poll_interval_seconds,
+        sync_timeout_seconds: view.sync_timeout_seconds,
+    }
+}
+
+fn dingtalk_request_from_config(
+    config: &ChatRuntimeConfig,
+    enabled: bool,
+) -> DingTalkLocalConfigRequest {
+    let view = dingtalk_view_from_config(config, &PathBuf::new());
+    DingTalkLocalConfigRequest {
+        enabled,
+        client_id: String::new(),
+        client_secret: String::new(),
+        robot_code: view.robot_code,
+        default_server_id: view.default_server_id,
+        default_target_player: view.default_target_player,
+    }
+}
+
+fn matrix_tool_from_config(config: &ChatRuntimeConfig) -> Option<&ChatToolConfig> {
+    config
+        .tools
+        .iter()
+        .find(|tool| tool.name == MATRIX_LOCAL_TOOL_NAME)
+        .or_else(|| {
+            config
+                .tools
+                .iter()
+                .find(|tool| tool.platform == ChatPlatform::Matrix)
+        })
+}
+
+fn dingtalk_tool_from_config(config: &ChatRuntimeConfig) -> Option<&ChatToolConfig> {
+    config
+        .tools
+        .iter()
+        .find(|tool| tool.name == DINGTALK_LOCAL_TOOL_NAME)
+        .or_else(|| {
+            config
+                .tools
+                .iter()
+                .find(|tool| tool.platform == ChatPlatform::DingTalk)
+        })
+}
+
 fn matrix_tool_from_request(
     request: &MatrixLocalConfigRequest,
 ) -> Result<ChatToolConfig, (StatusCode, String)> {
@@ -441,17 +775,51 @@ fn matrix_tool_from_request(
     })
 }
 
+fn dingtalk_tool_from_request(
+    request: &DingTalkLocalConfigRequest,
+) -> Result<ChatToolConfig, (StatusCode, String)> {
+    let client_id = request.client_id.trim();
+    let client_secret = request.client_secret.trim();
+    let robot_code = normalize_optional_string(request.robot_code.as_deref());
+    if contains_line_break(client_id)
+        || contains_line_break(client_secret)
+        || robot_code
+            .as_deref()
+            .map(contains_line_break)
+            .unwrap_or(false)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "DingTalk configuration values cannot contain line breaks.".to_string(),
+        ));
+    }
+
+    Ok(ChatToolConfig {
+        name: DINGTALK_LOCAL_TOOL_NAME.to_string(),
+        platform: ChatPlatform::DingTalk,
+        enabled: request.enabled,
+        inbound: ChatInboundMode::Stream,
+        default_server_id: normalize_optional_string(request.default_server_id.as_deref()),
+        default_target_player: normalize_optional_string(request.default_target_player.as_deref()),
+        dingtalk: Some(DingTalkChatConfig {
+            client_id_env: DINGTALK_CLIENT_ID_ENV.to_string(),
+            client_secret_env: DINGTALK_CLIENT_SECRET_ENV.to_string(),
+            robot_code,
+        }),
+        matrix: None,
+    })
+}
+
 fn upsert_chat_tool(
     path: &PathBuf,
     tool: ChatToolConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut config = if path.exists() {
-        let source = std::fs::read_to_string(path)?;
-        yaml_serde::from_str::<ChatRuntimeConfig>(&source)?
-    } else {
-        ChatRuntimeConfig::default()
-    };
+    let mut config = config::load_chat_runtime_config(path)?;
+    upsert_chat_tool_in_config(&mut config, tool);
+    config::write_chat_runtime_config(path, &config)
+}
 
+fn upsert_chat_tool_in_config(config: &mut ChatRuntimeConfig, tool: ChatToolConfig) {
     if let Some(existing) = config
         .tools
         .iter_mut()
@@ -461,13 +829,6 @@ fn upsert_chat_tool(
     } else {
         config.tools.push(tool);
     }
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let source = yaml_serde::to_string(&config)?;
-    std::fs::write(path, source)?;
-    Ok(())
 }
 
 fn env_key_exists(path: &PathBuf, key: &str) -> bool {
@@ -478,6 +839,12 @@ fn env_key_exists(path: &PathBuf, key: &str) -> bool {
                 line.starts_with(&format!("{key}="))
             })
         })
+        .unwrap_or(false)
+}
+
+fn env_var_exists(key: &str) -> bool {
+    std::env::var(key)
+        .map(|value| !value.trim().is_empty())
         .unwrap_or(false)
 }
 

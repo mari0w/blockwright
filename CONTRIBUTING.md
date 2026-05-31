@@ -1,53 +1,53 @@
-# 贡献指南
+# Contributing Guide
 
-感谢你关注 Blockwright。项目当前处于早期阶段，贡献重点是把 Java 版/Fabric 本地世界的闭环做稳定，再逐步扩展更多规划和聊天入口。
+Thank you for your interest in Blockwright. The project is still in an early stage. The current contribution priority is to make the local Minecraft Java Edition and Fabric workflow stable first, then gradually expand planning features and chat entry points.
 
-## 开发边界
+## Development Boundaries
 
-- Minecraft 执行逻辑放在 `plugins/fabric` 和 `plugins/paper`。
-- 智能规划、蓝图管理、任务队列、聊天工具和 Codex CLI 入口放在 `apps/controller`。
-- 不要把外部机器人、图片分析或 Codex CLI 调用塞进 Minecraft 插件。
-- 蓝图方块坐标必须使用相对坐标。
-- 建筑任务必须先在 controller 保存构建记录，再下发同一份方块清单。
-- 执行端必须逐块读取世界状态生成校验报告。
-- 面向玩家和运营的说明文字使用中文。
+- Minecraft execution logic belongs in `plugins/fabric` and `plugins/paper`.
+- AI planning, blueprint management, task queues, chat tools, and the Codex CLI entry point belong in `apps/controller`.
+- Do not put external bots, image analysis, or Codex CLI calls inside the Minecraft plugins.
+- Blueprint block coordinates must use relative coordinates.
+- Build tasks must save a build record in the controller before sending the same block list to Minecraft.
+- The execution side must read world blocks one by one and produce a verification report.
+- Player-facing and operator-facing text should keep the existing Chinese copy where the product surface requires it.
 
-## 本地环境
+## Local Environment
 
-需要准备：
+Required tools:
 
-- Rust stable。
-- JDK 21。
-- Gradle。
-- Minecraft 1.21.8 + Fabric Loader。
-- Fabric API。
-- 可选：`cargo-llvm-cov`，用于本地覆盖率门禁。
-- 可选：Codex CLI。
+- Rust stable.
+- JDK 21.
+- Gradle.
+- Minecraft 1.21.8 with Fabric Loader.
+- Fabric API.
+- Optional: `cargo-llvm-cov` for the local coverage gate.
+- Optional: Codex CLI.
 
-启动 controller：
+Start the controller:
 
 ```bash
 cp .env.example .env
 cargo run -p blockwright-controller
 ```
 
-安装 Fabric 模组到默认 `.minecraft`：
+Install the Fabric mod into the default `.minecraft` directory:
 
 ```bash
 make
 ```
 
-自定义 Java 版游戏目录：
+Use a custom Java Edition game directory:
 
 ```bash
-make GAME_DIR=<Java 版当前游戏目录>
+make GAME_DIR=<current Java Edition game directory>
 ```
 
-## 测试要求
+## Testing Requirements
 
-新增业务逻辑必须补测试。
+New business logic must include tests.
 
-常用检查：
+Common checks:
 
 ```bash
 cargo test --workspace
@@ -55,43 +55,43 @@ cd plugins/fabric && gradle test
 cd plugins/paper && gradle test
 ```
 
-controller 覆盖率门禁：
+Controller coverage gate:
 
 ```bash
 cargo install cargo-llvm-cov
 cargo llvm-cov --workspace --all-targets --ignore-filename-regex 'apps/controller/src/main.rs' --fail-under-lines 80
 ```
 
-全量本地测试：
+Full local test run:
 
 ```bash
 make test
 ```
 
-## 代码风格
+## Code Style
 
-- Rust 代码提交前运行 `cargo fmt`。
-- Java/Kotlin/Gradle 代码尽量沿用现有插件结构。
-- 复杂业务分支优先写中文注释。
-- 不为“智能”提前做过重抽象；第一阶段优先跑通可验证闭环。
-- 不引入真实 token、webhook、client secret 或本地私有配置。
-- 面向玩家的 Web 文案需要同步维护中英文；新增页面文字优先接入现有语言字典。
-- 文档新增用户入口时，优先同时更新中文 README 和 `README.en.md`。
+- Run `cargo fmt` before submitting Rust code.
+- Keep Java, Kotlin, and Gradle code consistent with the existing plugin structure.
+- Complex business branches may use Chinese comments when that matches the surrounding code.
+- Do not add heavy abstractions early just to make the project feel more "intelligent"; the first stage prioritizes a verifiable end-to-end workflow.
+- Do not commit real tokens, webhooks, client secrets, or local private configuration.
+- Player-facing Web copy must keep English and Chinese text in sync. New page text should use the existing language dictionaries first.
+- When documentation adds a user entry point, update both the Chinese README and `README.en.md` where possible.
 
-## Pull Request 要求
+## Pull Request Requirements
 
-PR 描述应包含：
+PR descriptions should include:
 
-- 改动目的。
-- 影响范围。
-- 测试结果。
-- 是否影响 Minecraft 执行、蓝图格式、构建记录或聊天工具凭证。
+- Purpose of the change.
+- Scope of impact.
+- Test results.
+- Whether the change affects Minecraft execution, blueprint formats, build records, or chat tool credentials.
 
-如果改动涉及玩家可见行为，请附上中文说明或截图。
+If the change affects player-visible behavior, include notes or screenshots and update localized copy where relevant.
 
-## 发布前检查
+## Pre-Release Checks
 
-- `git status` 确认没有误提交 `data/`、`.env`、`config/chat.local.yaml` 或构建产物。
-- controller 测试通过。
-- Fabric/Paper 相关测试通过。
-- README 或 docs 与行为变更同步。
+- Use `git status` to confirm that `data/`, `.env`, `config/chat.local.yaml`, and build artifacts were not committed accidentally.
+- Controller tests pass.
+- Fabric and Paper related tests pass.
+- README or docs updates match the behavior changes.
