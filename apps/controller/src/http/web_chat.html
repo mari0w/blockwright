@@ -1107,18 +1107,23 @@
         overflow: auto;
       }
       .config-form {
+        grid-template-rows: auto auto;
+        gap: 12px;
         height: auto;
-        min-height: 100%;
+        min-height: 0;
       }
       .config-layout {
         grid-template-columns: 1fr;
+        gap: 12px;
+        align-content: start;
       }
       .config-nav {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
       }
       .config-tab {
-        min-height: 62px;
-        padding: 10px;
+        min-height: 56px;
+        padding: 9px 10px;
       }
       .config-content {
         overflow: visible;
@@ -1131,6 +1136,10 @@
       .config-actions,
       .config-footer {
         grid-template-columns: 1fr;
+      }
+      .config-footer {
+        gap: 10px;
+        padding-top: 10px;
       }
       .config-actions button {
         width: 100%;
