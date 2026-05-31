@@ -6,6 +6,10 @@ The project follows a pragmatic early-stage versioning model. Breaking changes a
 
 ## Unreleased
 
+## 0.1.30 - 2026-05-31
+
+- Reissued the 0.1.29 release contents after updating GitHub Actions Fabric packaging to Gradle 9.5.1 for Fabric Loom 1.16.2.
+
 ## 0.1.29 - 2026-05-31
 
 - Added a unified Web chat-tools settings flow for Element/Matrix and DingTalk, including persistent local config, secret-safe environment updates, and Matrix polling startup.
