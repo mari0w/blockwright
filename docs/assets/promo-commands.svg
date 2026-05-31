@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="title desc">
+  <title id="title">Blockwright command surface</title>
+  <desc id="desc">A product visual showing Blockwright command entrances and supported operation categories.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09110d"/>
+      <stop offset="1" stop-color="#121b17"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4fdb8f"/>
+      <stop offset="1" stop-color="#20ad66"/>
+    </linearGradient>
+    <style>
+      .title{font:900 38px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f7fbf6;letter-spacing:0}
+      .sub{font:650 19px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .label{font:850 23px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f3f6f0;letter-spacing:0}
+      .small{font:700 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .mono{font:800 20px "SFMono-Regular",Consolas,monospace;fill:#e7f0ea;letter-spacing:0}
+      .tag{font:900 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#101411;letter-spacing:0}
+    </style>
+  </defs>
+  <rect width="900" height="620" rx="8" fill="url(#bg)"/>
+  <g opacity="0.24" stroke="#2f493a" stroke-width="1">
+    <path d="M78 124H822M78 224H822M78 324H822M78 424H822M78 524H822"/>
+    <path d="M170 76V552M310 76V552M450 76V552M590 76V552M730 76V552"/>
+  </g>
+  <text x="58" y="74" class="title">Commands and entrances</text>
+  <text x="58" y="108" class="sub">Natural language routes into typed Minecraft operations.</text>
+
+  <g transform="translate(58 152)">
+    <rect width="784" height="130" rx="8" fill="#101713" stroke="#31473a"/>
+    <rect x="24" y="24" width="204" height="44" rx="8" fill="url(#green)"/>
+    <text x="42" y="53" class="tag">MAIN COMMAND</text>
+    <text x="254" y="54" class="mono">/bw &lt;request&gt;</text>
+    <text x="254" y="88" class="small">Inspect world, operate inventory, set time/weather, build, edit, verify.</text>
+  </g>
+
+  <g transform="translate(58 312)">
+    <rect width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/>
+    <text x="20" y="36" class="label">/bw web</text>
+    <text x="20" y="61" class="small">Open console</text>
+    <rect x="202" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/>
+    <text x="222" y="36" class="label">Web</text>
+    <text x="222" y="61" class="small">Text + voice</text>
+    <rect x="404" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/>
+    <text x="424" y="36" class="label">Matrix</text>
+    <text x="424" y="61" class="small">Room requests</text>
+    <rect x="606" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/>
+    <text x="626" y="36" class="label">DingTalk</text>
+    <text x="626" y="61" class="small">Stream bot</text>
+  </g>
+
+  <g transform="translate(58 438)">
+    <text x="0" y="0" class="label">Supported operation categories</text>
+    <g transform="translate(0 28)">
+      <rect width="148" height="52" rx="8" fill="#e7b15d"/>
+      <text x="20" y="33" class="tag">WORLD READS</text>
+      <rect x="164" width="148" height="52" rx="8" fill="#71a7ff"/>
+      <text x="189" y="33" class="tag">INVENTORY</text>
+      <rect x="328" width="148" height="52" rx="8" fill="url(#green)"/>
+      <text x="350" y="33" class="tag">COMMAND OPS</text>
+      <rect x="492" width="148" height="52" rx="8" fill="#e7b15d"/>
+      <text x="525" y="33" class="tag">BUILD EDIT</text>
+      <rect x="656" width="128" height="52" rx="8" fill="#71a7ff"/>
+      <text x="678" y="33" class="tag">VERIFY</text>
+    </g>
+  </g>
+</svg>

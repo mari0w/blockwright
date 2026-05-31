@@ -468,20 +468,24 @@
       font-size: 15px;
     }
 
-    .screenshot-grid {
+    .visual-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
       align-items: start;
     }
 
-    .screenshot-item {
+    .visual-item {
       margin: 0;
       display: grid;
       gap: 10px;
     }
 
-    .screenshot-item img {
+    .visual-item.primary {
+      grid-column: 1 / -1;
+    }
+
+    .visual-item img {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -489,7 +493,7 @@
       box-shadow: var(--shadow);
     }
 
-    .screenshot-item figcaption {
+    .visual-item figcaption {
       color: var(--muted);
       font-size: 14px;
       font-weight: 800;
@@ -552,7 +556,7 @@
       .steps,
       .config-grid,
       .model-grid,
-      .screenshot-grid {
+      .visual-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -618,8 +622,12 @@
       .steps,
       .config-grid,
       .model-grid,
-      .screenshot-grid {
+      .visual-grid {
         grid-template-columns: 1fr;
+      }
+
+      .visual-item.primary {
+        grid-column: auto;
       }
 
       .command-row {
@@ -853,25 +861,25 @@
       </div>
     </section>
 
-    <section id="screenshots" class="band alt">
+    <section id="showcase" class="band alt">
       <div class="section">
         <div class="section-head">
-          <p class="section-kicker" data-i18n="screenshots.kicker">Interface</p>
-          <h2 data-i18n="screenshots.title">Web console screens for chat, settings, and model selection.</h2>
-          <p class="section-copy" data-i18n="screenshots.copy">The Web UI gives operators player binding, text and voice input, local settings, and model provider configuration.</p>
+          <p class="section-kicker" data-i18n="showcase.kicker">Product surface</p>
+          <h2 data-i18n="showcase.title">The important surfaces are models, commands, and verified Minecraft execution.</h2>
+          <p class="section-copy" data-i18n="showcase.copy">These product visuals summarize the operating model and keep attention on the capabilities buyers and operators need to evaluate.</p>
         </div>
-        <div class="screenshot-grid">
-          <figure class="screenshot-item">
-            <img src="assets/web-chat-mobile-preview.png?v=20260530" alt="Blockwright mobile chat window" data-i18n-alt="screenshots.chatAlt">
-            <figcaption data-i18n="screenshots.chatCaption">Mobile chat window</figcaption>
+        <div class="visual-grid">
+          <figure class="visual-item primary">
+            <img src="assets/promo-execution.svg?v=20260531" data-src-en="assets/promo-execution.svg?v=20260531" data-src-zh="assets/promo-execution.zh-CN.svg?v=20260531" alt="Blockwright execution path" data-i18n-alt="showcase.executionAlt">
+            <figcaption data-i18n="showcase.executionCaption">Execution path: request, planning, controller tools, Minecraft execution, records, and verification.</figcaption>
           </figure>
-          <figure class="screenshot-item">
-            <img src="assets/web-settings-preview.png?v=20260530" alt="Blockwright Web settings page" data-i18n-alt="screenshots.settingsAlt">
-            <figcaption data-i18n="screenshots.settingsCaption">Web settings page</figcaption>
+          <figure class="visual-item">
+            <img src="assets/promo-models.svg?v=20260531" data-src-en="assets/promo-models.svg?v=20260531" data-src-zh="assets/promo-models.zh-CN.svg?v=20260531" alt="Blockwright supported AI models" data-i18n-alt="showcase.modelsAlt">
+            <figcaption data-i18n="showcase.modelsCaption">Supported model backends: Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.</figcaption>
           </figure>
-          <figure class="screenshot-item">
-            <img src="assets/web-model-provider-dropdown.png?v=20260530" alt="Blockwright supported AI model dropdown" data-i18n-alt="screenshots.modelsAlt">
-            <figcaption data-i18n="screenshots.modelsCaption">Supported AI models</figcaption>
+          <figure class="visual-item">
+            <img src="assets/promo-commands.svg?v=20260531" data-src-en="assets/promo-commands.svg?v=20260531" data-src-zh="assets/promo-commands.zh-CN.svg?v=20260531" alt="Blockwright command surface" data-i18n-alt="showcase.commandsAlt">
+            <figcaption data-i18n="showcase.commandsCaption">Command entrances: /bw, Web, voice, Matrix, DingTalk, and local scripts.</figcaption>
           </figure>
         </div>
       </div>
@@ -1013,16 +1021,16 @@
           read: "Read the overview",
           markdown: "Markdown overview"
         },
-        screenshots: {
-          kicker: "Interface",
-          title: "Web console screens for chat, settings, and model selection.",
-          copy: "The Web UI gives operators player binding, text and voice input, local settings, and model provider configuration.",
-          chatAlt: "Blockwright mobile chat window",
-          chatCaption: "Mobile chat window",
-          settingsAlt: "Blockwright Web settings page",
-          settingsCaption: "Web settings page",
-          modelsAlt: "Blockwright supported AI model dropdown",
-          modelsCaption: "Supported AI models"
+        showcase: {
+          kicker: "Product surface",
+          title: "The important surfaces are models, commands, and verified Minecraft execution.",
+          copy: "These product visuals summarize the operating model and keep attention on the capabilities buyers and operators need to evaluate.",
+          executionAlt: "Blockwright execution path",
+          executionCaption: "Execution path: request, planning, controller tools, Minecraft execution, records, and verification.",
+          modelsAlt: "Blockwright supported AI models",
+          modelsCaption: "Supported model backends: Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.",
+          commandsAlt: "Blockwright command surface",
+          commandsCaption: "Command entrances: /bw, Web, voice, Matrix, DingTalk, and local scripts."
         },
         docs: {
           kicker: "Documentation",
@@ -1140,16 +1148,16 @@
           read: "阅读概览",
           markdown: "Markdown 概览"
         },
-        screenshots: {
-          kicker: "界面",
-          title: "Web 控制台覆盖聊天、设置和模型选择。",
-          copy: "Web UI 提供玩家绑定、文字和语音输入、本地设置以及模型提供方配置。",
-          chatAlt: "Blockwright 移动端聊天窗口",
-          chatCaption: "移动端聊天窗口",
-          settingsAlt: "Blockwright Web 设置页面",
-          settingsCaption: "Web 设置页面",
-          modelsAlt: "Blockwright 支持的大模型下拉选项",
-          modelsCaption: "支持的大模型"
+        showcase: {
+          kicker: "产品界面",
+          title: "真正重要的是模型、命令入口，以及带校验的 Minecraft 执行链路。",
+          copy: "这里用专门设计的产品图说明运行方式，让重点落在评估产品时真正需要看的能力上。",
+          executionAlt: "Blockwright 执行链路",
+          executionCaption: "执行链路：请求、规划、controller 工具、Minecraft 执行、记录和校验。",
+          modelsAlt: "Blockwright 支持的 AI 模型",
+          modelsCaption: "支持的模型后端：Codex CLI、OpenAI、DeepSeek、豆包和 Gemini。",
+          commandsAlt: "Blockwright 命令入口",
+          commandsCaption: "命令入口：/bw、Web、语音、Matrix、钉钉和本地脚本。"
         },
         docs: {
           kicker: "文档",

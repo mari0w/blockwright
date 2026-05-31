@@ -131,21 +131,21 @@ Supported model backends:
 
 After that, you can send requests from the Web page, voice input, the in-game `/bw` command, or connected chat tools.
 
-## Interface Screenshots
+## Product Visuals
 
-These screenshots are ready to use on the website, tutorials, X/Twitter, forums, or other publishing platforms.
+The public website uses designed product visuals so the focus stays on the operating model.
 
-![Blockwright mobile chat window](../assets/web-chat-mobile-preview.png?v=20260530)
+![Blockwright execution path](../assets/promo-execution.svg?v=20260531)
 
-The mobile chat screenshot shows that players can use text or voice from a phone browser.
+The execution visual shows how a request moves through model-backed planning, controller tools, Minecraft-side execution, build records, and verification.
 
-![Blockwright Web settings page](../assets/web-settings-preview.png?v=20260530)
+![Blockwright supported AI models](../assets/promo-models.svg?v=20260531)
 
-The Web settings screenshot shows the player name, language, Controller Token, and AI model configuration entry.
+The model visual shows the supported backends: Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
 
-![Blockwright supported AI model dropdown](../assets/web-model-provider-dropdown.png?v=20260530)
+![Blockwright command surface](../assets/promo-commands.svg?v=20260531)
 
-The AI model dropdown shows Codex CLI, OpenAI, DeepSeek, Doubao, and Gemini.
+The command visual shows the supported entrances and operation categories: `/bw`, Web, voice, Matrix, DingTalk, local scripts, world reads, command operations, build edits, and verification.
 
 ## Why this matters
 

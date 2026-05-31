@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">Blockwright 执行链路</title>
+  <desc id="desc">展示请求入口、AI 规划、controller 工具、Minecraft 执行和校验报告的产品图。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09110d"/>
+      <stop offset="1" stop-color="#111a16"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4fdb8f"/>
+      <stop offset="1" stop-color="#20ad66"/>
+    </linearGradient>
+    <style>
+      .label{font:800 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#f3f6f0;letter-spacing:0}
+      .small{font:700 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .tiny{font:800 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#101411;letter-spacing:0}
+      .title{font:900 34px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#f7fbf6;letter-spacing:0}
+      .sub{font:650 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .mono{font:800 17px "SFMono-Regular",Consolas,monospace;fill:#dce9df;letter-spacing:0}
+    </style>
+  </defs>
+  <rect width="1200" height="520" rx="8" fill="url(#bg)"/>
+  <g opacity="0.24" stroke="#2f493a" stroke-width="1">
+    <path d="M80 96H1120M80 172H1120M80 248H1120M80 324H1120M80 400H1120"/>
+    <path d="M180 64V456M340 64V456M500 64V456M660 64V456M820 64V456M980 64V456"/>
+  </g>
+  <text x="64" y="74" class="title">带记录和校验的执行链路</text>
+  <text x="64" y="108" class="sub">自然语言会进入类型化工具、服务端世界操作和可审计报告。</text>
+  <g transform="translate(64 166)"><rect width="164" height="116" rx="8" fill="#151f1a" stroke="#31473a"/><rect x="18" y="18" width="64" height="26" rx="6" fill="#25342b"/><text x="30" y="37" class="mono">/bw</text><text x="18" y="72" class="label">请求</text><text x="18" y="96" class="small">Web、语音、聊天</text></g>
+  <g transform="translate(272 166)"><rect width="164" height="116" rx="8" fill="#151f1a" stroke="#31473a"/><circle cx="46" cy="42" r="20" fill="url(#green)"/><text x="78" y="47" class="label">AI 规划</text><text x="18" y="82" class="small">5 个模型后端</text><text x="18" y="103" class="small">工具选择</text></g>
+  <g transform="translate(480 166)"><rect width="164" height="116" rx="8" fill="#151f1a" stroke="#31473a"/><rect x="18" y="22" width="128" height="20" rx="5" fill="#263a30"/><rect x="18" y="52" width="96" height="20" rx="5" fill="#263a30"/><rect x="18" y="82" width="112" height="20" rx="5" fill="#263a30"/><text x="18" y="108" class="label">Controller</text></g>
+  <g transform="translate(688 166)"><rect width="164" height="116" rx="8" fill="#151f1a" stroke="#31473a"/><rect x="22" y="22" width="120" height="72" rx="8" fill="#1a2a22" stroke="#40c979"/><text x="42" y="54" class="label">Fabric</text><text x="38" y="82" class="small">世界 API</text></g>
+  <g transform="translate(896 166)"><rect width="164" height="116" rx="8" fill="#151f1a" stroke="#31473a"/><g transform="translate(26 22)" fill="#284634" stroke="#55d98d"><path d="M44 0 88 24 44 48 0 24Z"/><path d="M0 24v48l44 24V48Z"/><path d="M88 24v48L44 96V48Z"/></g><text x="30" y="102" class="label">Minecraft</text></g>
+  <g stroke="#4fdb8f" stroke-width="4" stroke-linecap="round" fill="none"><path d="M232 224H268"/><path d="M440 224H476"/><path d="M648 224H684"/><path d="M856 224H892"/></g>
+  <g fill="#4fdb8f"><path d="M268 224l-12-7v14Z"/><path d="M476 224l-12-7v14Z"/><path d="M684 224l-12-7v14Z"/><path d="M892 224l-12-7v14Z"/></g>
+  <g transform="translate(94 344)"><rect width="300" height="84" rx="8" fill="#111815" stroke="#31473a"/><rect x="22" y="20" width="92" height="26" rx="6" fill="#e7b15d"/><text x="44" y="38" class="tiny">保存</text><text x="132" y="38" class="label">构建记录</text><text x="22" y="64" class="small">执行前保存蓝图和动作计划。</text></g>
+  <g transform="translate(450 344)"><rect width="300" height="84" rx="8" fill="#111815" stroke="#31473a"/><rect x="22" y="20" width="96" height="26" rx="6" fill="url(#green)"/><text x="47" y="38" class="tiny">执行</text><text x="136" y="38" class="label">服务端 API</text><text x="22" y="64" class="small">方块、背包、时间、天气和命令都走 API。</text></g>
+  <g transform="translate(806 344)"><rect width="300" height="84" rx="8" fill="#111815" stroke="#31473a"/><rect x="22" y="20" width="98" height="26" rx="6" fill="#71a7ff"/><text x="47" y="38" class="tiny">报告</text><text x="138" y="38" class="label">结果校验</text><text x="22" y="64" class="small">回读世界状态确认真实结果。</text></g>
+</svg>

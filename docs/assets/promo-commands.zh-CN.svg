@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="title desc">
+  <title id="title">Blockwright 命令入口</title>
+  <desc id="desc">展示 Blockwright 命令入口和支持操作类别的产品图。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#09110d"/><stop offset="1" stop-color="#121b17"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fdb8f"/><stop offset="1" stop-color="#20ad66"/></linearGradient>
+    <style>
+      .title{font:900 38px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#f7fbf6;letter-spacing:0}
+      .sub{font:650 19px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .label{font:850 23px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#f3f6f0;letter-spacing:0}
+      .small{font:700 16px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#b8c8bd;letter-spacing:0}
+      .mono{font:800 20px "SFMono-Regular",Consolas,monospace;fill:#e7f0ea;letter-spacing:0}
+      .tag{font:900 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#101411;letter-spacing:0}
+    </style>
+  </defs>
+  <rect width="900" height="620" rx="8" fill="url(#bg)"/>
+  <g opacity="0.24" stroke="#2f493a" stroke-width="1"><path d="M78 124H822M78 224H822M78 324H822M78 424H822M78 524H822"/><path d="M170 76V552M310 76V552M450 76V552M590 76V552M730 76V552"/></g>
+  <text x="58" y="74" class="title">命令和入口</text>
+  <text x="58" y="108" class="sub">自然语言会被路由成类型化 Minecraft 操作。</text>
+  <g transform="translate(58 152)"><rect width="784" height="130" rx="8" fill="#101713" stroke="#31473a"/><rect x="24" y="24" width="204" height="44" rx="8" fill="url(#green)"/><text x="42" y="53" class="tag">主要命令</text><text x="254" y="54" class="mono">/bw &lt;request&gt;</text><text x="254" y="88" class="small">检查世界、操作背包、调整时间天气、建造、改造、校验。</text></g>
+  <g transform="translate(58 312)"><rect width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/><text x="20" y="36" class="label">/bw web</text><text x="20" y="61" class="small">打开控制台</text><rect x="202" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/><text x="222" y="36" class="label">Web</text><text x="222" y="61" class="small">文字 + 语音</text><rect x="404" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/><text x="424" y="36" class="label">Matrix</text><text x="424" y="61" class="small">房间消息</text><rect x="606" width="176" height="84" rx="8" fill="#17221d" stroke="#31473a"/><text x="626" y="36" class="label">钉钉</text><text x="626" y="61" class="small">Stream 机器人</text></g>
+  <g transform="translate(58 438)"><text x="0" y="0" class="label">支持的操作类别</text><g transform="translate(0 28)"><rect width="148" height="52" rx="8" fill="#e7b15d"/><text x="34" y="33" class="tag">世界读取</text><rect x="164" width="148" height="52" rx="8" fill="#71a7ff"/><text x="203" y="33" class="tag">背包</text><rect x="328" width="148" height="52" rx="8" fill="url(#green)"/><text x="357" y="33" class="tag">命令操作</text><rect x="492" width="148" height="52" rx="8" fill="#e7b15d"/><text x="526" y="33" class="tag">建造改造</text><rect x="656" width="128" height="52" rx="8" fill="#71a7ff"/><text x="685" y="33" class="tag">校验</text></g></g>
+</svg>

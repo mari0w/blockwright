@@ -50,15 +50,17 @@ If you later use a custom domain, configure it in Pages and add `docs/CNAME`. Th
 
 The repository currently includes website and promotional assets:
 
-- `docs/assets/web-chat-mobile-preview.png`: mobile `/web` chat screenshot for tutorials and social posts.
 - `docs/assets/hero-ai-assistant.jpg`: generated wide hero background used by the website landing page.
-- `docs/assets/web-settings-preview.png`: real `/web` settings screenshot for tutorials and product overview pages.
-- `docs/assets/web-model-provider-dropdown.png`: supported AI model dropdown screenshot.
+- `docs/assets/promo-execution.svg`: English product visual for request intake, model planning, Minecraft execution, build records, and verification.
+- `docs/assets/promo-models.svg`: English product visual for supported AI model backends.
+- `docs/assets/promo-commands.svg`: English product visual for command entrances and supported operation categories.
+- `docs/assets/promo-execution.zh-CN.svg`, `docs/assets/promo-models.zh-CN.svg`, `docs/assets/promo-commands.zh-CN.svg`: Chinese versions of the product visuals.
+- `docs/assets/web-chat-mobile-preview.png`, `docs/assets/web-settings-preview.png`, `docs/assets/web-model-provider-dropdown.png`: legacy UI captures kept for internal tutorials, not used as the main website promotional visuals.
 - `docs/assets/architecture-flow.svg`: English architecture diagram for the default website language.
 - `docs/assets/architecture-flow.zh-CN.svg`: Chinese architecture diagram used when the website language is switched to Chinese.
 - `docs/assets/social-preview.png`: recommended image for GitHub repository Social preview; the source file is `docs/assets/social-preview.svg`.
 
-When real in-game build screenshots are available, add:
+When real in-game build captures are available, add:
 
 ```text
 docs/assets/minecraft-build-preview.png
