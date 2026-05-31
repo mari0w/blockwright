@@ -1339,7 +1339,7 @@
             <nav class="config-nav" aria-label="Settings sections" data-i18n-aria-label="settingsSections" role="tablist">
               <button id="configTabGeneral" class="config-tab" type="button" role="tab" aria-controls="configPaneGeneral" aria-selected="true" data-config-pane="general">
                 <strong data-i18n="settingsGeneral">General</strong>
-                <span data-i18n="settingsGeneralHelp">Language, player, and controller token.</span>
+                <span data-i18n="settingsGeneralHelp">Language and player identity.</span>
               </button>
               <button id="configTabModel" class="config-tab" type="button" role="tab" aria-controls="configPaneModel" aria-selected="false" data-config-pane="model">
                 <strong data-i18n="settingsModel">AI model</strong>
@@ -1372,13 +1372,6 @@
                       <input id="username" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
                     </label>
                     <p data-i18n="playerHelp">Chat and voice commands are sent to this Minecraft player.</p>
-                  </section>
-                  <section class="config-section">
-                    <h3>Controller</h3>
-                    <label for="controllerToken">
-                      <span>Controller Token</span>
-                      <input id="controllerToken" type="password" autocomplete="off" placeholder="local-dev-token">
-                    </label>
                   </section>
                 </div>
               </section>
@@ -1509,6 +1502,7 @@
     const ACTIVE_JOB_KEY = 'bw.activeJob.v1';
     const MAX_CHAT_HISTORY_ITEMS = 80;
     const MODEL_SETUP_PENDING_KEY = 'bw.modelSetupPending.v1';
+    const DEFAULT_CONTROLLER_TOKEN = 'local-dev-token';
     const LLM_PROVIDER_DEFAULTS = {
       codex_cli: {model: '', base_url: '', supports_images: true, key_placeholder: ''},
       openai: {model: 'gpt-4.1', base_url: 'https://api.openai.com/v1', supports_images: true, key_placeholder: 'OPENAI_API_KEY'},
@@ -1561,7 +1555,6 @@
     const httpsGuidePrimaryButton = document.getElementById('httpsGuidePrimaryButton');
     const httpsGuideBack = document.getElementById('httpsGuideBack');
     const httpsGuideNext = document.getElementById('httpsGuideNext');
-    const controllerToken = document.getElementById('controllerToken');
     const llmProvider = document.getElementById('llmProvider');
     const llmCodexHint = document.getElementById('llmCodexHint');
     const llmApiFields = document.getElementById('llmApiFields');
@@ -1648,7 +1641,7 @@
         settingsIntro: '配置按用途分组，可通过分组按钮快速切换。',
         settingsSections: '设置分组',
         settingsGeneral: '常规',
-        settingsGeneralHelp: '语言、玩家和 controller token。',
+        settingsGeneralHelp: '语言和玩家身份。',
         settingsModel: 'AI 模型',
         settingsModelHelp: '模型提供方、模型名、Base URL 和 key。',
         settingsAccess: '访问权限',
@@ -1717,7 +1710,6 @@
         imageAddedLibraryOne: '已从相册添加 1 张图片。',
         imageAddedLibraryMany: '已从相册添加 {count} 张图片。',
         imageAddedGeneric: '已添加 {count} 张图片。',
-        configTokenRequired: 'Controller Token 不能为空。',
         matrixRequired: 'Matrix 主服务器 URL 和允许发指令的用户不能为空。',
         savingConfig: '正在保存配置...',
         saveFailed: '保存失败',
@@ -1823,7 +1815,7 @@
         settingsIntro: 'Configuration is grouped by area. Use the section tabs to switch.',
         settingsSections: 'Settings sections',
         settingsGeneral: 'General',
-        settingsGeneralHelp: 'Language, player, and controller token.',
+        settingsGeneralHelp: 'Language and player identity.',
         settingsModel: 'AI model',
         settingsModelHelp: 'Provider, model, base URL, and key.',
         settingsAccess: 'Access',
@@ -1892,7 +1884,6 @@
         imageAddedLibraryOne: 'Added 1 image from photos.',
         imageAddedLibraryMany: 'Added {count} images from photos.',
         imageAddedGeneric: 'Added {count} images.',
-        configTokenRequired: 'Controller Token is required.',
         matrixRequired: 'Matrix homeserver URL and allowed sender are required.',
         savingConfig: 'Saving configuration...',
         saveFailed: 'Save failed',
@@ -2012,6 +2003,10 @@
       return languages.some((language) => String(language).toLowerCase().startsWith('zh')) ? 'zh' : 'en';
     }
 
+    function controllerTokenValue() {
+      return DEFAULT_CONTROLLER_TOKEN;
+    }
+
     function t(key, values = {}) {
       const dictionary = I18N[currentLanguage] || I18N.zh;
       const template = dictionary[key] || I18N.zh[key] || key;
@@ -2082,7 +2077,6 @@
 
     applyLanguage();
     setUsername(localStorage.getItem('bw.username') || '');
-    controllerToken.value = localStorage.getItem('bw.controllerToken') || 'local-dev-token';
     llmProvider.value = normalizeLlmProvider(localStorage.getItem('bw.llmProvider') || 'codex_cli');
     lastLlmProvider = llmProvider.value;
     llmModel.value = localStorage.getItem('bw.llmModel') || '';
@@ -2101,7 +2095,6 @@
       usernameGateError.textContent = '';
     });
     [
-      [controllerToken, 'bw.controllerToken'],
       [llmProvider, 'bw.llmProvider'],
       [llmModel, 'bw.llmModel'],
       [llmBaseUrl, 'bw.llmBaseUrl'],
@@ -2371,12 +2364,7 @@
     }
 
     async function loadLlmConfig() {
-      const token = controllerToken.value.trim();
-      if (!token) {
-        updateLlmProviderFields(settingsLlmControls);
-        updateLlmProviderFields(modelSetupLlmControls);
-        return;
-      }
+      const token = controllerTokenValue();
       try {
         const response = await fetch('/api/llm/config', {
           headers: {'x-blockwright-token': token}
@@ -2534,16 +2522,10 @@
 
     async function saveWebConfig(event) {
       event.preventDefault();
-      const token = controllerToken.value.trim();
+      const token = controllerTokenValue();
       const homeserver = matrixHomeserver.value.trim();
       const matrixAccessTokenValue = matrixAccessToken.value.trim();
       const allowedSender = matrixAllowedSender.value.trim();
-      if (!token) {
-        setConfigPane('general');
-        setConfigStatus(t('configTokenRequired'), true);
-        controllerToken.focus();
-        return;
-      }
       if (normalizeLlmProvider(llmProvider.value) !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
         setConfigPane('model');
         setConfigStatus(t('llmConfigRequired'), true);
@@ -2659,11 +2641,7 @@
 
     async function saveModelSetupGate(event) {
       event.preventDefault();
-      const token = controllerToken.value.trim();
-      if (!token) {
-        setModelSetupStatus(t('configTokenRequired'), true);
-        return;
-      }
+      const token = controllerTokenValue();
       modelSetupSubmit.disabled = true;
       setModelSetupStatus(t('savingConfig'), false);
       try {
