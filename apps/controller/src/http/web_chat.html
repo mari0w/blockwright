@@ -827,20 +827,27 @@
     }
     .language-choice {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 3px;
-      padding: 3px;
+      grid-template-columns: repeat(2, minmax(78px, max-content));
+      justify-self: start;
+      width: fit-content;
+      max-width: 100%;
+      gap: 2px;
+      padding: 2px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 7px;
       background: var(--panel-soft);
     }
     .language-choice-button {
       min-width: 0;
-      padding: 9px 10px;
+      min-height: 30px;
+      padding: 5px 12px;
       border-color: transparent;
+      border-radius: 5px;
       background: transparent;
       color: var(--muted);
+      font-size: 13px;
       font-weight: 650;
+      line-height: 1.1;
     }
     .language-choice-button:hover,
     .language-choice-button:focus-visible {
