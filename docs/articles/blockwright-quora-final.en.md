@@ -1,6 +1,6 @@
 # I Built a Minecraft AI Mod for My 5-Year-Old Daughter, So She Could Play by Talking Instead of Reading Menus
 
-![Blockwright hero image](../assets/zhihu-blockwright-hero.png)
+![Blockwright hero image](https://mari0w.github.io/blockwright/assets/zhihu-blockwright-hero.png)
 
 I have been building a Minecraft Java Edition mod called **Blockwright**.
 
@@ -41,7 +41,7 @@ She can say, “Give me torches,” get the torches, and then place them herself
 
 That matters to me. I do not want AI to replace her play. I want it to help with the parts that block her from playing.
 
-![Web voice entry](../assets/zhihu-blockwright-voice-web.png)
+![Web voice entry](https://mari0w.github.io/blockwright/assets/zhihu-blockwright-voice-web.png)
 
 ## The Use Cases I Care About Most
 
@@ -76,7 +76,7 @@ Replace this wall with stone bricks
 
 That feels much closer to the real way people build in Minecraft: make a rough version, look at it, then keep adjusting.
 
-![Voice to item action](../assets/zhihu-blockwright-give-item.png)
+![Voice to item action](https://mari0w.github.io/blockwright/assets/zhihu-blockwright-give-item.png)
 
 ## Why I Made It a Local/LAN Web Interface
 
@@ -113,7 +113,7 @@ In short: **natural language comes in, controlled actions go out, and the result
 
 That is important because Minecraft is not an image. Success is not whether the assistant wrote a nice response. Success is whether the blocks were actually placed, the item actually reached the player's hand, and the command actually changed the world.
 
-![Build iteration](../assets/zhihu-blockwright-build-iteration.png)
+![Build iteration](https://mari0w.github.io/blockwright/assets/zhihu-blockwright-build-iteration.png)
 
 ## What Blockwright Supports Today
 
