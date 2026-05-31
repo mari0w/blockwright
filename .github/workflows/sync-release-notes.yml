@@ -1,0 +1,59 @@
+name: Sync Release Notes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/release-notes/v*.md"
+      - ".github/workflows/sync-release-notes.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sync, for example v0.1.28
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync GitHub release body
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find release note files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            file=".github/release-notes/${{ inputs.tag }}.md"
+            test -f "$file"
+            printf '%s\n' "$file" > /tmp/release-note-files
+          else
+            if git rev-parse HEAD^ >/dev/null 2>&1; then
+              git diff --name-only HEAD^ HEAD -- ".github/release-notes/v*.md" > /tmp/release-note-files
+            else
+              find .github/release-notes -maxdepth 1 -name "v*.md" | sort > /tmp/release-note-files
+            fi
+          fi
+          cat /tmp/release-note-files
+
+      - name: Sync GitHub releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            tag="$(basename "$file" .md)"
+            echo "Syncing release notes for $tag from $file"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$file"
+          done < /tmp/release-note-files
