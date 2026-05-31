@@ -1,5 +1,5 @@
 plugins {
-    id("fabric-loom") version "1.10.5"
+    id("fabric-loom") version "1.16.2"
     java
 }
 
@@ -24,8 +24,8 @@ dependencies {
     mappings("net.fabricmc:yarn:$yarnMappings:v2")
     modImplementation("net.fabricmc:fabric-loader:$loaderVersion")
     modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricVersion")
-    implementation("com.google.code.gson:gson:2.11.0")
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    implementation("com.google.code.gson:gson:2.14.0")
+    testImplementation(platform("org.junit:junit-bom:6.1.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

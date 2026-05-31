@@ -5,21 +5,45 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: gradle
     directory: /plugins/fabric
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      fabric-gradle-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: gradle
     directory: /plugins/paper
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      paper-gradle-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: io.papermc.paper:paper-api
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: gradle/actions
+        update-types:
+          - version-update:semver-major
