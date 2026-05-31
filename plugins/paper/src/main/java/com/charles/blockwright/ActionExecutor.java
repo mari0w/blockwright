@@ -37,6 +37,7 @@ public final class ActionExecutor {
             return report;
         }
 
+        BlockwrightLanguage language = languageForPlayer(defaultPlayer);
         for (JsonModels.GameAction action : actions) {
             if (action == null || action.type == null) {
                 continue;
@@ -44,7 +45,7 @@ public final class ActionExecutor {
 
             switch (action.type) {
                 case "give_item" -> {
-                    giveItem(action, defaultPlayer);
+                    giveItem(action, defaultPlayer, language);
                     report.actions.add(nonBlockReport("give_item"));
                 }
                 case "place_blocks" -> report.actions.add(placeBlocks(action, defaultPlayer, fallbackOrigin));
@@ -53,7 +54,7 @@ public final class ActionExecutor {
                     report.actions.add(nonBlockReport("chat"));
                 }
                 case "run_command" -> {
-                    runCommand(action, defaultPlayer);
+                    runCommand(action, defaultPlayer, language);
                     report.actions.add(nonBlockReport("run_command"));
                 }
                 default -> {
@@ -66,20 +67,33 @@ public final class ActionExecutor {
         return report;
     }
 
-    private void giveItem(JsonModels.GameAction action, String defaultPlayer) {
+    private void giveItem(JsonModels.GameAction action, String defaultPlayer, BlockwrightLanguage language) {
         String playerName = action.player != null ? action.player : defaultPlayer;
         Player player = playerName == null ? null : Bukkit.getPlayerExact(playerName);
         if (player == null) {
-            throw new IllegalStateException("找不到玩家：" + playerName);
+            throw new IllegalStateException(language.text("Player not found: ", "找不到玩家：") + playerName);
         }
+        BlockwrightLanguage playerLanguage = BlockwrightLanguage.fromPlayer(player);
 
-        Material material = itemMaterialFromId(action.item);
+        Material material = itemMaterialFromId(action.item, playerLanguage);
         int count = Math.max(action.count, 1);
         int heldSlot = putItemInMainHand(player, material, count);
         player.updateInventory();
-        player.sendMessage(
-                "Blockwright 已发放并切到手上：" + material.getKey().asString() + " x " + count
-                        + "（快捷栏 " + (heldSlot + 1) + "）");
+        player.sendMessage(playerLanguage.text(
+                "Blockwright gave and selected: "
+                        + material.getKey().asString()
+                        + " x "
+                        + count
+                        + " (hotbar slot "
+                        + (heldSlot + 1)
+                        + ")",
+                "Blockwright 已发放并切到手上："
+                        + material.getKey().asString()
+                        + " x "
+                        + count
+                        + "（快捷栏 "
+                        + (heldSlot + 1)
+                        + "）"));
     }
 
     private int putItemInMainHand(Player player, Material material, int count) {
@@ -220,7 +234,9 @@ public final class ActionExecutor {
         Location origin = resolveOrigin(action.origin, fallbackOrigin);
         World world = origin.getWorld();
         if (world == null) {
-            throw new IllegalStateException("放置蓝图失败：世界不存在");
+            throw new IllegalStateException(languageForPlayer(defaultPlayer).text(
+                    "Failed to place blueprint: world does not exist",
+                    "放置蓝图失败：世界不存在"));
         }
 
         int placed = 0;
@@ -240,7 +256,7 @@ public final class ActionExecutor {
             }
             attempted++;
 
-            BlockData blockData = blockDataFromId(blockItem.material);
+            BlockData blockData = blockDataFromId(blockItem.material, languageForPlayer(defaultPlayer));
             Block block = world.getBlockAt(
                     origin.getBlockX() + blockItem.x,
                     origin.getBlockY() + blockItem.y,
@@ -319,7 +335,7 @@ public final class ActionExecutor {
                 continue;
             }
 
-            BlockData expected = blockDataFromId(blockItem.material);
+            BlockData expected = blockDataFromId(blockItem.material, languageForPlayer(null));
             Block block = world.getBlockAt(
                     origin.getBlockX() + blockItem.x,
                     origin.getBlockY() + blockItem.y,
@@ -373,12 +389,15 @@ public final class ActionExecutor {
         }
     }
 
-    private void runCommand(JsonModels.GameAction action, String defaultPlayer) {
+    private void runCommand(JsonModels.GameAction action, String defaultPlayer, BlockwrightLanguage language) {
         String command = normalizeCommand(action.command);
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
         Player player = defaultPlayer == null ? null : Bukkit.getPlayerExact(defaultPlayer);
         if (player != null) {
-            player.sendMessage("Blockwright 已执行指令：/" + command);
+            player.sendMessage(BlockwrightLanguage.fromPlayer(player).text(
+                            "Blockwright executed command: /",
+                            "Blockwright 已执行指令：/")
+                    + command);
         }
     }
 
@@ -408,32 +427,43 @@ public final class ActionExecutor {
         return new Location(world, origin.x, origin.y, origin.z);
     }
 
-    private Material materialFromId(String materialId) {
+    private Material materialFromId(String materialId, BlockwrightLanguage language) {
         if (materialId == null || materialId.isBlank()) {
-            throw new IllegalArgumentException("材质不能为空");
+            throw new IllegalArgumentException(language.text("Material is required", "材质不能为空"));
         }
 
         String normalized = materialId.toUpperCase(Locale.ROOT).replace("MINECRAFT:", "");
         Material material = Material.matchMaterial(normalized);
         if (material == null || !material.isBlock() && !material.isItem()) {
-            throw new IllegalArgumentException("不支持的 Minecraft 材质：" + materialId);
+            throw new IllegalArgumentException(language.text(
+                    "Unsupported Minecraft material: ",
+                    "不支持的 Minecraft 材质：") + materialId);
         }
         return material;
     }
 
-    private Material itemMaterialFromId(String materialId) {
-        Material material = materialFromId(materialId);
+    private Material itemMaterialFromId(String materialId, BlockwrightLanguage language) {
+        Material material = materialFromId(materialId, language);
         if (!material.isItem()) {
-            throw new IllegalArgumentException("不支持的 Minecraft 物品：" + materialId);
+            throw new IllegalArgumentException(language.text(
+                    "Unsupported Minecraft item: ",
+                    "不支持的 Minecraft 物品：") + materialId);
         }
         return material;
     }
 
-    private BlockData blockDataFromId(String materialId) {
+    private BlockData blockDataFromId(String materialId, BlockwrightLanguage language) {
         try {
             return Bukkit.createBlockData(materialId);
         } catch (IllegalArgumentException error) {
-            throw new IllegalArgumentException("不支持的 Minecraft 方块状态：" + materialId, error);
+            throw new IllegalArgumentException(language.text(
+                    "Unsupported Minecraft block state: ",
+                    "不支持的 Minecraft 方块状态：") + materialId, error);
         }
+    }
+
+    private BlockwrightLanguage languageForPlayer(String playerName) {
+        Player player = playerName == null ? null : Bukkit.getPlayerExact(playerName);
+        return BlockwrightLanguage.fromPlayer(player);
     }
 }

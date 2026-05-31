@@ -6,8 +6,8 @@ final class BlockwrightCommandText {
     private BlockwrightCommandText() {
     }
 
-    static boolean isReload(String[] args) {
-        return args.length == 1 && args[0].equalsIgnoreCase("reload");
+    static boolean isWeb(String[] args) {
+        return args.length == 1 && args[0].equalsIgnoreCase("web");
     }
 
     static String extractChatText(String[] args) {
@@ -15,15 +15,7 @@ final class BlockwrightCommandText {
             return null;
         }
 
-        String first = args[0].toLowerCase();
-        if (first.equals("ask") || first.equals("chat") || first.equals("say")) {
-            if (args.length < 2) {
-                return null;
-            }
-            return join(args, 1);
-        }
-
-        if (first.equals("reload")) {
+        if (isWeb(args)) {
             return null;
         }
 
@@ -31,7 +23,13 @@ final class BlockwrightCommandText {
     }
 
     static String usage() {
-        return "用法：/bw <你想要的物品或建筑>，或 /bw ask <需求>";
+        return usage(BlockwrightLanguage.ENGLISH);
+    }
+
+    static String usage(BlockwrightLanguage language) {
+        return language.text(
+                "Usage: /bw <request>, or /bw web",
+                "用法：/bw <需求>，或 /bw web");
     }
 
     private static String join(String[] args, int start) {

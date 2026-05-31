@@ -123,6 +123,8 @@ public final class JsonModels {
     }
 
     public static final class PlayerState {
+        @SerializedName("client_language")
+        public String clientLanguage;
         @SerializedName("selected_slot")
         public int selectedSlot;
         @SerializedName("main_hand")

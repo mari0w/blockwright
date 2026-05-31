@@ -31,7 +31,7 @@ final class BlockwrightConfigScreen extends Screen {
     private boolean allowOwnMessages;
 
     BlockwrightConfigScreen(Screen parent, Path configPath, BlockwrightConfig config) {
-        super(Text.literal("Blockwright 配置"));
+        super(Text.literal("Blockwright Settings"));
         this.parent = parent;
         this.configPath = configPath;
         this.config = config;
@@ -45,19 +45,20 @@ final class BlockwrightConfigScreen extends Screen {
         int formWidth = Math.min(420, this.width - 40);
         int x = (this.width - formWidth) / 2;
         int y = 42;
-        controllerUrlField = addField("Controller 地址", config.controllerUrl, x, y, formWidth);
+        controllerUrlField = addField("Controller URL", config.controllerUrl, x, y, formWidth);
         y += 42;
         sharedTokenField = addField("Controller Token", config.sharedToken, x, y, formWidth);
         y += 42;
-        serverIdField = addField("服务器 ID", config.serverId, x, y, formWidth);
+        serverIdField = addField("Server ID", config.serverId, x, y, formWidth);
         y += 42;
-        matrixHomeserverField = addField("Matrix 主服务器 URL", config.matrixHomeserverUrl, x, y, formWidth);
+        matrixHomeserverField = addField("Matrix homeserver URL", config.matrixHomeserverUrl, x, y, formWidth);
         y += 42;
         matrixAccessTokenField = addField("Matrix Access Token", config.matrixAccessToken, x, y, formWidth);
         y += 42;
-        matrixAllowedSenderField = addField("允许发指令的 Matrix 用户", config.matrixAllowedSender, x, y, formWidth);
+        matrixAllowedSenderField = addField("Allowed Matrix user", config.matrixAllowedSender, x, y, formWidth);
         y += 34;
-        matrixDefaultTargetPlayerField = addField("Element 默认目标玩家", config.matrixDefaultTargetPlayer, x, y, formWidth);
+        matrixDefaultTargetPlayerField =
+                addField("Element default target player", config.matrixDefaultTargetPlayer, x, y, formWidth);
         y += 34;
 
         matrixEnabledButton = ButtonWidget.builder(Text.empty(), button -> {
@@ -77,10 +78,10 @@ final class BlockwrightConfigScreen extends Screen {
         refreshToggleLabels();
         y += 32;
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("保存并应用到 controller"), button -> save())
+        addDrawableChild(ButtonWidget.builder(Text.literal("Save and apply to controller"), button -> save())
                 .dimensions(x, y, 200, 20)
                 .build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("取消"), button -> close())
+        addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"), button -> close())
                 .dimensions(x + formWidth - 90, y, 90, 20)
                 .build());
     }
@@ -96,15 +97,17 @@ final class BlockwrightConfigScreen extends Screen {
 
     private void refreshToggleLabels() {
         if (matrixEnabledButton != null) {
-            matrixEnabledButton.setMessage(Text.literal("Element 接入：" + (matrixEnabled ? "启用" : "禁用")));
+            matrixEnabledButton.setMessage(
+                    Text.literal("Element bridge: " + (matrixEnabled ? "Enabled" : "Disabled")));
         }
         if (allowOwnMessagesButton != null) {
-            allowOwnMessagesButton.setMessage(Text.literal("个人 token：" + (allowOwnMessages ? "允许" : "跳过自己")));
+            allowOwnMessagesButton.setMessage(Text.literal(
+                    "Personal token: " + (allowOwnMessages ? "Allow own messages" : "Skip own messages")));
         }
     }
 
     private void save() {
-        status = Text.literal("正在保存...");
+        status = Text.literal("Saving...");
         BlockwrightConfig next = readConfigFromFields();
         CompletableFuture.supplyAsync(() -> {
                     try {
@@ -118,7 +121,7 @@ final class BlockwrightConfigScreen extends Screen {
                         .execute(() -> status = Text.literal(message)))
                 .exceptionally(error -> {
                     MinecraftClient.getInstance()
-                            .execute(() -> status = Text.literal("保存失败：" + rootMessage(error)));
+                            .execute(() -> status = Text.literal("Save failed: " + rootMessage(error)));
                     return null;
                 });
     }

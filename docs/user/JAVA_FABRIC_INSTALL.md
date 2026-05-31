@@ -151,7 +151,6 @@ Blockwright 局域网 HTTPS：https://<当前机器局域网 IP>:8766/web
 /bw 给我一把钻石剑
 /bw 帮我盖一个木屋
 /bw web
-/bw reload
 ```
 
 `/bw web` 会在游戏聊天里输出本机 Web 地址和当前机器的局域网 Web 地址，找不到 Minecraft 启动终端日志时可以直接用它查询。
@@ -223,7 +222,7 @@ data/builds/
 
 日常配置入口统一放在 controller 的 `/web` 页面，点右上角设置图标保存聊天接入；游戏内不再使用 `/bwconfig` 配置命令。
 
-`requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型处理复杂请求后，读场地、查蓝图、生成建筑或等待工具结果都可能超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后执行 `/bw reload` 或重启游戏即可生效。
+`requestTimeoutSeconds` 默认 1800 秒，也就是最多等 30 分钟，因为启用 Codex CLI 或本地模型处理复杂请求后，读场地、查蓝图、生成建筑或等待工具结果都可能超过几分钟。新版 Fabric 模组加载旧配置时会把旧的 20、120、180 这类短超时自动升级并回写成 1800；更新 jar 后重启游戏即可生效。
 
 `protectExistingBlocks` 默认是 `true`，意思是蓝图只会放到空气里，遇到已有方块会跳过，避免误覆盖你的旧地图。确认要覆盖已有方块时才改成 `false`。
 

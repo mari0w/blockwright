@@ -48,6 +48,7 @@ public final class ActionExecutor {
             return report;
         }
 
+        BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(defaultPlayer);
         for (JsonModels.GameAction action : actions) {
             if (action == null || action.type == null) {
                 continue;
@@ -55,12 +56,12 @@ public final class ActionExecutor {
 
             switch (action.type) {
                 case "give_item" -> {
-                    giveItem(action, defaultPlayer);
+                    giveItem(action, defaultPlayer, language);
                     report.actions.add(nonBlockReport("give_item"));
                 }
                 case "place_blocks" -> report.actions.add(placeBlocks(action, defaultPlayer));
                 case "run_command" -> {
-                    runCommand(action, defaultPlayer);
+                    runCommand(action, defaultPlayer, language);
                     report.actions.add(nonBlockReport("run_command"));
                 }
                 case "chat" -> {
@@ -70,7 +71,10 @@ public final class ActionExecutor {
                 case "scan_nearby_and_plan", "scan_nearby", "get_player_state" ->
                         report.actions.add(nonBlockReport(action.type));
                 default -> {
-                    defaultPlayer.sendMessage(Text.literal("Blockwright 暂不支持动作：" + action.type), false);
+                    defaultPlayer.sendMessage(Text.literal(language.text(
+                                    "Blockwright does not support this action yet: ",
+                                    "Blockwright 暂不支持动作：")
+                            + action.type), false);
                     report.actions.add(nonBlockReport(action.type));
                 }
             }
@@ -79,18 +83,34 @@ public final class ActionExecutor {
         return report;
     }
 
-    private void giveItem(JsonModels.GameAction action, ServerPlayerEntity defaultPlayer) {
+    private void giveItem(
+            JsonModels.GameAction action,
+            ServerPlayerEntity defaultPlayer,
+            BlockwrightLanguage language) {
         ServerPlayerEntity player = resolvePlayer(action.player, defaultPlayer);
         if (player == null) {
-            throw new IllegalStateException("找不到玩家：" + action.player);
+            throw new IllegalStateException(language.text("Player not found: ", "找不到玩家：") + action.player);
         }
 
-        Item item = itemFromId(action.item);
+        Item item = itemFromId(action.item, language);
         int count = Math.max(action.count, 1);
         int heldSlot = putItemInMainHand(player, item, count);
-        player.sendMessage(Text.literal(
-                "Blockwright 已发放并切到手上：" + Registries.ITEM.getId(item) + " x " + count
-                        + "（快捷栏 " + (heldSlot + 1) + "）"), false);
+        player.sendMessage(Text.literal(language.text(
+                        "Blockwright gave and selected: "
+                                + Registries.ITEM.getId(item)
+                                + " x "
+                                + count
+                                + " (hotbar slot "
+                                + (heldSlot + 1)
+                                + ")",
+                        "Blockwright 已发放并切到手上："
+                                + Registries.ITEM.getId(item)
+                                + " x "
+                                + count
+                                + "（快捷栏 "
+                                + (heldSlot + 1)
+                                + "）")),
+                false);
     }
 
     private int putItemInMainHand(ServerPlayerEntity player, Item item, int count) {
@@ -212,13 +232,19 @@ public final class ActionExecutor {
         }
     }
 
-    private void runCommand(JsonModels.GameAction action, ServerPlayerEntity defaultPlayer) {
+    private void runCommand(
+            JsonModels.GameAction action,
+            ServerPlayerEntity defaultPlayer,
+            BlockwrightLanguage language) {
         String command = normalizeCommand(action.command);
         ServerCommandSource source = defaultPlayer.getCommandSource()
                 .withLevel(4)
                 .withSilent();
         server.getCommandManager().executeWithPrefix(source, "/" + command);
-        defaultPlayer.sendMessage(Text.literal("Blockwright 已执行指令：/" + command), false);
+        defaultPlayer.sendMessage(Text.literal(language.text(
+                        "Blockwright executed command: /",
+                        "Blockwright 已执行指令：/")
+                + command), false);
     }
 
     private String normalizeCommand(String command) {
@@ -256,6 +282,7 @@ public final class ActionExecutor {
         int skippedPlayerSafety = 0;
         int maxBlocks = config == null ? 0 : PlacementPolicy.normalizeMaxBlocks(config.maxBlocksPerAction);
         int attempted = 0;
+        BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(defaultPlayer);
 
         for (int index = 0; index < action.blocks.size(); index++) {
             JsonModels.BlueprintBlock blockItem = action.blocks.get(index);
@@ -268,7 +295,7 @@ public final class ActionExecutor {
             }
             attempted++;
 
-            BlockState blockState = blockStateFromId(blockItem.material);
+            BlockState blockState = blockStateFromId(blockItem.material, language);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
             if (!blockState.isAir() && isInsidePlayerSafetyZone(targetPos, defaultPlayer, world)) {
                 skippedPlayerSafety++;
@@ -287,11 +314,11 @@ public final class ActionExecutor {
         report.skippedExistingCount = skippedExisting;
         report.skippedLimitCount = skippedLimit;
         report.skippedPlayerSafetyCount = skippedPlayerSafety;
-        verifyPlacedBlocks(action, basePos, world, report);
+        verifyPlacedBlocks(action, basePos, world, report, language);
         defaultPlayer.sendMessage(Text.literal(new PlacementStats(
                 placed,
                 skippedExisting,
-                skippedPlayerSafety).summary()), false);
+                skippedPlayerSafety).summary(language)), false);
         return report;
     }
 
@@ -299,7 +326,8 @@ public final class ActionExecutor {
             JsonModels.GameAction action,
             BlockPos basePos,
             ServerWorld world,
-            JsonModels.ActionExecutionReport report) {
+            JsonModels.ActionExecutionReport report,
+            BlockwrightLanguage language) {
         int verified = 0;
         int mismatches = 0;
         for (JsonModels.BlueprintBlock blockItem : action.blocks) {
@@ -307,7 +335,7 @@ public final class ActionExecutor {
                 continue;
             }
 
-            BlockState expected = blockStateFromId(blockItem.material);
+            BlockState expected = blockStateFromId(blockItem.material, language);
             BlockPos targetPos = basePos.add(blockItem.x, blockItem.y, blockItem.z);
             BlockState actual = world.getBlockState(targetPos);
             if (actual.equals(expected)) {
@@ -409,34 +437,47 @@ public final class ActionExecutor {
         return world == null ? fallbackWorld : world;
     }
 
-    private Item itemFromId(String itemId) {
-        Identifier id = requireIdentifier(itemId, "物品");
+    private Item itemFromId(String itemId, BlockwrightLanguage language) {
+        Identifier id = requireIdentifier(itemId, language.text("item", "物品"), language);
         Item item = Registries.ITEM.get(id);
         if (Registries.ITEM.getId(item).equals(Identifier.of("minecraft", "air"))) {
-            throw new IllegalArgumentException("不支持的 Minecraft 物品：" + itemId);
+            throw new IllegalArgumentException(language.text(
+                    "Unsupported Minecraft item: ",
+                    "不支持的 Minecraft 物品：") + itemId);
         }
         return item;
     }
 
-    private Block blockFromId(String blockId) {
-        Identifier id = requireIdentifier(blockId, "方块");
+    private Block blockFromId(String blockId, BlockwrightLanguage language) {
+        Identifier id = requireIdentifier(blockId, language.text("block", "方块"), language);
         Block block = Registries.BLOCK.get(id);
         if (Registries.BLOCK.getId(block).equals(Identifier.of("minecraft", "air"))
                 && !id.equals(Identifier.of("minecraft", "air"))) {
-            throw new IllegalArgumentException("不支持的 Minecraft 方块：" + blockId);
+            throw new IllegalArgumentException(language.text(
+                    "Unsupported Minecraft block: ",
+                    "不支持的 Minecraft 方块：") + blockId);
         }
         return block;
     }
 
-    private BlockState blockStateFromId(String blockMaterial) {
-        BlockMaterialSpec spec = BlockMaterialSpec.parse(blockMaterial);
-        BlockState state = blockFromId(spec.id()).getDefaultState();
+    private BlockState blockStateFromId(String blockMaterial, BlockwrightLanguage language) {
+        BlockMaterialSpec spec;
+        try {
+            spec = BlockMaterialSpec.parse(blockMaterial);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException(language.text(
+                    "Invalid block state: ",
+                    "非法方块状态：") + blockMaterial);
+        }
+        BlockState state = blockFromId(spec.id(), language).getDefaultState();
         for (Map.Entry<String, String> entry : spec.states().entrySet()) {
             Property<?> property = findProperty(state, entry.getKey());
             if (property == null) {
-                throw new IllegalArgumentException("方块状态不存在：" + blockMaterial);
+                throw new IllegalArgumentException(language.text(
+                        "Block state property does not exist: ",
+                        "方块状态不存在：") + blockMaterial);
             }
-            state = applyProperty(state, property, entry.getValue(), blockMaterial);
+            state = applyProperty(state, property, entry.getValue(), blockMaterial, language);
         }
         return state;
     }
@@ -454,22 +495,29 @@ public final class ActionExecutor {
             BlockState state,
             Property<T> property,
             String value,
-            String originalMaterial) {
+            String originalMaterial,
+            BlockwrightLanguage language) {
         Optional<T> parsed = property.parse(value);
         if (parsed.isEmpty()) {
-            throw new IllegalArgumentException("非法方块状态：" + originalMaterial);
+            throw new IllegalArgumentException(language.text(
+                    "Invalid block state: ",
+                    "非法方块状态：") + originalMaterial);
         }
         return state.with(property, parsed.get());
     }
 
-    private Identifier requireIdentifier(String value, String label) {
+    private Identifier requireIdentifier(String value, String label, BlockwrightLanguage language) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(label + " ID 不能为空");
+            throw new IllegalArgumentException(language.text(
+                    label + " ID is required",
+                    label + " ID 不能为空"));
         }
 
         Identifier id = Identifier.tryParse(value);
         if (id == null) {
-            throw new IllegalArgumentException("非法 " + label + " ID：" + value);
+            throw new IllegalArgumentException(language.text(
+                    "Invalid " + label + " ID: ",
+                    "非法 " + label + " ID：") + value);
         }
         return id;
     }
@@ -477,7 +525,7 @@ public final class ActionExecutor {
     record BlockMaterialSpec(String id, Map<String, String> states) {
         static BlockMaterialSpec parse(String value) {
             if (value == null || value.isBlank()) {
-                throw new IllegalArgumentException("方块 ID 不能为空");
+                throw new IllegalArgumentException("Block ID is required");
             }
 
             int stateStart = value.indexOf('[');
@@ -485,23 +533,23 @@ public final class ActionExecutor {
                 return new BlockMaterialSpec(value, Map.of());
             }
             if (!value.endsWith("]")) {
-                throw new IllegalArgumentException("非法方块状态：" + value);
+                throw new IllegalArgumentException("Invalid block state: " + value);
             }
 
             String id = value.substring(0, stateStart);
             String stateText = value.substring(stateStart + 1, value.length() - 1);
             if (id.isBlank() || stateText.isBlank()) {
-                throw new IllegalArgumentException("非法方块状态：" + value);
+                throw new IllegalArgumentException("Invalid block state: " + value);
             }
 
             Map<String, String> states = new LinkedHashMap<>();
             for (String pair : stateText.split(",")) {
                 String[] parts = pair.split("=", 2);
                 if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-                    throw new IllegalArgumentException("非法方块状态：" + value);
+                    throw new IllegalArgumentException("Invalid block state: " + value);
                 }
                 if (states.put(parts[0], parts[1]) != null) {
-                    throw new IllegalArgumentException("重复方块状态：" + value);
+                    throw new IllegalArgumentException("Duplicate block state: " + value);
                 }
             }
             return new BlockMaterialSpec(id, Map.copyOf(states));

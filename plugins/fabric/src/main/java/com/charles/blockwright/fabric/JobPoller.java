@@ -118,8 +118,9 @@ public final class JobPoller {
         try {
             ServerPlayerEntity player = resolveTargetPlayer(job.targetPlayer);
             if (player == null) {
-                throw new IllegalStateException("没有在线玩家可执行任务");
+                throw new IllegalStateException("No online player is available to run this job");
             }
+            BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(player);
             if (executeLiveQueryJob(controllerClient, job, player)) {
                 return;
             }
@@ -138,12 +139,16 @@ public final class JobPoller {
                     return;
                 }
                 ok = false;
-                message = "执行端正忙，建筑任务未开始。";
+                message = language.text(
+                        "The executor is busy, so the build did not start.",
+                        "执行端正忙，建筑任务未开始。");
             } else {
                 report = new ActionExecutor(server, configSupplier.get()).executeActions(job.actions, player);
                 ok = report.isOk();
                 if (!ok) {
-                    message = "建筑执行失败，已回传执行报告";
+                    message = language.text(
+                            "Build execution failed; execution report returned",
+                            "建筑执行失败，已回传执行报告");
                 }
             }
         } catch (Exception error) {
@@ -225,12 +230,15 @@ public final class JobPoller {
             JsonModels.GameAction scanAction,
             int attempt) {
         if (attempt >= MAX_SCAN_REPLAN_ATTEMPTS) {
+            BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(player);
             CompletableFuture.runAsync(
                     () -> sendJobResult(
                             controllerClient,
                             originalJobId,
                             false,
-                            "连续扫描后仍未生成可执行方案，已停止，避免一直重复扫描。",
+                            language.text(
+                                    "Blockwright still did not produce an executable plan after repeated scans, so it stopped to avoid repeating scans.",
+                                    "连续扫描后仍未生成可执行方案，已停止，避免一直重复扫描。"),
                             null),
                     executor);
             return;
@@ -242,8 +250,16 @@ public final class JobPoller {
                 ? scanAction.message
                 : scanAction.text;
         if (text == null || text.isBlank()) {
+            BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(player);
             CompletableFuture.runAsync(
-                    () -> sendJobResult(controllerClient, originalJobId, false, "缺少要继续处理的原始需求", null),
+                    () -> sendJobResult(
+                            controllerClient,
+                            originalJobId,
+                            false,
+                            language.text(
+                                    "The original request to continue is missing",
+                                    "缺少要继续处理的原始需求"),
+                            null),
                     executor);
             return;
         }
@@ -324,10 +340,11 @@ public final class JobPoller {
         ServerPlayerEntity currentPlayer = server.getPlayerManager().getPlayer(playerSnapshot.name());
         if (currentPlayer == null) {
             CompletableFuture.runAsync(
-                    () -> sendJobResult(controllerClient, originalJobId, false, "玩家已离线", null),
+                    () -> sendJobResult(controllerClient, originalJobId, false, "Player went offline.", null),
                     executor);
             return;
         }
+        BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(currentPlayer);
 
         currentPlayer.sendMessage(net.minecraft.text.Text.literal(response.reply), false);
         JsonModels.GameAction nextScanAction = firstScanAction(response.actions);
@@ -345,14 +362,18 @@ public final class JobPoller {
                         controllerClient,
                         originalJobId,
                         playerSnapshot.name(),
-                        "扫描后继续执行建筑任务",
+                        language.text(
+                                "Continue build after scan",
+                                "扫描后继续执行建筑任务"),
                         response.actions,
                         currentPlayer,
                         response.jobId)) {
                     return;
                 }
                 ok = false;
-                message = "执行端正忙，建筑任务未开始。";
+                message = language.text(
+                        "The executor is busy, so the build did not start.",
+                        "执行端正忙，建筑任务未开始。");
                 report = null;
                 if (response.jobId != null && !response.jobId.isBlank()) {
                     sendJobResult(controllerClient, response.jobId, false, message, null);
@@ -363,7 +384,9 @@ public final class JobPoller {
             report = new ActionExecutor(server, configSupplier.get()).executeActions(response.actions, currentPlayer);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑执行失败，已回传执行报告";
+                message = language.text(
+                        "Build execution failed; execution report returned",
+                        "建筑执行失败，已回传执行报告");
             }
         } catch (Exception error) {
             ok = false;
@@ -430,6 +453,7 @@ public final class JobPoller {
         private final JsonModels.GameJob job;
         private final String extraResultJobId;
         private final String playerName;
+        private final BlockwrightLanguage language;
         private final JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
         private int actionIndex;
 
@@ -442,13 +466,14 @@ public final class JobPoller {
             this.job = job;
             this.extraResultJobId = extraResultJobId;
             this.playerName = player.getName().getString();
+            this.language = BlockwrightLanguage.fromPlayer(player);
             this.report.actions = new ArrayList<>();
         }
 
         void step() {
             ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerName);
             if (player == null) {
-                finish(false, "玩家已离线");
+                finish(false, language.text("Player went offline.", "玩家已离线"));
                 return;
             }
 
@@ -469,7 +494,11 @@ public final class JobPoller {
                 }
 
                 boolean ok = report.isOk();
-                finish(ok, ok ? "ok" : "建筑执行失败，已回传执行报告");
+                finish(ok, ok
+                        ? "ok"
+                        : language.text(
+                                "Build execution failed; execution report returned",
+                                "建筑执行失败，已回传执行报告"));
             } catch (Exception error) {
                 LOGGER.warn("Blockwright chunked job execute failed: {}, {}", job.id, error.getMessage());
                 finish(false, rootMessage(error));

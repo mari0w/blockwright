@@ -2,6 +2,33 @@ package com.charles.blockwright.fabric;
 
 record PlacementStats(int placed, int skippedExisting, int skippedPlayerSafety) {
     String summary() {
+        return summary(BlockwrightLanguage.ENGLISH);
+    }
+
+    String summary(BlockwrightLanguage language) {
+        if (language != BlockwrightLanguage.CHINESE) {
+            return englishSummary();
+        }
+        return chineseSummary();
+    }
+
+    private String englishSummary() {
+        StringBuilder message = new StringBuilder("Blockwright placed ")
+                .append(placed)
+                .append(" blocks");
+        if (skippedExisting > 0) {
+            message.append(", skipped ").append(skippedExisting).append(" existing blocks to protect the world");
+        }
+        if (skippedPlayerSafety > 0) {
+            message.append(", skipped ")
+                    .append(skippedPlayerSafety)
+                    .append(" blocks too close to the player");
+        }
+        message.append(".");
+        return message.toString();
+    }
+
+    private String chineseSummary() {
         StringBuilder message = new StringBuilder("Blockwright 已放置 ")
                 .append(placed)
                 .append(" 个方块");

@@ -116,27 +116,37 @@ final class ControllerProcessManagerTest {
     void buildsWebAddressMessagesForCommandOutput() {
         assertEquals(
                 List.of(
-                        "Blockwright 本机 Web 地址：http://127.0.0.1:8765/web",
-                        "Blockwright 局域网 Web 地址：http://192.168.5.155:8765/web"),
+                        "Blockwright local Web address: http://127.0.0.1:8765/web",
+                        "Blockwright LAN Web address: http://192.168.5.155:8765/web"),
                 ControllerProcessManager.webAddressMessages(
                         "http://127.0.0.1:8765",
                         Optional.of("192.168.5.155")));
         assertEquals(
                 List.of(
-                        "Blockwright 本机 Web 地址：http://127.0.0.1:8765/web",
-                        "Blockwright 没有检测到局域网 IPv4 地址；只能使用本机 Web 地址。"),
+                        "Blockwright local Web address: http://127.0.0.1:8765/web",
+                        "Blockwright did not detect a LAN IPv4 address; use the local Web address on this computer."),
                 ControllerProcessManager.webAddressMessages("http://127.0.0.1:8765", Optional.empty()));
+    }
+
+    @Test
+    void buildsChineseWebAddressMessagesWhenRequested() {
+        assertEquals(
+                List.of(
+                        "Blockwright 本机 Web 地址：http://127.0.0.1:8765/web",
+                        "Blockwright 局域网 Web 地址：http://192.168.5.155:8765/web"),
+                ControllerProcessManager.webAddressMessages(
+                        "http://127.0.0.1:8765",
+                        Optional.of("192.168.5.155"),
+                        BlockwrightLanguage.CHINESE));
     }
 
     @Test
     void buildsStartupHintMessagesForJoinedPlayers() {
         assertEquals(
                 List.of(
-                        "Blockwright Web 已随游戏自动启动；如果地址暂时打不开，请等几秒。",
-                        "Blockwright 本机 Web 地址：http://127.0.0.1:8765/web",
-                        "Blockwright 局域网 Web 地址：http://192.168.5.155:8765/web",
-                        "排查日志：Minecraft logs/blockwright-controller.log。",
-                        "以后可输入 /bw web 再次查看 Web 地址。"),
+                        "Blockwright Web: http://127.0.0.1:8765/web",
+                        "LAN Web: http://192.168.5.155:8765/web",
+                        "Open this page to finish setup."),
                 ControllerProcessManager.startupHintMessages(
                         "http://127.0.0.1:8765",
                         true,
@@ -144,14 +154,25 @@ final class ControllerProcessManagerTest {
 
         assertEquals(
                 List.of(
-                        "Blockwright Web 自动启动已关闭；请先手动启动 controller。",
-                        "Blockwright 本机 Web 地址：http://127.0.0.1:8765/web",
-                        "Blockwright 没有检测到局域网 IPv4 地址；只能使用本机 Web 地址。",
-                        "排查日志：Minecraft logs/blockwright-controller.log。",
-                        "以后可输入 /bw web 再次查看 Web 地址。"),
+                        "Blockwright Web: http://127.0.0.1:8765/web",
+                        "Open this page to finish setup."),
                 ControllerProcessManager.startupHintMessages(
                         "http://127.0.0.1:8765",
                         false,
                         Optional.empty()));
+    }
+
+    @Test
+    void buildsChineseStartupHintMessagesWhenRequested() {
+        assertEquals(
+                List.of(
+                        "Blockwright Web：http://127.0.0.1:8765/web",
+                        "局域网 Web：http://192.168.5.155:8765/web",
+                        "打开这个页面完成配置。"),
+                ControllerProcessManager.startupHintMessages(
+                        "http://127.0.0.1:8765",
+                        true,
+                        Optional.of("192.168.5.155"),
+                        BlockwrightLanguage.CHINESE));
     }
 }

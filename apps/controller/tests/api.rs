@@ -16,6 +16,12 @@ use blockwright_controller::{
     state::AppState,
 };
 use serde_json::{json, Value};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    sync::oneshot,
+    time::{sleep, Duration},
+};
 use tower::ServiceExt;
 
 static NEXT_DIR_ID: AtomicU64 = AtomicU64::new(1);
@@ -124,6 +130,49 @@ async fn test_app_with_fake_codex(require_token: bool, name: &str) -> Router {
     app::build_app(state)
 }
 
+async fn test_app_with_fake_openai_api(
+    require_token: bool,
+    name: &str,
+) -> (Router, oneshot::Receiver<String>) {
+    let (base_url, request_rx) = spawn_openai_plan_server(
+        r#"{"choices":[{"message":{"content":"{\"reply\":\"我看到了附近的方块。\",\"summary\":\"读取附近方块\",\"blueprint\":null,\"site_plan\":null,\"actions\":[]}"}}]}"#,
+    )
+    .await;
+    let config_dir = temp_dir(name);
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let chat_path = config_dir.join("chat.local.yaml");
+    let env_path = config_dir.join(".env");
+    let mut config = config_with_chat_path_and_codex(
+        require_token,
+        chat_path,
+        env_path.clone(),
+        CodexConfig {
+            enabled: false,
+            command: "codex".to_string(),
+            timeout_seconds: 5,
+        },
+    );
+    config.llm.config_path = config_dir.join("llm.local.yaml");
+    std::fs::write(&env_path, "OPENAI_API_KEY=test-key\n").unwrap();
+    std::fs::write(
+        &config.llm.config_path,
+        format!(
+            r#"provider: openai
+openai:
+  model: fake-openai
+  base_url: {base_url}
+  api_key_env: OPENAI_API_KEY
+  supports_images: false
+  timeout_seconds: 5
+"#
+        ),
+    )
+    .unwrap();
+
+    let state = AppState::new(config).await.unwrap();
+    (app::build_app(state), request_rx)
+}
+
 fn fake_codex_script(name: &str) -> PathBuf {
     let dir = temp_dir(name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -175,7 +224,7 @@ JSON
       cat > "$last_message" <<'JSON'
 {"reply":"可以，我们先聊方案。你想偏木屋、城堡还是现代风？我确认后再开始动工。","summary":"讨论建造方案","blueprint":null,"site_plan":null,"actions":[]}
 JSON
-    elif grep -q "窗户换成蓝色玻璃" "$prompt_file" && grep -q "未收到附近场地扫描" "$prompt_file"; then
+    elif grep -q "窗户换成蓝色玻璃" "$prompt_file" && grep -q "No nearby site scan was provided" "$prompt_file"; then
       if grep -q "window.png" "$prompt_file"; then
         cat > "$last_message" <<'JSON'
 {
@@ -371,6 +420,79 @@ async fn response_bytes(response: axum::response::Response) -> Vec<u8> {
         .to_vec()
 }
 
+async fn spawn_openai_plan_server(
+    response_body: &'static str,
+) -> (String, oneshot::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (request_tx, request_rx) = oneshot::channel();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let raw_request = read_http_request(&mut stream).await;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            response_body.len(),
+            response_body
+        );
+        stream.write_all(response.as_bytes()).await.unwrap();
+        let _ = request_tx.send(raw_request);
+    });
+    (format!("http://{addr}"), request_rx)
+}
+
+async fn read_http_request(stream: &mut tokio::net::TcpStream) -> String {
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        let read = stream.read(&mut buffer).await.unwrap();
+        assert!(read > 0, "connection closed before request completed");
+        request.extend_from_slice(&buffer[..read]);
+        if let Some(headers_end) = find_subsequence(&request, b"\r\n\r\n") {
+            let headers = String::from_utf8_lossy(&request[..headers_end]).to_ascii_lowercase();
+            let content_length = headers
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let expected_len = headers_end + 4 + content_length;
+            while request.len() < expected_len {
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert!(read > 0, "connection closed before body completed");
+                request.extend_from_slice(&buffer[..read]);
+            }
+            return String::from_utf8_lossy(&request).to_string();
+        }
+    }
+}
+
+fn find_subsequence(source: &[u8], needle: &[u8]) -> Option<usize> {
+    source
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+async fn pop_next_job(app: Router) -> Value {
+    for _ in 0..40 {
+        let response = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/api/minecraft/jobs/next?server_id=local-paper",
+                None,
+                Some("test-token"),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        if !body["job"].is_null() {
+            return body["job"].clone();
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    panic!("timed out waiting for queued minecraft job");
+}
+
 #[tokio::test]
 async fn public_health_does_not_require_token() {
     let app = test_app(true).await;
@@ -418,7 +540,8 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("id=\"languageEnglish\""));
     assert!(page_body.contains("id=\"languageChinese\""));
     assert!(page_body.contains("Choose the language used by this browser"));
-    assert!(page_body.contains("return 'en';"));
+    assert!(page_body.contains("function browserPreferredLanguage"));
+    assert!(page_body.contains("browserNavigator.languages"));
     assert!(page_body.contains("bw.language"));
     assert!(page_body.contains("Switch to Chinese"));
     assert!(page_body.contains("Switch to English"));
@@ -435,6 +558,9 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("id=\"addPanel\""));
     assert!(page_body.contains("aria-controls=\"addPanel\""));
     assert!(page_body.contains("--top-control-size: 42px"));
+    assert!(page_body.contains("--topbar-height: calc(env(safe-area-inset-top) + var(--top-control-size) + var(--top-control-offset) + var(--top-control-offset))"));
+    assert!(page_body.contains("main::before"));
+    assert!(page_body.contains("inset: var(--topbar-height) 0 var(--composer-height) 0"));
     assert!(page_body.contains("--composer-control-height: 42px"));
     assert!(page_body.contains(".topbar .icon-button"));
     assert!(page_body.contains(
@@ -449,8 +575,16 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("toggle-icon-hidden"));
     assert!(page_body.contains("Minecraft 用户名"));
     assert!(page_body.contains("id=\"usernameGate\""));
-    assert!(page_body.contains(">Enter chat</button>"));
-    assert!(page_body.contains("进入聊天"));
+    assert!(page_body.contains(">Next</button>"));
+    assert!(page_body.contains("下一步"));
+    assert!(page_body.contains("id=\"modelSetupGate\""));
+    assert!(page_body.contains("配置 AI 模型"));
+    assert!(page_body.contains("id=\"modelSetupProvider\""));
+    assert!(page_body.contains("bw.modelSetupPending.v1"));
+    assert!(page_body.contains("function showModelSetupGate"));
+    assert!(page_body.contains("function syncLlmSettingsFromModelSetup"));
+    assert!(page_body.contains("modelSetupForm.addEventListener('submit', saveModelSetupGate)"));
+    assert!(page_body.contains("openConfigPage({focusLlm: true})"));
     assert!(page_body.contains("function showUsernameGate"));
     assert!(page_body.contains("class=\"brand-mark\""));
     assert!(page_body.contains("aria-label=\"Open settings\""));
@@ -464,6 +598,8 @@ async fn web_chat_page_and_image_message_work_without_api_token() {
     assert!(page_body.contains("/api/llm/config"));
     assert!(page_body.contains("function saveLlmConfig"));
     assert!(page_body.contains("bw.llmProvider"));
+    assert!(!page_body.contains("当前模式会把规划请求发送到"));
+    assert!(!page_body.contains("Planning requests will be sent"));
     assert!(page_body.contains("Request microphone permission"));
     assert!(page_body.contains("申请麦克风权限"));
     assert!(page_body.contains("Mobile HTTPS"));
@@ -857,6 +993,66 @@ async fn robot_message_queues_job_for_minecraft_poller() {
     assert_eq!(robot_body["queued_job"]["server_id"], "local-paper");
     assert_eq!(next_body["job"]["summary"], "建造蓝图 oak-house-small");
     assert!(empty_body["job"].is_null());
+}
+
+#[tokio::test]
+async fn api_provider_robot_message_prefetches_nearby_scan_before_prompt() {
+    let (app, api_request_rx) = test_app_with_fake_openai_api(true, "api-openai-live-scan").await;
+    let robot_request = json!({
+        "platform": "telegram",
+        "conversation_id": "local",
+        "sender": "charles",
+        "target_player": "Steve",
+        "text": "附近有什么方块"
+    });
+    let app_for_message = app.clone();
+    let message_handle = tokio::spawn(async move {
+        app_for_message
+            .oneshot(request(
+                "POST",
+                "/api/robot/message",
+                Some(robot_request),
+                Some("test-token"),
+            ))
+            .await
+            .unwrap()
+    });
+
+    let job = pop_next_job(app.clone()).await;
+    assert_eq!(job["actions"][0]["type"], "scan_nearby");
+    let job_id = job["id"].as_str().unwrap();
+    let result_response = app
+        .oneshot(request(
+            "POST",
+            &format!("/api/minecraft/jobs/{job_id}/result"),
+            Some(json!({
+                "ok": true,
+                "message": "ok",
+                "nearby_scan": {
+                    "world": "world",
+                    "center_x": 10,
+                    "center_y": 64,
+                    "center_z": 20,
+                    "radius": 8,
+                    "blocks": [
+                        {"x": 10, "y": 63, "z": 20, "material": "minecraft:stone"}
+                    ]
+                }
+            })),
+            Some("test-token"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(result_response.status(), StatusCode::OK);
+
+    let message_response = message_handle.await.unwrap();
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let body = response_json(message_response).await;
+    assert_eq!(body["reply"], "我看到了附近的方块。");
+
+    let api_request = api_request_rx.await.unwrap();
+    assert!(api_request.contains("nearby_scan"));
+    assert!(api_request.contains("minecraft:stone"));
 }
 
 #[tokio::test]

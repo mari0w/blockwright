@@ -21,6 +21,8 @@ public final class JsonModels {
         public PlayerPosition position;
         @SerializedName("player_state")
         public PlayerState playerState;
+        @SerializedName("nearby_scan")
+        public WorldScan nearbyScan;
         @SerializedName("progress_id")
         public String progressId;
     }
@@ -100,6 +102,8 @@ public final class JsonModels {
     }
 
     public static final class PlayerState {
+        @SerializedName("client_language")
+        public String clientLanguage;
         @SerializedName("selected_slot")
         public int selectedSlot;
         @SerializedName("main_hand")
@@ -111,6 +115,7 @@ public final class JsonModels {
         public static PlayerState fromPlayer(Player player) {
             PlayerInventory inventory = player.getInventory();
             PlayerState state = new PlayerState();
+            state.clientLanguage = player.locale().toLanguageTag();
             state.selectedSlot = inventory.getHeldItemSlot();
             state.mainHand = itemStack(inventory.getItemInMainHand());
             state.offHand = itemStack(inventory.getItemInOffHand());

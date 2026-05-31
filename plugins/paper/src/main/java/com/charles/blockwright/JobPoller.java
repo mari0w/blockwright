@@ -60,6 +60,7 @@ public final class JobPoller {
         JsonModels.JobExecutionReport report = null;
 
         try {
+            BlockwrightLanguage language = BlockwrightLanguage.fromPlayer(resolveTargetPlayer(job.targetPlayer));
             if (executeLiveQueryJob(job)) {
                 return;
             }
@@ -69,12 +70,16 @@ public final class JobPoller {
                     return;
                 }
                 ok = false;
-                message = "执行端正忙，建筑任务未开始。";
+                message = language.text(
+                        "The executor is busy, so the build did not start.",
+                        "执行端正忙，建筑任务未开始。");
             } else {
                 report = actionExecutor.executeActions(job.actions, job.targetPlayer, origin);
                 ok = report.isOk();
                 if (!ok) {
-                    message = "建筑执行失败，已回传执行报告";
+                    message = language.text(
+                            "Build execution failed; execution report returned",
+                            "建筑执行失败，已回传执行报告");
                 }
             }
         } catch (Exception error) {
@@ -134,7 +139,9 @@ public final class JobPoller {
             Player player = resolveTargetPlayer(job.targetPlayer);
             JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
             result.ok = player != null;
-            result.message = player == null ? "没有在线玩家可执行查询" : "ok";
+            result.message = player == null
+                    ? "No online player is available for this query"
+                    : "ok";
             if (player != null) {
                 result.playerState = JsonModels.PlayerState.fromPlayer(player);
             }
@@ -147,7 +154,9 @@ public final class JobPoller {
             Player player = resolveTargetPlayer(job.targetPlayer);
             JsonModels.JobResultRequest result = new JsonModels.JobResultRequest();
             result.ok = player != null;
-            result.message = player == null ? "没有在线玩家可执行扫描" : "ok";
+            result.message = player == null
+                    ? "No online player is available for this scan"
+                    : "ok";
             if (player != null) {
                 result.nearbyScan = WorldScanner.scan(player, scanAction.radius);
             }
@@ -200,6 +209,7 @@ public final class JobPoller {
     private final class RunningJob {
         private final JsonModels.GameJob job;
         private final Location origin;
+        private final BlockwrightLanguage language;
         private final JsonModels.JobExecutionReport report = new JsonModels.JobExecutionReport();
         private int actionIndex;
         private BukkitTask actionTask;
@@ -207,6 +217,7 @@ public final class JobPoller {
         RunningJob(JsonModels.GameJob job, Location origin) {
             this.job = job;
             this.origin = origin;
+            this.language = BlockwrightLanguage.fromPlayer(resolveTargetPlayer(job.targetPlayer));
             this.report.actions = new ArrayList<>();
         }
 
@@ -239,7 +250,11 @@ public final class JobPoller {
                 }
 
                 boolean ok = report.isOk();
-                finish(ok, ok ? "ok" : "建筑执行失败，已回传执行报告");
+                finish(ok, ok
+                        ? "ok"
+                        : language.text(
+                                "Build execution failed; execution report returned",
+                                "建筑执行失败，已回传执行报告"));
             } catch (Exception error) {
                 plugin.getLogger().warning("chunked job execute failed: " + job.id + ", " + error.getMessage());
                 finish(false, error.getMessage());

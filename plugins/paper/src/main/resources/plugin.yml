@@ -7,7 +7,7 @@ description: Local AI/Codex assistant bridge for Minecraft building and item act
 commands:
   bw:
     description: Talk to the local Blockwright controller.
-    usage: /bw ask <message>
+    usage: /bw <message> or /bw web
     permission: blockwright.use
 permissions:
   blockwright.use:

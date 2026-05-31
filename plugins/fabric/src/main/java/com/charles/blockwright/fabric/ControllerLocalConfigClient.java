@@ -40,7 +40,7 @@ final class ControllerLocalConfigClient {
         }
         MatrixLocalConfigResponse body = GSON.fromJson(response.body(), MatrixLocalConfigResponse.class);
         if (body == null || body.message == null || body.message.isBlank()) {
-            return "Matrix/Element 配置已保存到 controller。";
+            return "Matrix/Element configuration saved to controller.";
         }
         return body.message;
     }

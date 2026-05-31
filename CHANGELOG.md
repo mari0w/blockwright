@@ -6,6 +6,19 @@ The project follows a pragmatic early-stage versioning model. Breaking changes a
 
 ## Unreleased
 
+## 0.1.28 - 2026-05-31
+
+- Added first-run AI model setup in the Web UI and browser-language-aware UI defaults.
+- Added live Minecraft context prefetch for API provider mode so Web/robot requests can read player state and nearby block scans before planning.
+- Improved planner prompts, response-language handling, scan-context sampling, and API provider request isolation.
+- Simplified `/bw` player commands around the main natural-language entrypoint and `/bw web`.
+- Localized Fabric/Paper player-facing messages and passed client language through player state.
+- Included nearby scan data in Paper direct Minecraft messages, matching the Fabric request path.
+- Improved controlled action execution, placement stats, and visible item-delivery behavior.
+- Updated public docs, install guidance, website assets, and project funding metadata.
+
+## 0.1.27 - 2026-05-30
+
 - Added English documentation entrypoint with `README.en.md`.
 - Added Web UI language switching between Chinese and English with browser-local persistence.
 - Added open-source project files: MIT license, code of conduct, support guide, changelog, and editor configuration.

@@ -582,7 +582,7 @@ final class ControllerProcessManager {
 
     private static void logWebAddress(BlockwrightConfig config) {
         Optional<String> lanIp = primaryLanIpv4();
-        List<String> messages = webAddressMessages(config.controllerUrl, lanIp);
+        List<String> messages = webAddressMessages(config.controllerUrl, lanIp, BlockwrightLanguage.ENGLISH);
         LOGGER.info(messages.get(0));
         if (lanIp.isPresent()) {
             LOGGER.info(messages.get(1));
@@ -592,35 +592,61 @@ final class ControllerProcessManager {
     }
 
     static List<String> webAddressMessages(String controllerUrl) {
-        return webAddressMessages(controllerUrl, primaryLanIpv4());
+        return webAddressMessages(controllerUrl, primaryLanIpv4(), BlockwrightLanguage.ENGLISH);
+    }
+
+    static List<String> webAddressMessages(String controllerUrl, BlockwrightLanguage language) {
+        return webAddressMessages(controllerUrl, primaryLanIpv4(), language);
     }
 
     static List<String> startupHintMessages(BlockwrightConfig config) {
+        return startupHintMessages(config, BlockwrightLanguage.ENGLISH);
+    }
+
+    static List<String> startupHintMessages(BlockwrightConfig config, BlockwrightLanguage language) {
         String controllerUrl = config == null ? "http://127.0.0.1:8765" : config.controllerUrl;
         boolean autoStart = config == null || config.autoStartController;
-        return startupHintMessages(controllerUrl, autoStart, primaryLanIpv4());
+        return startupHintMessages(controllerUrl, autoStart, primaryLanIpv4(), language);
     }
 
     static List<String> startupHintMessages(String controllerUrl, boolean autoStart, Optional<String> lanIp) {
+        return startupHintMessages(controllerUrl, autoStart, lanIp, BlockwrightLanguage.ENGLISH);
+    }
+
+    static List<String> startupHintMessages(
+            String controllerUrl,
+            boolean autoStart,
+            Optional<String> lanIp,
+            BlockwrightLanguage language) {
         List<String> messages = new ArrayList<>();
-        if (autoStart) {
-            messages.add("Blockwright Web 已随游戏自动启动；如果地址暂时打不开，请等几秒。");
-        } else {
-            messages.add("Blockwright Web 自动启动已关闭；请先手动启动 controller。");
-        }
-        messages.addAll(webAddressMessages(controllerUrl, lanIp));
-        messages.add("排查日志：Minecraft logs/blockwright-controller.log。");
-        messages.add("以后可输入 /bw web 再次查看 Web 地址。");
+        messages.add(language.text("Blockwright Web: ", "Blockwright Web：")
+                + loopbackWebAddress(controllerUrl));
+        lanIp.ifPresent(ip -> messages.add(language.text("LAN Web: ", "局域网 Web：")
+                + lanWebAddress(controllerUrl, ip)));
+        messages.add(language.text(
+                "Open this page to finish setup.",
+                "打开这个页面完成配置。"));
         return messages;
     }
 
     static List<String> webAddressMessages(String controllerUrl, Optional<String> lanIp) {
+        return webAddressMessages(controllerUrl, lanIp, BlockwrightLanguage.ENGLISH);
+    }
+
+    static List<String> webAddressMessages(
+            String controllerUrl,
+            Optional<String> lanIp,
+            BlockwrightLanguage language) {
         List<String> messages = new ArrayList<>();
-        messages.add("Blockwright 本机 Web 地址：" + loopbackWebAddress(controllerUrl));
+        messages.add(language.text("Blockwright local Web address: ", "Blockwright 本机 Web 地址：")
+                + loopbackWebAddress(controllerUrl));
         if (lanIp.isPresent()) {
-            messages.add("Blockwright 局域网 Web 地址：" + lanWebAddress(controllerUrl, lanIp.get()));
+            messages.add(language.text("Blockwright LAN Web address: ", "Blockwright 局域网 Web 地址：")
+                    + lanWebAddress(controllerUrl, lanIp.get()));
         } else {
-            messages.add("Blockwright 没有检测到局域网 IPv4 地址；只能使用本机 Web 地址。");
+            messages.add(language.text(
+                    "Blockwright did not detect a LAN IPv4 address; use the local Web address on this computer.",
+                    "Blockwright 没有检测到局域网 IPv4 地址；只能使用本机 Web 地址。"));
         }
         return messages;
     }

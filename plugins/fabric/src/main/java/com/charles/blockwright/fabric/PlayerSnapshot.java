@@ -18,6 +18,7 @@ public record PlayerSnapshot(String name, JsonModels.PlayerPosition position, Js
     private static JsonModels.PlayerState playerState(ServerPlayerEntity player) {
         PlayerInventory inventory = player.getInventory();
         JsonModels.PlayerState state = new JsonModels.PlayerState();
+        state.clientLanguage = player.getClientOptions().language();
         state.selectedSlot = inventory.getSelectedSlot();
         state.mainHand = itemStack(inventory.getStack(state.selectedSlot));
         state.offHand = itemStack(player.getOffHandStack());

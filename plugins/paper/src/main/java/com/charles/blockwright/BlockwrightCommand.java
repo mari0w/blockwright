@@ -22,24 +22,28 @@ public final class BlockwrightCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (BlockwrightCommandText.isReload(args)) {
-            plugin.reloadBlockwrightConfig();
-            sender.sendMessage("Blockwright 配置已重新加载。");
+        BlockwrightLanguage language = BlockwrightLanguage.fromSender(sender);
+        if (BlockwrightCommandText.isWeb(args)) {
+            sender.sendMessage(language.text("Blockwright Web: ", "Blockwright Web：") + webAddress());
             return true;
         }
 
         String text = BlockwrightCommandText.extractChatText(args);
         if (text == null || text.isBlank()) {
-            sender.sendMessage(BlockwrightCommandText.usage());
+            sender.sendMessage(BlockwrightCommandText.usage(language));
             return true;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("这个命令需要玩家在游戏内执行。");
+            sender.sendMessage(language.text(
+                    "This command must be run by a player in game.",
+                    "这个命令需要玩家在游戏内执行。"));
             return true;
         }
 
-        sender.sendMessage("Blockwright 正在处理你的需求...");
+        sender.sendMessage(language.text(
+                "Blockwright is processing your request...",
+                "Blockwright 正在处理你的需求..."));
 
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
@@ -61,38 +65,56 @@ public final class BlockwrightCommand implements CommandExecutor {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     player.sendMessage(response.reply);
                     Location origin = player.getLocation();
-                    executeActionsAndReport(response, player.getName(), origin);
+                    executeActionsAndReport(response, player.getName(), origin, language);
                 });
             } catch (Exception error) {
                 plugin.getLogger().warning("controller request failed: " + error.getMessage());
                 plugin.getServer().getScheduler().runTask(plugin,
-                        () -> sender.sendMessage("Blockwright controller 请求失败：" + error.getMessage()));
+                        () -> sender.sendMessage(language.text(
+                                        "Blockwright controller request failed: ",
+                                        "Blockwright controller 请求失败：")
+                                + error.getMessage()));
             }
         });
 
         return true;
     }
 
+    private String webAddress() {
+        String controllerUrl = ControllerPaths.trimTrailingSlash(
+                plugin.getConfig().getString("controller-url", "http://127.0.0.1:8765"));
+        return controllerUrl + "/web";
+    }
+
     private void executeActionsAndReport(
             JsonModels.MinecraftMessageResponse response,
             String playerName,
-            Location origin) {
+            Location origin,
+            BlockwrightLanguage language) {
         if (JobPoller.hasPlaceBlocks(response.actions)) {
             JobPoller poller = plugin.jobPoller();
             if (poller != null
                     && poller.startControlledActions(
                             response.jobId,
                             playerName,
-                            "直接执行玩家请求",
+                            language.text("Direct player request", "直接执行玩家请求"),
                             response.actions,
                             origin)) {
                 return;
             }
-            sendPlayerMessage(playerName, "Blockwright 正在执行另一个建筑任务，请等它完成后再试。");
+            sendPlayerMessage(playerName, language.text(
+                    "Blockwright is already running another build. Try again after it finishes.",
+                    "Blockwright 正在执行另一个建筑任务，请等它完成后再试。"));
             if (response.jobId != null && !response.jobId.isBlank()) {
                 plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
                     try {
-                        controllerClient.sendJobResult(response.jobId, false, "执行端正忙，建筑任务未开始。", null);
+                        controllerClient.sendJobResult(
+                                response.jobId,
+                                false,
+                                language.text(
+                                        "The executor is busy, so the build did not start.",
+                                        "执行端正忙，建筑任务未开始。"),
+                                null);
                     } catch (Exception error) {
                         plugin.getLogger().warning("send direct job result failed: " + error.getMessage());
                     }
@@ -109,14 +131,19 @@ public final class BlockwrightCommand implements CommandExecutor {
             report = actionExecutor.executeActions(response.actions, playerName, origin);
             ok = report.isOk();
             if (!ok) {
-                message = "建筑执行失败，已回传执行报告";
+                message = language.text(
+                        "Build execution failed; execution report returned",
+                        "建筑执行失败，已回传执行报告");
                 sendPlayerMessage(playerName, message);
             }
         } catch (Exception error) {
             ok = false;
             message = error.getMessage();
             plugin.getLogger().warning("action execute failed: " + error.getMessage());
-            sendPlayerMessage(playerName, "Blockwright 执行失败：" + message);
+            sendPlayerMessage(playerName, language.text(
+                            "Blockwright execution failed: ",
+                            "Blockwright 执行失败：")
+                    + message);
         }
 
         if (response.jobId == null || response.jobId.isBlank()) {

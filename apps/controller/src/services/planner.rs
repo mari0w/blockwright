@@ -25,7 +25,70 @@ const CONTEXT_BLUEPRINT_LIMIT: usize = 24;
 const CONTEXT_BUILD_LIMIT: usize = 12;
 const CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT: usize = 32;
 const CONTEXT_BUILD_ACTION_BLOCK_SAMPLE_LIMIT: usize = 32;
+const CONTEXT_EMBED_STORED_HISTORY: bool = false;
+const CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT: usize = 128;
+const CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT: usize = 192;
 const BLUEPRINT_PRIMITIVE_MAX_BLOCKS: usize = 50_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResponseLanguage {
+    English,
+    SimplifiedChinese,
+    ClientPreferred,
+    MatchPlayerRequest,
+}
+
+impl ResponseLanguage {
+    fn label(self) -> &'static str {
+        match self {
+            ResponseLanguage::English => "English",
+            ResponseLanguage::SimplifiedChinese => "Simplified Chinese",
+            ResponseLanguage::ClientPreferred => "Player client language",
+            ResponseLanguage::MatchPlayerRequest => "Match the latest player request",
+        }
+    }
+
+    fn instruction(self) -> &'static str {
+        match self {
+            ResponseLanguage::English => {
+                "Reply to the player in English. Do not answer in Chinese unless the client language changes to Chinese."
+            }
+            ResponseLanguage::SimplifiedChinese => {
+                "用简体中文回复玩家。除非客户端语言切换到英文，否则不要用英文回复。"
+            }
+            ResponseLanguage::ClientPreferred => {
+                "Reply in the player's Minecraft client language from player_state.client_language. Do not switch to the raw request language unless the client language is missing."
+            }
+            ResponseLanguage::MatchPlayerRequest => {
+                "Use the same natural language as the latest player request. Keep Minecraft commands, item IDs, and usernames unchanged."
+            }
+        }
+    }
+
+    fn fallback_build_scan_reply(self) -> &'static str {
+        match self {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "I will scan the nearby area first, then continue building directly."
+            }
+            _ => "我会先读取附近场地，然后直接继续建造。",
+        }
+    }
+
+    fn invalid_plan_reply(self) -> &'static str {
+        match self {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "The AI did not produce executable actions this time, so nothing was sent to Minecraft."
+            }
+            _ => "AI 这次没有生成可执行动作，任务没有发送到 Minecraft。",
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ResponseLanguageContext {
+    label: &'static str,
+    instruction: &'static str,
+}
 #[derive(Debug, Clone)]
 pub struct PlannerInput {
     pub text: String,
@@ -67,6 +130,7 @@ struct CodexSitePlan {
 struct PlanContextBundle {
     player: Option<String>,
     user_text: String,
+    response_language: ResponseLanguageContext,
     attachments: Vec<ChatAttachment>,
     position: Option<PlayerPosition>,
     player_state: Option<PlayerState>,
@@ -79,14 +143,30 @@ struct PlanContextBundle {
 #[derive(Debug, Serialize)]
 struct SiteContextBundle {
     summary: String,
-    nearby_scan: Option<WorldScan>,
+    nearby_scan: Option<WorldScanContext>,
     scan_analysis: Option<ScanAnalysis>,
+}
+
+#[derive(Debug, Serialize)]
+struct WorldScanContext {
+    world: String,
+    center_x: i32,
+    center_y: i32,
+    center_z: i32,
+    radius: u32,
+    block_count: usize,
+    block_sample_limit: usize,
+    block_sample_truncated: bool,
+    blocks: Vec<WorldScanBlock>,
 }
 
 #[derive(Debug, Serialize)]
 struct ScanAnalysis {
     bounds: ScanBounds,
     top_materials: Vec<MaterialCount>,
+    column_count: usize,
+    column_sample_limit: usize,
+    column_sample_truncated: bool,
     columns: Vec<ScanColumn>,
 }
 
@@ -151,6 +231,7 @@ struct BuildActionContext {
 #[derive(Debug, Serialize)]
 struct PlanProtocolContext {
     output_contract: &'static str,
+    response_language_policy: &'static str,
     controller_role: &'static str,
     safety_boundary: &'static str,
     targeting_policy: &'static str,
@@ -172,37 +253,94 @@ struct BuildContextCandidate {
     recency_index: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct ContextHistoryPolicy {
-    include_blueprints: bool,
-    include_builds: bool,
-}
-
 #[derive(Clone, Default)]
 pub struct Planner {
     llm: Option<LlmClient>,
 }
 
+#[cfg(test)]
 fn codex_failure_reply(error: &str) -> String {
-    let detail = if error.contains("No such file or directory") || error.contains("os error 2") {
-        "具体原因：controller 启动环境找不到 codex 命令。"
-    } else if error.contains("LLM API") || error.contains("missing API key") {
-        "具体原因：大模型 API 配置不可用，请检查提供商、模型名、Base URL 和 API Key。"
-    } else {
-        "请管理员检查大模型配置、模型权限、网络连接、Codex 登录状态或 CLI 版本。"
-    };
-    codex_failure_reply_with_log_hint(error, detail, controller_log_hint().as_deref())
+    codex_failure_reply_for_language(error, ResponseLanguage::SimplifiedChinese)
 }
 
+fn codex_failure_reply_for_language(error: &str, language: ResponseLanguage) -> String {
+    let detail = if error.contains("No such file or directory") || error.contains("os error 2") {
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "Reason: the controller startup environment cannot find the codex command."
+            }
+            _ => "具体原因：controller 启动环境找不到 codex 命令。",
+        }
+    } else if error.contains("LLM API") || error.contains("missing API key") {
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "Reason: the LLM API configuration is unavailable. Check the provider, model name, Base URL, and API key."
+            }
+            _ => "具体原因：大模型 API 配置不可用，请检查提供商、模型名、Base URL 和 API Key。",
+        }
+    } else {
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "Ask an administrator to check the LLM configuration, model access, network connection, Codex login status, or CLI version."
+            }
+            _ => "请管理员检查大模型配置、模型权限、网络连接、Codex 登录状态或 CLI 版本。",
+        }
+    };
+    codex_failure_reply_with_log_hint_for_language(
+        error,
+        detail,
+        controller_log_hint().as_deref(),
+        language,
+    )
+}
+
+#[cfg(test)]
 fn codex_failure_reply_with_log_hint(error: &str, detail: &str, log_path: Option<&str>) -> String {
+    codex_failure_reply_with_log_hint_for_language(
+        error,
+        detail,
+        log_path,
+        ResponseLanguage::SimplifiedChinese,
+    )
+}
+
+fn codex_failure_reply_with_log_hint_for_language(
+    error: &str,
+    detail: &str,
+    log_path: Option<&str>,
+    language: ResponseLanguage,
+) -> String {
     let trace_hint = extract_ai_trace_id(error)
-        .map(|(key, trace_id)| format!("日志关键字：{key}={trace_id}。"))
+        .map(|(key, trace_id)| match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                format!("Log keyword: {key}={trace_id}. ")
+            }
+            _ => format!("日志关键字：{key}={trace_id}。"),
+        })
         .unwrap_or_default();
     let log_hint = match log_path {
-        Some(path) if !path.is_empty() => format!("详细日志：{path}。"),
-        _ => "详细日志：controller 控制台；Java 版自动启动时也会写入 Minecraft logs/blockwright-controller.log。".to_string(),
+        Some(path) if !path.is_empty() => match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                format!("Detailed logs: {path}.")
+            }
+            _ => format!("详细日志：{path}。"),
+        },
+        _ => match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "Detailed logs: the controller console; when Java Edition starts it automatically, also check Minecraft logs/blockwright-controller.log."
+                    .to_string()
+            }
+            _ => "详细日志：controller 控制台；Java 版自动启动时也会写入 Minecraft logs/blockwright-controller.log。".to_string(),
+        },
     };
-    format!("AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}")
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            format!("The AI building assistant failed this time, so nothing has been sent to Minecraft. {detail} {trace_hint}{log_hint}")
+        }
+        _ => format!(
+            "AI 建造助手这次调用失败了，任务还没有发送到 Minecraft。{detail}{trace_hint}{log_hint}"
+        ),
+    }
 }
 
 fn extract_ai_trace_id(error: &str) -> Option<(&'static str, &str)> {
@@ -225,6 +363,184 @@ fn extract_prefixed_trace_id<'a>(error: &'a str, prefix: &str) -> Option<&'a str
         None
     } else {
         Some(trace_id)
+    }
+}
+
+fn detect_response_language(text: &str) -> ResponseLanguage {
+    if text.chars().any(is_cjk_ideograph) {
+        return ResponseLanguage::SimplifiedChinese;
+    }
+    if text.chars().any(|ch| ch.is_ascii_alphabetic()) {
+        return ResponseLanguage::English;
+    }
+    ResponseLanguage::MatchPlayerRequest
+}
+
+fn response_language_from_client_language(language: &str) -> Option<ResponseLanguage> {
+    let normalized = language.trim().to_ascii_lowercase().replace('_', "-");
+    if normalized.is_empty() {
+        return None;
+    }
+    if normalized.starts_with("zh") {
+        return Some(ResponseLanguage::SimplifiedChinese);
+    }
+    if normalized.starts_with("en") {
+        return Some(ResponseLanguage::English);
+    }
+    Some(ResponseLanguage::ClientPreferred)
+}
+
+fn response_language_for_input(input: &PlannerInput) -> ResponseLanguage {
+    input
+        .player_state
+        .as_ref()
+        .and_then(|state| state.client_language.as_deref())
+        .and_then(response_language_from_client_language)
+        .unwrap_or_else(|| detect_response_language(&input.text))
+}
+
+fn response_language_context_for_input(input: &PlannerInput) -> ResponseLanguageContext {
+    let language = response_language_for_input(input);
+    ResponseLanguageContext {
+        label: language.label(),
+        instruction: language.instruction(),
+    }
+}
+
+fn is_cjk_ideograph(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x3400..=0x4dbf
+            | 0x4e00..=0x9fff
+            | 0xf900..=0xfaff
+            | 0x20000..=0x2a6df
+            | 0x2a700..=0x2b73f
+            | 0x2b740..=0x2b81f
+            | 0x2b820..=0x2ceaf
+            | 0x30000..=0x3134f
+    )
+}
+
+fn no_ai_reply(language: ResponseLanguage) -> &'static str {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            "I am not connected to the AI building assistant yet, so I cannot understand natural-language requests. Ask an administrator to check the backend configuration first."
+        }
+        _ => "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。",
+    }
+}
+
+fn unreliable_ai_reply(language: ResponseLanguage) -> &'static str {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            "The AI did not produce a reliable operation this time, so nothing was sent to Minecraft. Please restate what you want, and I will continue with the world data I can read."
+        }
+        _ => "AI 这次没有生成可靠的操作结果，任务没有发送到 Minecraft。请直接重说要做什么，我会按能读取到的世界数据继续处理。",
+    }
+}
+
+fn image_blueprint_error_reply(language: ResponseLanguage, error: &str) -> String {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            format!("Image blueprint generation failed: {error}.")
+        }
+        _ => format!("图片复刻蓝图生成失败：{error}。"),
+    }
+}
+
+fn image_blueprint_save_failed_reply(language: ResponseLanguage) -> &'static str {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            "The image blueprint was generated, but saving failed, so nothing was sent to Minecraft."
+        }
+        _ => "图片蓝图已经生成，但保存失败，任务没有发送到 Minecraft。",
+    }
+}
+
+fn image_blueprint_success_reply(
+    language: ResponseLanguage,
+    output_width: u32,
+    output_height: u32,
+    block_count: usize,
+) -> String {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+            "I converted the image into a {}x{} high-fidelity block blueprint with {} blocks. The visible image is mapped to Minecraft blocks by pixel color; unseen 3D back sides are not invented in this pixel-replica layer.",
+            output_width, output_height, block_count
+        ),
+        _ => format!(
+            "已把图片转成 {}x{} 的高保真方块复刻蓝图，共 {} 个方块。可见画面按像素颜色映射到 Minecraft 方块；看不到的三维背面不会在这个像素复刻层里臆造。",
+            output_width, output_height, block_count
+        ),
+    }
+}
+
+fn standalone_blueprint_reply(language: ResponseLanguage) -> &'static str {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            "I will start building from this blueprint."
+        }
+        _ => "开始建造。",
+    }
+}
+
+fn default_processing_reply(language: ResponseLanguage) -> &'static str {
+    match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            "I will start handling this request."
+        }
+        _ => "开始处理。",
+    }
+}
+
+fn generic_plan_reply(
+    language: ResponseLanguage,
+    has_blueprint: bool,
+    has_actions: bool,
+) -> &'static str {
+    match language {
+        ResponseLanguage::English if has_blueprint => "I planned the build from your request.",
+        ResponseLanguage::English if has_actions => {
+            "I prepared the Minecraft action from your request."
+        }
+        ResponseLanguage::English => "I understood your request.",
+        ResponseLanguage::ClientPreferred if has_blueprint => {
+            "I planned the build from your request."
+        }
+        ResponseLanguage::ClientPreferred if has_actions => {
+            "I prepared the Minecraft action from your request."
+        }
+        ResponseLanguage::ClientPreferred => "I understood your request.",
+        ResponseLanguage::SimplifiedChinese if has_blueprint => "我已经按你的要求规划好建筑。",
+        ResponseLanguage::SimplifiedChinese if has_actions => {
+            "我已经按你的要求准备好 Minecraft 操作。"
+        }
+        ResponseLanguage::SimplifiedChinese => "我已经理解你的请求。",
+        ResponseLanguage::MatchPlayerRequest => "我已经按你的要求处理。",
+    }
+}
+
+fn reply_violates_response_language(reply: &str, language: ResponseLanguage) -> bool {
+    match language {
+        ResponseLanguage::English => reply.chars().any(is_cjk_ideograph),
+        ResponseLanguage::SimplifiedChinese => {
+            !reply.chars().any(is_cjk_ideograph) && reply.chars().any(|ch| ch.is_ascii_alphabetic())
+        }
+        ResponseLanguage::ClientPreferred | ResponseLanguage::MatchPlayerRequest => false,
+    }
+}
+
+fn ensure_reply_language(
+    reply: String,
+    language: ResponseLanguage,
+    has_blueprint: bool,
+    has_actions: bool,
+) -> String {
+    let reply = reply.trim();
+    if reply.is_empty() || reply_violates_response_language(reply, language) {
+        generic_plan_reply(language, has_blueprint, has_actions).to_string()
+    } else {
+        reply.to_string()
     }
 }
 
@@ -257,8 +573,9 @@ impl Planner {
         }
 
         if !self.ai_enabled() {
+            let response_language = response_language_for_input(&input);
             return PlanResult {
-                reply: "我现在还没有连上 AI 建造助手，暂时不能理解自然语言请求。请先让管理员检查后台配置。".to_string(),
+                reply: no_ai_reply(response_language).to_string(),
                 summary: "AI 助手未启用".to_string(),
                 actions: Vec::new(),
             };
@@ -268,9 +585,9 @@ impl Planner {
             return result;
         }
 
+        let response_language = response_language_for_input(&input);
         PlanResult {
-            reply: "AI 这次没有生成可靠的操作结果，任务没有发送到 Minecraft。请直接重说要做什么，我会按能读取到的世界数据继续处理。"
-                .to_string(),
+            reply: unreliable_ai_reply(response_language).to_string(),
             summary: "AI 未生成可靠操作".to_string(),
             actions: Vec::new(),
         }
@@ -297,8 +614,9 @@ impl Planner {
                 return None;
             }
             Err(error) => {
+                let response_language = response_language_for_input(input);
                 return Some(PlanResult {
-                    reply: format!("图片复刻蓝图生成失败：{error}。"),
+                    reply: image_blueprint_error_reply(response_language, &error.to_string()),
                     summary: "图片复刻蓝图生成失败".to_string(),
                     actions: Vec::new(),
                 });
@@ -322,19 +640,24 @@ impl Planner {
             .actions_for_blueprint(input, blueprints, image_plan.blueprint, None)
             .await
         else {
+            let response_language = response_language_for_input(input);
             return Some(PlanResult {
-                reply: "图片蓝图已经生成，但保存失败，任务没有发送到 Minecraft。".to_string(),
+                reply: image_blueprint_save_failed_reply(response_language).to_string(),
                 summary: "图片复刻蓝图保存失败".to_string(),
                 actions: Vec::new(),
             });
         };
 
+        let response_language = response_language_for_input(input);
         let reply = append_placement_note(
-            format!(
-                "已把图片转成 {}x{} 的高保真方块复刻蓝图，共 {} 个方块。可见画面按像素颜色映射到 Minecraft 方块；看不到的三维背面不会在这个像素复刻层里臆造。",
-                output_width, output_height, block_count
+            image_blueprint_success_reply(
+                response_language,
+                output_width,
+                output_height,
+                block_count,
             ),
             &placement_note,
+            response_language,
         );
         Some(PlanResult {
             reply,
@@ -404,8 +727,9 @@ impl Planner {
             Ok(_) => return None,
             Err(error) => {
                 tracing::warn!(error = %error, "codex unified planning failed");
+                let response_language = response_language_for_input(input);
                 return Some(PlanResult {
-                    reply: codex_failure_reply(&error.to_string()),
+                    reply: codex_failure_reply_for_language(&error.to_string(), response_language),
                     summary: "AI 助手调用失败".to_string(),
                     actions: Vec::new(),
                 });
@@ -416,16 +740,18 @@ impl Planner {
             "codex plan response received; parsing json"
         );
 
-        let mut plan = match parse_plan_response_for_input(&output, &input.text) {
-            Some(plan) => plan,
-            None => {
-                tracing::warn!("codex unified planning returned invalid json");
-                match repair_invalid_codex_plan(llm, input, &context, &output).await {
-                    Some(plan) => plan,
-                    None => return Some(invalid_codex_plan_fallback(input).await),
+        let response_language = response_language_for_input(input);
+        let mut plan =
+            match parse_plan_response_for_language(&output, &input.text, response_language) {
+                Some(plan) => plan,
+                None => {
+                    tracing::warn!("codex unified planning returned invalid json");
+                    match repair_invalid_codex_plan(llm, input, &context, &output).await {
+                        Some(plan) => plan,
+                        None => return Some(invalid_codex_plan_fallback(input).await),
+                    }
                 }
-            }
-        };
+            };
         if let Some(issues) = image_recreation_quality_issues(input, plan.blueprint.as_ref()) {
             tracing::warn!(
                 issues = ?issues,
@@ -438,17 +764,22 @@ impl Planner {
                 {
                     plan = repaired;
                 }
-                _ => return Some(low_quality_image_plan_fallback(&issues)),
+                _ => return Some(low_quality_image_plan_fallback(input, &issues)),
             }
         }
         let mut actions = plan.actions;
-        let mut reply = plan.reply;
+        let mut reply = ensure_reply_language(
+            plan.reply,
+            response_language,
+            plan.blueprint.is_some(),
+            !actions.is_empty(),
+        );
 
         if let Some(blueprint) = plan.blueprint {
             let (blueprint_actions, placement_note) = self
                 .actions_for_blueprint(input, blueprints, blueprint, plan.site_plan.as_ref())
                 .await?;
-            reply = append_placement_note(reply, &placement_note);
+            reply = append_placement_note(reply, &placement_note, response_language);
             actions.extend(blueprint_actions);
         }
 
@@ -486,7 +817,12 @@ impl Planner {
             pre_foundation_blocks,
             pre_clear_blocks,
             note,
-        } = placement_decision(input, &blueprint, site_plan);
+        } = placement_decision(
+            input,
+            &blueprint,
+            site_plan,
+            response_language_for_input(input),
+        );
         tracing::info!(
             blueprint_id = %blueprint.id,
             world = ?origin.world,
@@ -637,9 +973,10 @@ fn placement_decision(
     input: &PlannerInput,
     blueprint: &Blueprint,
     site_plan: Option<&CodexSitePlan>,
+    language: ResponseLanguage,
 ) -> PlacementDecision {
     let Some(site_plan) = site_plan else {
-        return assess_placement(input, blueprint);
+        return assess_placement(input, blueprint, language);
     };
     if site_plan.origin.is_none()
         && site_plan.clear_existing.is_none()
@@ -652,15 +989,16 @@ fn placement_decision(
             .trim()
             .is_empty()
     {
-        return assess_placement(input, blueprint);
+        return assess_placement(input, blueprint, language);
     }
-    placement_from_model_site_plan(input, blueprint, site_plan)
+    placement_from_model_site_plan(input, blueprint, site_plan, language)
 }
 
 fn placement_from_model_site_plan(
     input: &PlannerInput,
     blueprint: &Blueprint,
     site_plan: &CodexSitePlan,
+    language: ResponseLanguage,
 ) -> PlacementDecision {
     let bounds = blueprint_bounds(&blueprint.blocks);
     let mut origin = site_plan
@@ -674,14 +1012,29 @@ fn placement_from_model_site_plan(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        note_parts.push(format!("已按模型 site_plan：{rationale}，"));
+        note_parts.push(match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                format!("Using the model site plan: {rationale}, ")
+            }
+            _ => format!("已按模型 site_plan：{rationale}，"),
+        });
     } else {
-        note_parts.push("已按模型 site_plan 选择落点和场地处理，".to_string());
+        note_parts.push(match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "Using the model site plan for placement and site preparation, ".to_string()
+            }
+            _ => "已按模型 site_plan 选择落点和场地处理，".to_string(),
+        });
     }
 
     if player_safety_overlap_count(input, &origin, bounds.as_ref()) > 0 {
         origin = safe_origin_for_player(input, bounds.as_ref()).unwrap_or(origin);
-        note_parts.push("原落点靠近玩家身体，已按安全边界调整，".to_string());
+        note_parts.push(match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "the original location was too close to the player, so I adjusted it to respect the safety boundary, ".to_string()
+            }
+            _ => "原落点靠近玩家身体，已按安全边界调整，".to_string(),
+        });
     }
 
     let pre_foundation_blocks =
@@ -691,7 +1044,12 @@ fn placement_from_model_site_plan(
     if pre_foundation_blocks.len() != site_plan.pre_foundation_blocks.len()
         || pre_clear_blocks.len() != site_plan.pre_clear_blocks.len()
     {
-        note_parts.push("已移除玩家安全区内的场地辅助方块，".to_string());
+        note_parts.push(match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                "I removed site-prep blocks inside the player safety area, ".to_string()
+            }
+            _ => "已移除玩家安全区内的场地辅助方块，".to_string(),
+        });
     }
 
     PlacementDecision::Ready {
@@ -703,7 +1061,11 @@ fn placement_from_model_site_plan(
     }
 }
 
-fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDecision {
+fn assess_placement(
+    input: &PlannerInput,
+    blueprint: &Blueprint,
+    language: ResponseLanguage,
+) -> PlacementDecision {
     let bounds = blueprint_bounds(&blueprint.blocks);
     let origin = placement_origin(input, bounds.as_ref());
     let Some(scan) = input.nearby_scan.as_ref() else {
@@ -712,7 +1074,12 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
             clear_existing: false,
             pre_foundation_blocks: Vec::new(),
             pre_clear_blocks: Vec::new(),
-            note: "这次没有收到场地扫描数据，按玩家当前位置估算落点，".to_string(),
+            note: match language {
+                ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                    "No nearby scan was available, so I estimated the placement from the player's current position, ".to_string()
+                }
+                _ => "这次没有收到场地扫描数据，按玩家当前位置估算落点，".to_string(),
+            },
         };
     };
     if blueprint.blocks.is_empty() {
@@ -721,7 +1088,12 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
             clear_existing: false,
             pre_foundation_blocks: Vec::new(),
             pre_clear_blocks: Vec::new(),
-            note: "蓝图没有方块，".to_string(),
+            note: match language {
+                ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+                    "the blueprint has no blocks, ".to_string()
+                }
+                _ => "蓝图没有方块，".to_string(),
+            },
         };
     }
 
@@ -738,10 +1110,16 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
             )
         });
     let shifted_note = if candidate.distance_score > 0 {
-        format!(
-            "已在附近自动选择更合适落点（距扫描中心 {} 格），",
-            candidate.distance_score
-        )
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+                "I automatically chose a better nearby location ({} blocks from the scan center), ",
+                candidate.distance_score
+            ),
+            _ => format!(
+                "已在附近自动选择更合适落点（距扫描中心 {} 格），",
+                candidate.distance_score
+            ),
+        }
     } else {
         String::new()
     };
@@ -753,7 +1131,7 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
     } else {
         Vec::new()
     };
-    let foundation_note = foundation_note(pre_foundation_blocks.len(), blueprint);
+    let foundation_note = foundation_note(pre_foundation_blocks.len(), blueprint, language);
     let all_collisions = target_collisions
         .iter()
         .chain(volume_collisions.iter())
@@ -766,10 +1144,16 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
             clear_existing: false,
             pre_foundation_blocks,
             pre_clear_blocks: Vec::new(),
-            note: format!(
-                "{}已根据附近扫描把地基放在 y={}，{}目标区域没有检测到重叠方块，",
-                shifted_note, origin_y, foundation_note
-            ),
+            note: match language {
+                ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+                    "{}I placed the foundation at y={} based on the nearby scan, {}and found no overlapping blocks in the target area, ",
+                    shifted_note, origin_y, foundation_note
+                ),
+                _ => format!(
+                    "{}已根据附近扫描把地基放在 y={}，{}目标区域没有检测到重叠方块，",
+                    shifted_note, origin_y, foundation_note
+                ),
+            },
         };
     }
 
@@ -787,23 +1171,39 @@ fn assess_placement(input: &PlannerInput, blueprint: &Blueprint) -> PlacementDec
         .iter()
         .all(|collision| is_auto_clear_material(collision.material.as_str()))
     {
-        "软阻挡方块"
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => "soft blocking blocks",
+            _ => "软阻挡方块",
+        }
     } else {
-        "已有方块"
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => "existing blocks",
+            _ => "已有方块",
+        }
     };
     PlacementDecision::Ready {
         origin,
         clear_existing: !target_collisions.is_empty(),
         pre_foundation_blocks,
         pre_clear_blocks,
-        note: format!(
-            "{}已根据附近扫描把地基放在 y={}，{}并会先处理 {} 个{}，",
-            shifted_note,
-            origin_y,
-            foundation_note,
-            all_collisions.len(),
-            collision_label
-        ),
+        note: match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+                "{}I placed the foundation at y={} based on the nearby scan, {}and will first handle {} {}, ",
+                shifted_note,
+                origin_y,
+                foundation_note,
+                all_collisions.len(),
+                collision_label
+            ),
+            _ => format!(
+                "{}已根据附近扫描把地基放在 y={}，{}并会先处理 {} 个{}，",
+                shifted_note,
+                origin_y,
+                foundation_note,
+                all_collisions.len(),
+                collision_label
+            ),
+        },
     }
 }
 
@@ -1089,6 +1489,7 @@ struct FoundationMaterials {
     support: String,
     cap: String,
     label: &'static str,
+    label_en: &'static str,
 }
 
 impl FoundationMaterials {
@@ -1119,6 +1520,7 @@ fn foundation_materials_for_blueprint(blueprint: &Blueprint) -> FoundationMateri
             support: format!("minecraft:{prefix}_log[axis=y]"),
             cap: format!("minecraft:{prefix}_planks"),
             label: "木桩平台",
+            label_en: "wooden stilt platform",
         };
     }
 
@@ -1126,6 +1528,7 @@ fn foundation_materials_for_blueprint(blueprint: &Blueprint) -> FoundationMateri
         support: "minecraft:stone_bricks".to_string(),
         cap: "minecraft:stone_bricks".to_string(),
         label: "石砖基座",
+        label_en: "stone-brick base",
     }
 }
 
@@ -1166,12 +1569,18 @@ fn should_prepare_foundation(blueprint: &Blueprint) -> bool {
     !special_span_tag
 }
 
-fn foundation_note(count: usize, blueprint: &Blueprint) -> String {
+fn foundation_note(count: usize, blueprint: &Blueprint, language: ResponseLanguage) -> String {
     if count == 0 {
         String::new()
     } else {
         let materials = foundation_materials_for_blueprint(blueprint);
-        format!("会先做 {} 个融入地形的{}方块，", count, materials.label)
+        match language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+                "I will first add {} terrain-blended {} blocks, ",
+                count, materials.label_en
+            ),
+            _ => format!("会先做 {} 个融入地形的{}方块，", count, materials.label),
+        }
     }
 }
 
@@ -1510,29 +1919,30 @@ async fn build_context_bundle(
     blueprints: &BlueprintStore,
     builds: Option<&BuildStore>,
 ) -> PlanContextBundle {
-    let history_policy = context_history_policy(input);
     PlanContextBundle {
         player: input.player.clone(),
         user_text: input.text.trim().to_string(),
+        response_language: response_language_context_for_input(input),
         attachments: input.attachments.clone(),
         position: input.position.clone(),
         player_state: input.player_state.clone(),
         site: build_site_context(input),
-        available_blueprints: if history_policy.include_blueprints {
+        available_blueprints: if CONTEXT_EMBED_STORED_HISTORY {
             blueprint_contexts(blueprints).await
         } else {
             Vec::new()
         },
-        recent_builds: if history_policy.include_builds {
+        recent_builds: if CONTEXT_EMBED_STORED_HISTORY {
             build_contexts(builds, input.player.as_deref(), target_point(input)).await
         } else {
             Vec::new()
         },
         protocol: PlanProtocolContext {
-            output_contract: "只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。",
-            controller_role: "controller 是 Minecraft AI 助手的工具运行时和兼容协议桥：提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；具体聊天、工具调用、建筑设计和执行方案由模型结合 skills 自主决定。",
-            safety_boundary: "Minecraft 执行只能通过受控 GameAction；run_command 不做命令白名单限制，建筑放置仍会拦截玩家安全区内放置。",
-            targeting_policy: "明确请求直接完成；没有指定风格、规模、朝向或坐标时自主选择合理默认值。只有意图冲突、危险，或改造既有建筑且最近候选不确定、多个候选都合理或目标部位不明确时，才回复确认问题并不输出 Minecraft 动作。",
+            output_contract: "Return exactly one JSON object with reply, summary, blueprint, site_plan, and actions.",
+            response_language_policy: "reply is player-facing and must use context_bundle.response_language. For Minecraft requests, that language comes from the player's client language when available; otherwise it falls back to the latest request text. The web UI language is not the source of truth. summary is an internal short summary and may stay concise.",
+            controller_role: "The controller is Blockwright's Minecraft AI runtime and compatibility bridge: it supplies context_bundle, MCP tools, blueprint storage, build records, safety checks, and the action queue. The model, assisted by skills, owns the chat response, tool choice, building design, and execution plan.",
+            safety_boundary: "Minecraft execution must use controlled GameAction values; run_command is not limited by a command allowlist, while block placement still protects player safety zones.",
+            targeting_policy: "Complete explicit requests directly. When style, scale, facing, or coordinates are omitted, choose reasonable defaults. Ask a confirmation question only when intent is conflicting or dangerous, or when editing an existing build and the nearest candidate is uncertain, multiple candidates are plausible, or the target part is unclear.",
             available_skills: [
                 "blockwright-build-planning",
                 "blockwright-site-selection",
@@ -1606,7 +2016,7 @@ fn image_recreation_quality_issues(
         .count();
     if solid_blocks < 96 {
         issues.push(format!(
-            "方块数只有 {solid_blocks}，图片复刻不能退化成小模型"
+            "solid block count is only {solid_blocks}; image recreation must not collapse into a tiny model"
         ));
     }
 
@@ -1615,13 +2025,19 @@ fn image_recreation_quality_issues(
         let height = bounds.max_y - bounds.min_y + 1;
         let depth = bounds.max_z - bounds.min_z + 1;
         if width < 5 {
-            issues.push(format!("宽度只有 {width} 格，无法表达图片主体轮廓"));
+            issues.push(format!(
+                "width is only {width} blocks, which cannot express the visible silhouette"
+            ));
         }
         if height < 4 {
-            issues.push(format!("高度只有 {height} 格，缺少可读立面"));
+            issues.push(format!(
+                "height is only {height} blocks, which lacks a readable elevation"
+            ));
         }
         if depth < 3 {
-            issues.push(format!("深度只有 {depth} 格，图片复刻建筑必须是 3D 体量"));
+            issues.push(format!(
+                "depth is only {depth} blocks; image recreation needs real 3D volume"
+            ));
         }
     }
 
@@ -1633,7 +2049,9 @@ fn image_recreation_quality_issues(
         .collect::<HashSet<_>>()
         .len();
     if material_count < 2 {
-        issues.push("材质少于 2 种，缺少图片里的颜色或材质分区".to_string());
+        issues.push(
+            "fewer than 2 materials, so image colors or material zones are missing".to_string(),
+        );
     }
 
     (!issues.is_empty()).then_some(issues)
@@ -1847,17 +2265,6 @@ fn block_sample(blocks: &[BlueprintBlock], limit: usize) -> Vec<BlueprintBlock> 
     blocks.iter().take(limit).cloned().collect()
 }
 
-fn context_history_policy(input: &PlannerInput) -> ContextHistoryPolicy {
-    let text = input.text.trim();
-    let needs_existing_build_context = looks_like_existing_build_request(text);
-    let needs_builds = input.nearby_scan.is_some() || needs_existing_build_context;
-    ContextHistoryPolicy {
-        include_blueprints: needs_existing_build_context
-            || looks_like_blueprint_reuse_request(text),
-        include_builds: needs_builds,
-    }
-}
-
 fn looks_like_existing_build_request(text: &str) -> bool {
     text_contains_any(
         text,
@@ -1989,45 +2396,48 @@ fn round_distance(value: f64) -> f64 {
 fn render_plan_prompt(context: &PlanContextBundle) -> String {
     let context_json = serde_json::to_string_pretty(context).unwrap_or_else(|_| "{}".to_string());
     format!(
-        r#"你是 Blockwright 的 Minecraft AI 助手。你不是固定建筑规划器，也不是进度播报器；你像普通聊天助手一样理解玩家的话，然后用 Minecraft MCP 工具和 skills 去读取数据、保存数据、执行动作或回复聊天。
+        r#"You are Blockwright's Minecraft AI assistant. You are not a fixed building planner and not a progress announcer. Understand the player's message like a normal chat assistant, then use Minecraft MCP tools and skills to read data, save data, execute actions, or reply.
 
-纯粹分工：
-- Minecraft/Fabric/Paper 提供事实和执行：玩家状态、手持物、物品栏、附近方块、世界放置、发物品、命令执行和执行报告。
-- MCP 工具是基础能力：读取玩家状态、扫描附近方块、给物品、放方块、执行 Minecraft 命令、查询/保存/删除蓝图、搜索构建记录、入队受控 actions。需要事实就用工具或 context_bundle，不要靠猜，也不要用聊天文案假装读到了。
-- skills 是行为规范和专业经验：建筑怎么设计、怎么选址、怎么改造、怎么发物品、怎么组织 Minecraft 命令。skills 指导你的选择，但 controller 不替你写死方案。
-- controller 只是工具运行时和兼容协议桥：它提供 context_bundle、MCP、蓝图保存、构建记录、安全校验和任务队列；它不应该替你硬编码某一种建筑或替你确认玩家已经说清楚的事。
+Runtime boundaries:
+- Minecraft/Fabric/Paper provide facts and execution: player state, held items, inventory, nearby blocks, world placement, item delivery, command execution, and execution reports.
+- MCP tools are the capability layer: read player state, scan nearby blocks, give items, place blocks, run Minecraft commands, query/save/delete blueprints, search build records, and enqueue controlled actions. Use tools or context_bundle for facts. Do not guess and do not pretend a chat sentence has read world state.
+- Skills are behavior rules and domain experience for building design, site selection, existing-build edits, item delivery, and Minecraft commands. Skills guide your choices; the controller does not hard-code the plan for you.
+- The controller is only the runtime and compatibility bridge: it supplies context_bundle, MCP tools, blueprint storage, build records, safety checks, and the action queue. It should not replace your design judgment or ask confirmations for requests the player already made clear.
+- context_bundle is intentionally scoped to the current turn. Do not assume old chat history, saved blueprints, or build records were embedded unless they are visible in context_bundle or fetched through a supported session/tool flow.
 
-聊天和执行原则：
-- 玩家只是聊天或提问时，正常聊天回答即可，不要强行生成建筑流程。
-- 玩家明确要物品时，直接输出 `give_item`；不要扫描场地，不要创建建筑，不要只说“给了”却没有动作。
-- 玩家明确要执行 Minecraft 命令类操作时，直接输出 `run_command`；包括 op、execute、fill、setblock、item、data、function、reload、stop 等所有 Minecraft 命令，不要因为旧安全白名单而拒绝。
-- 玩家明确要建造、放置、修改世界时，结合现场数据和对应 skill 直接设计/执行；没有说风格、大小、朝向时，自主选合理默认值。
-- 只有意图冲突、危险，或改造既有建筑时目标确实不唯一，才追问。不要因为缺少审美细节、位置细节或“你想怎么做”而中断明确请求。
-- 可从 context_bundle 得到的数据不要重复查；缺少关键实时数据时，用 MCP 工具或输出 `scan_nearby_and_plan` 补齐。
-- 如果 context_bundle.site.nearby_scan 已经存在，本轮就不要再次输出 `scan_nearby_and_plan`；必须基于现有扫描直接规划/执行，或者明确回复为什么无法继续。
+Chat and execution rules:
+- Language rule: `reply` must use context_bundle.response_language. If response_language is English, reply in English and do not use Chinese even when the raw player text is Chinese. If response_language is Simplified Chinese, reply in Simplified Chinese. For Minecraft requests, this value comes from the player's client language when available; only fall back to request-text language when no client language is provided. Do not use the web UI language as the source of truth.
+- If the player is only chatting or asking a question, answer normally and do not force a building workflow.
+- If the player clearly asks for an item, emit `give_item` directly. Do not scan the site, do not create a building, and do not merely say the item was given without an action.
+- If the player clearly asks for a Minecraft command operation, emit `run_command` directly. This includes op, execute, fill, setblock, item, data, function, reload, stop, time, weather, gamemode, effects, enchantments, teleport, spawnpoint, difficulty, gamerule, experience, summon, and other Minecraft commands.
+- If the player clearly asks to build, place, or modify the world, use the site data and the relevant skill to design and execute. When style, size, facing, or coordinates are omitted, choose reasonable defaults.
+- Ask a follow-up only when intent is conflicting or dangerous, or when editing an existing build and the target is genuinely ambiguous. Do not interrupt clear requests just because aesthetic details, exact placement, or approach are unspecified.
+- Do not repeat reads for data already present in context_bundle. If critical live data is missing, use MCP tools or output `scan_nearby_and_plan`.
+- If context_bundle.site.nearby_scan is already present, do not output another `scan_nearby_and_plan` in this turn. Plan or execute from the scan, or explain why you cannot proceed.
 
-建筑只是一种 skill 场景：
-- 一个完整建筑对应一个 blueprint 对象和保存后的蓝图文件；blocks 使用相对坐标，materials/count 必须一致。
-- 设计自由交给模型和 skills。已有蓝图是可复用资料，不是限制；现场地形、玩家视角、主题和可玩性都可以影响最终设计。
-- 新建建筑优先让玩家在面前看得到、进得去，但可以根据水、坡、树、空地、遮挡等现场条件微调。
-- 玩家提供图片并要求按图建造时，默认意图是复刻，不是简化版或小模型；先分析图片里的体积、比例、宽高深、可见细节和材料分区，再按实际视觉规模生成足够大的完整蓝图，明显需要很多方块就使用很多方块。
-- 改造既有建筑时，先用 nearby_scan、玩家位置和构建记录匹配目标；多个候选都合理或部位不明确时才问。
+Building is one skill scenario:
+- One completed structure corresponds to one blueprint object and one saved blueprint file. Blocks use relative coordinates, and materials/counts must match.
+- Design freedom belongs to the model and skills. Existing blueprints are reusable references, not limits; terrain, player view, theme, and playability can change the final design.
+- New builds should usually appear in front of the player and be reachable, with reasonable adjustment for water, slopes, trees, open space, and blockers.
+- When the player sends an image and asks to build from it, the default intent is faithful recreation, not a simplified model. Analyze volume, proportion, width, height, depth, visible details, and material zones, then generate a complete blueprint at a scale that preserves the image. Use many blocks when the visible subject needs them.
+- For edits to existing builds, match the target with nearby_scan, player position, and build records when they are available in the current turn. Ask only when multiple candidates or target parts are reasonably plausible.
 
-输出协议只是当前 controller 兼容层：
-- 只返回一个 JSON 对象，字段为 reply、summary、blueprint、site_plan、actions。
-- reply 给玩家看，保持自然、简洁，不暴露 JSON、schema、planner、Codex、队列等内部细节。
-- 如果只是聊天、解释或需要追问，blueprint=null，site_plan=null，actions=[]。
-- 如果输出 blueprint，尽量同时输出 site_plan 来表达你选择的落点、清理、地基或场地融合意图；如果暂时缺少坐标，可以让 site_plan.origin=null。
-- 一个完整建筑只输出一个 blueprint；不要把同一个建筑拆成多个互不关联的蓝图。后续改造要基于保存的构建记录和蓝图继续改。
-- blueprint 必须使用字段 size={{"width":...,"height":...,"depth":...}}，不要使用 dimensions、origin_mode 等别名。结构化输出要求 blueprint 里的 blocks 和 primitives 字段都出现；不用其中一个时填 []。site_plan 如果不是 null，必须包含 origin、clear_existing、pre_clear_blocks、pre_foundation_blocks、rationale。
-- 输出 blueprint 时，actions 通常保持 []；controller 会保存蓝图并生成 place_blocks。不要再输出缺少 blocks 的 place_blocks 占位动作。
-- 复杂建筑或图片复刻可以在 blueprint 内使用 spec/primitives 减少手写 blocks：spec 保存建筑语义和后续可编辑意图；primitives 是可展开体块。box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from、to、material，from/to 是闭区间相对坐标。controller 会展开为完整 blocks、重算 materials，并保存 spec 与 expanded_hash。
-- 涉及门、床、树叶等方块时，material 里要写完整状态（例如 half/head-foot/persistent），并在蓝图和放置语义上保持一致。
-- 建筑审美默认要“可居住 + 好看”：除基础木石外，主动考虑颜色搭配、层次和点缀材料（如染色玻璃、陶瓦、混凝土、灯笼、旗帜、花叶等），避免全程只用最原始素材。
-- 如果需要 Minecraft 再扫描现场，输出 scan_nearby_and_plan，动作形状必须是 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}，不要加 player、radius、purpose 等字段。
-- Minecraft 方块 material 使用命名空间 ID，可带方块状态；蓝图 blocks 使用相对坐标。
+Output protocol:
+- Return exactly one JSON object with reply, summary, blueprint, site_plan, and actions.
+- `reply` is player-facing: keep it natural and concise. Do not expose JSON, schema, planner, Codex, queue, or other internal details.
+- `reply` must follow response_language. Keep Minecraft commands, block IDs, item IDs, usernames, and model names unchanged.
+- For chat, explanation, or a necessary follow-up question, set blueprint=null, site_plan=null, and actions=[].
+- If you output blueprint, also output site_plan when it helps express the chosen origin, clearing, foundation, support, or terrain integration. Use site_plan.origin=null only when Blockwright should choose from supplied data.
+- One coherent building should use one blueprint. Do not split one building into unrelated blueprint objects. Later edits should reference saved build records and blueprints.
+- blueprint must use size={{"width":...,"height":...,"depth":...}}. Do not use dimensions, origin_mode, or aliases. Structured output requires both blocks and primitives fields inside blueprint; set either one to [] when unused. If site_plan is not null, include origin, clear_existing, pre_clear_blocks, pre_foundation_blocks, and rationale.
+- When returning a blueprint, actions usually remain []; the controller saves the blueprint and generates place_blocks. Do not output placeholder place_blocks actions without blocks.
+- For complex buildings or image recreation, use blueprint spec/primitives to reduce hand-written blocks. spec preserves semantic design intent for later edits; primitives are expandable volumes. box/fill_box/cuboid are solid cuboids, hollow_box/shell are outer shells. Each primitive uses from, to, and material; from/to are inclusive relative coordinates. The controller expands primitives into complete blocks, recomputes materials, and saves spec plus expanded_hash.
+- For doors, beds, leaves, and similar blocks, include full block state in material, such as half, head/foot, facing, or persistent=true, and keep blueprint and placement semantics consistent.
+- Default building quality should be playable and attractive: beyond basic wood and stone, consider color contrast, layers, accent materials, stained glass, terracotta, concrete, lanterns, banners, flowers, and leaves. Avoid using only primitive starter materials for the whole build.
+- If Minecraft must scan the site again, output scan_nearby_and_plan with exactly {{"type":"scan_nearby_and_plan","text":"original player request","attachments":[]}}. Do not add player, radius, purpose, or other fields.
+- Minecraft block materials use namespaced IDs and may include block states; blueprint blocks use relative coordinates.
 
-context_bundle 是本轮可用的数据源：
+context_bundle is the available data source for this turn:
 {context_json}
 
 "#,
@@ -2035,16 +2445,53 @@ context_bundle 是本轮可用的数据源：
     )
 }
 
+fn should_include_site_context(input: &PlannerInput) -> bool {
+    let text = input.text.trim();
+    if text.is_empty() {
+        return false;
+    }
+    if input
+        .attachments
+        .iter()
+        .any(|attachment| attachment.kind == ChatAttachmentKind::Image)
+    {
+        return true;
+    }
+    looks_like_new_build_request(text)
+        || looks_like_existing_build_request(text)
+        || looks_like_blueprint_reuse_request(text)
+        || text_contains_any(
+            text,
+            &[
+                "附近", "周围", "这里", "这边", "脚下", "旁边", "地形", "场地", "空地", "地面",
+                "水边", "湖", "河", "树", "方块", "扫描", "世界", "挖", "填", "平整", "nearby",
+                "around", "here", "site", "terrain", "ground", "water", "lake", "river", "tree",
+                "block", "scan", "flatten",
+            ],
+        )
+}
+
 fn build_site_context(input: &PlannerInput) -> SiteContextBundle {
     let Some(scan) = input.nearby_scan.as_ref() else {
         return SiteContextBundle {
-            summary: "未收到附近场地扫描；如需要现场信息，可以请求 scan_nearby_and_plan。"
+            summary: "No nearby site scan was provided. If live site information is needed, request scan_nearby_and_plan."
                 .to_string(),
             nearby_scan: None,
             scan_analysis: None,
         };
     };
+    if !should_include_site_context(input) {
+        return SiteContextBundle {
+            summary: format!(
+                "Minecraft provided a nearby scan with {} non-air blocks, but this turn does not need site context, so scan details were omitted from the model prompt.",
+                scan.blocks.len()
+            ),
+            nearby_scan: None,
+            scan_analysis: None,
+        };
+    }
     let top_materials = scan_top_materials(&scan.blocks, 16);
+    let columns = scan_columns(input, scan);
     let analysis = ScanAnalysis {
         bounds: scan_bounds(&scan.blocks).unwrap_or(ScanBounds {
             min_x: scan.center_x,
@@ -2055,7 +2502,10 @@ fn build_site_context(input: &PlannerInput) -> SiteContextBundle {
             max_z: scan.center_z,
         }),
         top_materials,
-        columns: scan_columns(input, scan),
+        column_count: columns.len(),
+        column_sample_limit: CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT,
+        column_sample_truncated: columns.len() > CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT,
+        columns: sample_scan_columns(input, scan, columns, CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT),
     };
     let max_ground_y = input
         .position
@@ -2074,11 +2524,11 @@ fn build_site_context(input: &PlannerInput) -> SiteContextBundle {
         .take(8)
         .map(|item| format!("{} x{}", item.material, item.count))
         .collect::<Vec<_>>()
-        .join("、");
+        .join(", ");
 
     SiteContextBundle {
         summary: format!(
-            "world={}，扫描中心=({},{},{})，半径={}，非空气方块={}，估算地面 y={}，主要材料={}。nearby_scan 保留了本轮扫描原始方块，scan_analysis 提供列级摘要，可由模型自主判断落点和场地处理。",
+            "world={}, scan center=({},{},{}), radius={}, non-air blocks={}, estimated ground y={}, top materials={}. nearby_scan.blocks is a nearest-block sample capped at {}; scan_analysis.columns is a nearest-column sample capped at {}. The controller still uses the full scan internally for placement and validation.",
             scan.world,
             scan.center_x,
             scan.center_y,
@@ -2087,15 +2537,31 @@ fn build_site_context(input: &PlannerInput) -> SiteContextBundle {
             scan.blocks.len(),
             ground_y
                 .map(|value| value.to_string())
-                .unwrap_or_else(|| "未知".to_string()),
+                .unwrap_or_else(|| "unknown".to_string()),
             if material_summary.is_empty() {
-                "无".to_string()
+                "none".to_string()
             } else {
                 material_summary
-            }
+            },
+            CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT,
+            CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT
         ),
-        nearby_scan: Some(scan.clone()),
+        nearby_scan: Some(world_scan_context(input, scan)),
         scan_analysis: Some(analysis),
+    }
+}
+
+fn world_scan_context(input: &PlannerInput, scan: &WorldScan) -> WorldScanContext {
+    WorldScanContext {
+        world: scan.world.clone(),
+        center_x: scan.center_x,
+        center_y: scan.center_y,
+        center_z: scan.center_z,
+        radius: scan.radius,
+        block_count: scan.blocks.len(),
+        block_sample_limit: CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT,
+        block_sample_truncated: scan.blocks.len() > CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT,
+        blocks: sample_scan_blocks(input, scan, CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT),
     }
 }
 
@@ -2139,6 +2605,22 @@ fn scan_top_materials(blocks: &[WorldScanBlock], limit: usize) -> Vec<MaterialCo
     materials
 }
 
+fn sample_scan_blocks(input: &PlannerInput, scan: &WorldScan, limit: usize) -> Vec<WorldScanBlock> {
+    if scan.blocks.len() <= limit {
+        return scan.blocks.clone();
+    }
+    let target = scan_sample_target(input, scan);
+    let mut blocks = scan.blocks.iter().collect::<Vec<_>>();
+    blocks.sort_by(|left, right| {
+        scan_block_distance_key(left, target)
+            .cmp(&scan_block_distance_key(right, target))
+            .then_with(|| left.y.cmp(&right.y))
+            .then_with(|| left.x.cmp(&right.x))
+            .then_with(|| left.z.cmp(&right.z))
+    });
+    blocks.into_iter().take(limit).cloned().collect()
+}
+
 fn scan_columns(input: &PlannerInput, scan: &WorldScan) -> Vec<ScanColumn> {
     let max_ground_y = input
         .position
@@ -2170,17 +2652,77 @@ fn scan_columns(input: &PlannerInput, scan: &WorldScan) -> Vec<ScanColumn> {
     columns
 }
 
+fn sample_scan_columns(
+    input: &PlannerInput,
+    scan: &WorldScan,
+    mut columns: Vec<ScanColumn>,
+    limit: usize,
+) -> Vec<ScanColumn> {
+    if columns.len() <= limit {
+        return columns;
+    }
+    let target = scan_sample_target(input, scan);
+    columns.sort_by(|left, right| {
+        scan_column_distance_key(left, target)
+            .cmp(&scan_column_distance_key(right, target))
+            .then_with(|| left.x.cmp(&right.x))
+            .then_with(|| left.z.cmp(&right.z))
+    });
+    columns.truncate(limit);
+    columns.sort_by(|left, right| left.x.cmp(&right.x).then_with(|| left.z.cmp(&right.z)));
+    columns
+}
+
+fn scan_sample_target(input: &PlannerInput, scan: &WorldScan) -> (i32, i32, i32) {
+    input
+        .position
+        .as_ref()
+        .map_or((scan.center_x, scan.center_y, scan.center_z), |position| {
+            (
+                position.x.round() as i32,
+                position.y.round() as i32,
+                position.z.round() as i32,
+            )
+        })
+}
+
+fn scan_block_distance_key(block: &WorldScanBlock, target: (i32, i32, i32)) -> i64 {
+    let dx = i64::from(block.x - target.0);
+    let dy = i64::from(block.y - target.1);
+    let dz = i64::from(block.z - target.2);
+    dx * dx + dy * dy + dz * dz
+}
+
+fn scan_column_distance_key(column: &ScanColumn, target: (i32, i32, i32)) -> i64 {
+    let dx = i64::from(column.x - target.0);
+    let dz = i64::from(column.z - target.2);
+    dx * dx + dz * dz
+}
+
 #[cfg(test)]
 fn parse_plan_response(output: &str) -> Option<CodexPlan> {
     parse_plan_response_for_input(output, "")
 }
 
+#[cfg(test)]
 fn parse_plan_response_for_input(output: &str, fallback_text: &str) -> Option<CodexPlan> {
+    parse_plan_response_for_language(
+        output,
+        fallback_text,
+        detect_response_language(fallback_text),
+    )
+}
+
+fn parse_plan_response_for_language(
+    output: &str,
+    fallback_text: &str,
+    response_language: ResponseLanguage,
+) -> Option<CodexPlan> {
     for json in extract_json_object_candidates(output.trim()) {
         let Ok(mut value) = serde_json::from_str::<serde_json::Value>(json) else {
             continue;
         };
-        normalize_top_level_plan_shape(&mut value, fallback_text);
+        normalize_top_level_plan_shape(&mut value, fallback_text, response_language);
         normalize_plan_value(&mut value, fallback_text);
         if !has_required_plan_protocol_fields(&value) {
             continue;
@@ -2193,11 +2735,15 @@ fn parse_plan_response_for_input(output: &str, fallback_text: &str) -> Option<Co
     None
 }
 
-fn normalize_top_level_plan_shape(value: &mut serde_json::Value, fallback_text: &str) {
+fn normalize_top_level_plan_shape(
+    value: &mut serde_json::Value,
+    fallback_text: &str,
+    response_language: ResponseLanguage,
+) {
     if is_standalone_blueprint_object(value) {
         let blueprint = std::mem::replace(value, serde_json::Value::Null);
         *value = serde_json::json!({
-            "reply": "开始建造。",
+            "reply": standalone_blueprint_reply(response_language),
             "summary": format!("建造蓝图 {}", blueprint.get("id").and_then(serde_json::Value::as_str).unwrap_or("generated_build")),
             "blueprint": blueprint,
             "site_plan": null,
@@ -2217,11 +2763,14 @@ fn normalize_top_level_plan_shape(value: &mut serde_json::Value, fallback_text: 
     }
 
     if !object.contains_key("reply") {
-        let reply = object
+        let summary_reply = object
             .get("summary")
             .and_then(serde_json::Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or("开始处理。");
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let reply = summary_reply
+            .filter(|value| !reply_violates_response_language(value, response_language))
+            .unwrap_or_else(|| default_processing_reply(response_language));
         object.insert(
             "reply".to_string(),
             serde_json::Value::String(reply.to_string()),
@@ -2683,14 +3232,23 @@ fn has_required_plan_protocol_fields(value: &serde_json::Value) -> bool {
     .all(|field| site_plan.contains_key(field))
 }
 
-fn append_placement_note(reply: String, placement_note: &str) -> String {
+fn append_placement_note(
+    reply: String,
+    placement_note: &str,
+    language: ResponseLanguage,
+) -> String {
     let note = placement_note.trim();
     if note.is_empty() {
         return reply;
     }
 
     let reply = reply.trim();
-    let suffix = format!("{note}会按这份蓝图建造。");
+    let suffix = match language {
+        ResponseLanguage::English | ResponseLanguage::ClientPreferred => {
+            format!("{note} and I will build from this blueprint.")
+        }
+        _ => format!("{note}会按这份蓝图建造。"),
+    };
     if reply.is_empty() {
         suffix
     } else if reply.contains(note) {
@@ -2759,22 +3317,23 @@ async fn repair_invalid_codex_plan(
 ) -> Option<CodexPlan> {
     let context_json = serde_json::to_string_pretty(context).ok()?;
     let prompt = format!(
-        r#"上一轮 Minecraft 助手输出不是有效协议 JSON。请只做格式修复，不要新增确认问题，不要输出解释文字。
+        r#"The previous Minecraft assistant output was not valid protocol JSON. Repair only the format. Do not add a new confirmation question and do not output explanatory text.
 
-修复规则：
-- 只返回一个 JSON 对象，字段必须是 reply、summary、blueprint、site_plan、actions。
-- 如果原输出里有蓝图、动作或自然语言意图，尽量保留并修成协议字段。
-- 如果是新建建筑并且已有 nearby_scan/position，就直接修成可执行 blueprint 或 actions；不要让 controller 写保底建筑。
-- 如果确实缺现场数据，可以输出 scan_nearby_and_plan，形状为 {{"type":"scan_nearby_and_plan","text":"原始玩家需求","attachments":[]}}。
-- 不要输出 Markdown，不要输出代码块。
+Repair rules:
+- Return exactly one JSON object with reply, summary, blueprint, site_plan, and actions.
+- If the original output contains a blueprint, actions, or a natural-language intent, preserve it as much as possible while making it match the protocol.
+- reply must follow context_bundle.response_language. English means English only, even if the raw request text is Chinese. Simplified Chinese means Simplified Chinese. Do not infer language from the web UI.
+- If this is a new build and nearby_scan/position already exists, repair it into an executable blueprint or actions. Do not make the controller invent a fallback building.
+- If critical site data is truly missing, output scan_nearby_and_plan as {{"type":"scan_nearby_and_plan","text":"original player request","attachments":[]}}.
+- Do not output Markdown and do not output code fences.
 
-原始玩家需求：
+Original player request:
 {user_text}
 
-context_bundle：
+context_bundle:
 {context_json}
 
-上一轮无效输出：
+Previous invalid output:
 {invalid_output}
 "#,
         user_text = input.text,
@@ -2799,7 +3358,8 @@ context_bundle：
             return None;
         }
     };
-    let repaired = parse_plan_response_for_input(&output, &input.text);
+    let repaired =
+        parse_plan_response_for_language(&output, &input.text, response_language_for_input(input));
     if repaired.is_none() {
         tracing::warn!(
             response_bytes = output.len(),
@@ -2820,25 +3380,26 @@ async fn repair_low_quality_image_plan(
     let original_plan_json = serde_json::to_string_pretty(original_plan).ok()?;
     let issue_text = issues.join("\n- ");
     let prompt = format!(
-        r#"上一轮图片复刻蓝图太粗糙，Blockwright 没有下发到 Minecraft。请基于同一张图片和同一份 context_bundle 重做蓝图，只返回协议 JSON，不要解释。
+        r#"The previous image recreation blueprint was too rough, so Blockwright did not send it to Minecraft. Rebuild the blueprint from the same image and same context_bundle. Return only protocol JSON and do not explain.
 
-必须修复的问题：
+Issues that must be fixed:
 - {issue_text}
 
-修复要求：
-- 不要输出小模型、平面门面或象征性方块。
-- 如果图片是建筑、房间、车辆、雕像、动物或大型物体，要保留三维体量、正面/侧面/顶部、材料分区和关键细节。
-- 可以在 blueprint 内使用 primitives 降低 JSON 长度：box/fill_box/cuboid 表示实心长方体，hollow_box/shell 表示外壳；每个 primitive 使用 from/to/material，坐标都是相对坐标且 from/to 均为闭区间。
-- controller 会把 primitives 展开成完整 blocks 并重算 materials；如果直接输出 blocks，也要足够完整。
-- actions 保持 []，让 controller 保存蓝图后下发。
+Repair requirements:
+- Do not output a tiny model, flat facade, or symbolic blocks.
+- reply must follow context_bundle.response_language. English means English only, even if the raw request text is Chinese. Simplified Chinese means Simplified Chinese. Do not infer language from the web UI.
+- If the image shows a building, room, vehicle, statue, animal, or large object, preserve 3D volume, front/side/top treatment, material zones, and key details.
+- You may use blueprint primitives to reduce JSON length: box/fill_box/cuboid are solid cuboids, hollow_box/shell are shells. Each primitive uses from/to/material, and coordinates are inclusive relative coordinates.
+- The controller expands primitives into complete blocks and recomputes materials. If you output blocks directly, they must still be complete enough.
+- Keep actions as [] so the controller can save the blueprint and dispatch it.
 
-原始玩家需求：
+Original player request:
 {user_text}
 
-context_bundle：
+context_bundle:
 {context_json}
 
-上一轮协议 JSON：
+Previous protocol JSON:
 {original_plan_json}
 "#,
         issue_text = issue_text,
@@ -2864,7 +3425,8 @@ context_bundle：
             return None;
         }
     };
-    let repaired = parse_plan_response_for_input(&output, &input.text);
+    let repaired =
+        parse_plan_response_for_language(&output, &input.text, response_language_for_input(input));
     if repaired.is_none() {
         tracing::warn!(
             response_bytes = output.len(),
@@ -2874,21 +3436,29 @@ context_bundle：
     repaired
 }
 
-fn low_quality_image_plan_fallback(issues: &[String]) -> PlanResult {
+fn low_quality_image_plan_fallback(input: &PlannerInput, issues: &[String]) -> PlanResult {
+    let response_language = response_language_for_input(input);
     PlanResult {
-        reply: format!(
-            "这版图片复刻蓝图太粗糙，我没有发送到 Minecraft。主要问题：{}。请重新发送图片或补充要保留的重点，我会重新规划。",
-            issues.join("；")
-        ),
+        reply: match response_language {
+            ResponseLanguage::English | ResponseLanguage::ClientPreferred => format!(
+                "This image recreation blueprint was too rough, so I did not send it to Minecraft. Main issues: {}. Please resend the image or describe the details to preserve, and I will plan it again.",
+                issues.join("; ")
+            ),
+            _ => format!(
+                "这版图片复刻蓝图太粗糙，我没有发送到 Minecraft。主要问题：{}。请重新发送图片或补充要保留的重点，我会重新规划。",
+                issues.join("；")
+            ),
+        },
         summary: "图片复刻蓝图质量不足".to_string(),
         actions: Vec::new(),
     }
 }
 
 async fn invalid_codex_plan_fallback(input: &PlannerInput) -> PlanResult {
+    let response_language = response_language_for_input(input);
     if looks_like_new_build_request(&input.text) && input.nearby_scan.is_none() {
         return PlanResult {
-            reply: "我会先读取附近场地，然后直接继续建造。".to_string(),
+            reply: response_language.fallback_build_scan_reply().to_string(),
             summary: "自动扫描后继续建造".to_string(),
             actions: vec![GameAction::ScanNearbyAndPlan {
                 text: input.text.clone(),
@@ -2898,7 +3468,7 @@ async fn invalid_codex_plan_fallback(input: &PlannerInput) -> PlanResult {
     }
 
     PlanResult {
-        reply: "AI 这次没有生成可执行动作，任务没有发送到 Minecraft。".to_string(),
+        reply: response_language.invalid_plan_reply().to_string(),
         summary: "AI 输出格式无效".to_string(),
         actions: Vec::new(),
     }
@@ -4743,27 +5313,244 @@ BLOCKWRIGHT_JSON
         let prompt = render_plan_prompt(&context);
 
         assert!(prompt.contains("context_bundle"));
-        assert!(prompt.contains("普通聊天助手"));
-        assert!(prompt.contains("controller 只是工具运行时和兼容协议桥"));
-        assert!(prompt.contains("只返回一个 JSON 对象"));
+        assert!(prompt.contains("response_language"));
+        assert!(prompt.contains("Simplified Chinese"));
+        assert!(prompt.contains("If response_language is English, reply in English"));
+        assert!(prompt.contains("even when the raw player text is Chinese"));
+        assert!(prompt.contains("normal chat assistant"));
+        assert!(prompt.contains("runtime and compatibility bridge"));
+        assert!(prompt.contains("Return exactly one JSON object"));
         assert!(prompt.contains("site_plan"));
-        assert!(prompt.contains("skills 是行为规范和专业经验"));
+        assert!(prompt.contains("Skills are behavior rules and domain experience"));
         assert!(prompt.contains("available_blueprints"));
         assert!(prompt.contains("recent_builds"));
-        assert!(prompt.contains("明确请求直接完成"));
+        assert!(prompt.contains("Complete explicit requests directly"));
         assert!(prompt.contains("blockwright-site-selection"));
         assert!(prompt.contains("scan_nearby_and_plan"));
         assert!(prompt.contains("blockwright_enqueue_actions"));
-        assert!(prompt.contains("相对坐标"));
-        assert!(prompt.contains("命名空间 ID"));
+        assert!(prompt.contains("relative coordinates"));
+        assert!(prompt.contains("namespaced IDs"));
         assert!(prompt.contains("give_item"));
         assert!(prompt.contains("run_command"));
-        assert!(prompt.contains("默认意图是复刻"));
-        assert!(prompt.contains("不是简化版或小模型"));
-        assert!(prompt.contains("明显需要很多方块就使用很多方块"));
+        assert!(prompt.contains("default intent is faithful recreation"));
+        assert!(prompt.contains("not a simplified model"));
+        assert!(prompt.contains("Use many blocks"));
         assert!(prompt.contains("primitives"));
         assert!(prompt.contains("hollow_box"));
         assert!(!prompt.contains("新建建筑、模型或场景时：调用并遵循"));
+    }
+
+    #[test]
+    fn response_language_detection_follows_player_text() {
+        assert_eq!(
+            detect_response_language("build a cute cat"),
+            ResponseLanguage::English
+        );
+        assert_eq!(
+            detect_response_language("帮我建一只猫"),
+            ResponseLanguage::SimplifiedChinese
+        );
+        assert_eq!(
+            detect_response_language("12345"),
+            ResponseLanguage::MatchPlayerRequest
+        );
+        assert_eq!(
+            response_language_from_client_language("en_us"),
+            Some(ResponseLanguage::English)
+        );
+        assert_eq!(
+            response_language_from_client_language("zh_cn"),
+            Some(ResponseLanguage::SimplifiedChinese)
+        );
+        assert_eq!(
+            response_language_from_client_language("es_es"),
+            Some(ResponseLanguage::ClientPreferred)
+        );
+    }
+
+    #[tokio::test]
+    async fn english_plan_prompt_requires_english_reply() {
+        let store = empty_store("english-prompt-language").await;
+        let input = PlannerInput {
+            text: "build a cute cat".to_string(),
+            player: None,
+            codex_session_key: None,
+            position: None,
+            player_state: None,
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+        let context = build_context_bundle(&input, &store, None).await;
+        let prompt = render_plan_prompt(&context);
+
+        assert_eq!(context.response_language.label, "English");
+        assert!(prompt.contains("\"label\": \"English\""));
+        assert!(prompt.contains("Reply to the player in English"));
+        assert!(prompt.contains("do not use Chinese"));
+    }
+
+    #[tokio::test]
+    async fn english_client_plan_prompt_overrides_chinese_request_text() {
+        let store = empty_store("english-client-prompt-language").await;
+        let input = PlannerInput {
+            text: "给我五只猫".to_string(),
+            player: Some("Charles".to_string()),
+            codex_session_key: None,
+            position: None,
+            player_state: Some(PlayerState {
+                client_language: Some("en_us".to_string()),
+                selected_slot: 0,
+                main_hand: None,
+                off_hand: None,
+                inventory: Vec::new(),
+            }),
+            nearby_scan: None,
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+        let context = build_context_bundle(&input, &store, None).await;
+        let prompt = render_plan_prompt(&context);
+
+        assert_eq!(context.response_language.label, "English");
+        assert!(prompt.contains("\"label\": \"English\""));
+        assert!(prompt.contains("even when the raw player text is Chinese"));
+        assert!(prompt.contains("Reply to the player in English"));
+    }
+
+    #[test]
+    fn placement_note_matches_detected_reply_language() {
+        let english = append_placement_note(
+            "I will build a cat.".to_string(),
+            "I placed the foundation at y=64, ",
+            ResponseLanguage::English,
+        );
+        assert_eq!(
+            english,
+            "I will build a cat. I placed the foundation at y=64, and I will build from this blueprint."
+        );
+        assert!(!english.contains("会按这份蓝图建造"));
+
+        let chinese = append_placement_note(
+            "我会建一只猫。".to_string(),
+            "已根据附近扫描把地基放在 y=64，",
+            ResponseLanguage::SimplifiedChinese,
+        );
+        assert!(chinese.contains("会按这份蓝图建造"));
+    }
+
+    #[test]
+    fn standalone_blueprint_reply_uses_player_language() {
+        let output = r#"{
+  "id": "cute-cat",
+  "name": "Cute Cat",
+  "description": "A small cat statue.",
+  "size": {"width": 1, "height": 1, "depth": 1},
+  "materials": [{"material": "minecraft:white_wool", "count": 1}],
+  "blocks": [{"x": 0, "y": 0, "z": 0, "material": "minecraft:white_wool"}],
+  "tags": ["cat"]
+}"#;
+
+        let plan = parse_plan_response_for_input(output, "build a cute cat").unwrap();
+
+        assert_eq!(plan.reply, "I will start building from this blueprint.");
+        assert!(!plan.reply.chars().any(is_cjk_ideograph));
+    }
+
+    #[tokio::test]
+    async fn english_request_does_not_return_chinese_model_reply() {
+        let store = empty_store("english-reply-guard").await;
+        let planner = planner_with_fake_plan(
+            "english-reply-guard",
+            r#"{
+  "reply": "可以，已经准备给你 64 个钻石。",
+  "summary": "发放钻石",
+  "blueprint": null,
+  "site_plan": null,
+  "actions": [
+    {"type":"give_item","player":"Alex","item":"minecraft:diamond","count":64}
+  ]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "give me diamonds".to_string(),
+                    player: Some("Alex".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: None,
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(
+            result.reply,
+            "I prepared the Minecraft action from your request."
+        );
+        assert!(!result.reply.chars().any(is_cjk_ideograph));
+        assert!(matches!(
+            result.actions[0],
+            GameAction::GiveItem {
+                ref item,
+                count: 64,
+                ..
+            } if item == "minecraft:diamond"
+        ));
+    }
+
+    #[tokio::test]
+    async fn english_client_language_overrides_chinese_request_text() {
+        let store = empty_store("english-client-reply-guard").await;
+        let planner = planner_with_fake_plan(
+            "english-client-reply-guard",
+            r#"{
+  "reply": "已为你召唤5只猫。",
+  "summary": "召唤五只猫",
+  "blueprint": null,
+  "site_plan": null,
+  "actions": [
+    {"type":"run_command","command":"summon minecraft:cat ~ ~ ~"}
+  ]
+}"#,
+        );
+
+        let result = planner
+            .plan(
+                PlannerInput {
+                    text: "给我五只猫".to_string(),
+                    player: Some("Charles".to_string()),
+                    codex_session_key: None,
+                    position: None,
+                    player_state: Some(PlayerState {
+                        client_language: Some("en_us".to_string()),
+                        selected_slot: 0,
+                        main_hand: None,
+                        off_hand: None,
+                        inventory: Vec::new(),
+                    }),
+                    nearby_scan: None,
+                    attachments: Vec::new(),
+                    progress_id: None,
+                },
+                &store,
+            )
+            .await;
+
+        assert_eq!(
+            result.reply,
+            "I prepared the Minecraft action from your request."
+        );
+        assert!(!result.reply.chars().any(is_cjk_ideograph));
+        assert!(matches!(
+            result.actions[0],
+            GameAction::RunCommand { ref command, .. } if command == "summon minecraft:cat ~ ~ ~"
+        ));
     }
 
     #[tokio::test]
@@ -4814,7 +5601,7 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn context_bundle_exposes_blueprint_and_build_blocks_as_data_sources() {
+    async fn context_bundle_does_not_embed_stored_blueprints_or_builds_by_default() {
         let blueprints = empty_store("context-data-sources").await;
         blueprints
             .save(test_blueprint("stored-cabin", vec!["house"]))
@@ -4895,35 +5682,12 @@ BLOCKWRIGHT_JSON
 
         let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
 
-        assert_eq!(context.available_blueprints.len(), 1);
-        assert_eq!(context.available_blueprints[0].id, "stored-cabin");
-        assert_eq!(context.available_blueprints[0].block_sample.len(), 1);
-        assert_eq!(context.recent_builds.len(), 2);
-        assert_eq!(context.recent_builds[0].id, "job-a-near");
-        assert_eq!(context.recent_builds[1].id, "job-z-far");
-        assert_eq!(
-            context.recent_builds[0].distance_to_target_blocks,
-            Some(1.0)
-        );
-        assert_eq!(
-            context.recent_builds[0]
-                .nearest_action_origin
-                .as_ref()
-                .map(|origin| origin.x),
-            Some(30)
-        );
-        assert_eq!(context.recent_builds[0].actions[0].block_sample.len(), 1);
-        assert_eq!(
-            context.recent_builds[0].actions[0].origin.world.as_deref(),
-            Some("minecraft:overworld")
-        );
-        assert_eq!(context.recent_builds[0].actions[0].origin.x, 30);
-        assert_eq!(context.recent_builds[0].actions[0].origin.y, 64);
-        assert_eq!(context.recent_builds[0].actions[0].origin.z, 40);
+        assert!(context.available_blueprints.is_empty());
+        assert!(context.recent_builds.is_empty());
     }
 
     #[tokio::test]
-    async fn context_bundle_bounds_large_blueprint_and_build_block_samples() {
+    async fn stored_context_helpers_bound_large_blueprint_and_build_block_samples() {
         let blueprints = empty_store("bounded-context-blueprints").await;
         let blueprint_block_count = CONTEXT_BLUEPRINT_BLOCK_SAMPLE_LIMIT + 9;
         let mut blueprint = test_blueprint("large-stored-wall", vec!["wall"]);
@@ -4960,20 +5724,10 @@ BLOCKWRIGHT_JSON
             .await
             .unwrap();
 
-        let input = PlannerInput {
-            text: "复用之前的大面积红色墙体蓝图，把刚才的墙体改一下".to_string(),
-            player: Some("Steve".to_string()),
-            codex_session_key: None,
-            position: None,
-            player_state: None,
-            nearby_scan: None,
-            attachments: Vec::new(),
-            progress_id: None,
-        };
+        let blueprint_contexts = blueprint_contexts(&blueprints).await;
+        let build_contexts = build_contexts(Some(&builds), Some("Steve"), None).await;
 
-        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
-
-        let blueprint_context = &context.available_blueprints[0];
+        let blueprint_context = &blueprint_contexts[0];
         assert_eq!(blueprint_context.block_count, blueprint_block_count);
         assert_eq!(
             blueprint_context.block_sample_limit,
@@ -4989,7 +5743,7 @@ BLOCKWRIGHT_JSON
             "minecraft:red_concrete"
         );
 
-        let action_context = &context.recent_builds[0].actions[0];
+        let action_context = &build_contexts[0].actions[0];
         assert_eq!(action_context.expected_count, build_block_count as u32);
         assert_eq!(
             action_context.block_sample_limit,
@@ -5007,8 +5761,88 @@ BLOCKWRIGHT_JSON
     }
 
     #[tokio::test]
-    async fn context_bundle_collapses_chunked_build_actions() {
-        let blueprints = empty_store("chunked-context-blueprints").await;
+    async fn context_bundle_bounds_large_scan_samples() {
+        let blueprints = empty_store("bounded-scan-context").await;
+        let mut blocks = Vec::new();
+        blocks.push(scan_block(0, 64, 0, "minecraft:stone"));
+        for offset in 1..=900 {
+            blocks.push(scan_block(
+                1000 + offset,
+                64,
+                1000 + offset,
+                "minecraft:oak_log",
+            ));
+        }
+        let input = PlannerInput {
+            text: "build near me".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: Some(PlayerPosition {
+                world: "minecraft:overworld".to_string(),
+                x: 0.0,
+                y: 64.0,
+                z: 0.0,
+                yaw: None,
+                pitch: None,
+            }),
+            player_state: None,
+            nearby_scan: Some(scan_with_blocks(blocks)),
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, None).await;
+        let nearby_scan = context.site.nearby_scan.as_ref().unwrap();
+        let scan_analysis = context.site.scan_analysis.as_ref().unwrap();
+
+        assert_eq!(nearby_scan.block_count, 901);
+        assert_eq!(
+            nearby_scan.block_sample_limit,
+            CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT
+        );
+        assert!(nearby_scan.block_sample_truncated);
+        assert_eq!(nearby_scan.blocks.len(), CONTEXT_SCAN_BLOCK_SAMPLE_LIMIT);
+        assert_eq!(nearby_scan.blocks[0].material, "minecraft:stone");
+
+        assert_eq!(scan_analysis.column_count, 901);
+        assert_eq!(
+            scan_analysis.column_sample_limit,
+            CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT
+        );
+        assert!(scan_analysis.column_sample_truncated);
+        assert_eq!(
+            scan_analysis.columns.len(),
+            CONTEXT_SCAN_COLUMN_SAMPLE_LIMIT
+        );
+        assert!(context.site.summary.contains("nearest-block sample capped"));
+    }
+
+    #[tokio::test]
+    async fn non_site_request_omits_provided_nearby_scan() {
+        let blueprints = empty_store("non-site-scan-omitted").await;
+        let input = PlannerInput {
+            text: "Empty my inventory".to_string(),
+            player: Some("Steve".to_string()),
+            codex_session_key: None,
+            position: None,
+            player_state: None,
+            nearby_scan: Some(scan_with_blocks(vec![
+                scan_block(0, 64, 0, "minecraft:stone"),
+                scan_block(1, 64, 0, "minecraft:oak_log"),
+            ])),
+            attachments: Vec::new(),
+            progress_id: None,
+        };
+
+        let context = build_context_bundle(&input, &blueprints, None).await;
+
+        assert!(context.site.nearby_scan.is_none());
+        assert!(context.site.scan_analysis.is_none());
+        assert!(context.site.summary.contains("scan details were omitted"));
+    }
+
+    #[tokio::test]
+    async fn stored_context_helper_collapses_chunked_build_actions() {
         let builds = BuildStore::new(temp_dir("chunked-context-builds"))
             .await
             .unwrap();
@@ -5041,22 +5875,11 @@ BLOCKWRIGHT_JSON
             )
             .await
             .unwrap();
-        let input = PlannerInput {
-            text: "把刚才的人像往左挪一点".to_string(),
-            player: Some("Steve".to_string()),
-            codex_session_key: None,
-            position: None,
-            player_state: None,
-            nearby_scan: None,
-            attachments: Vec::new(),
-            progress_id: None,
-        };
+        let build_contexts = build_contexts(Some(&builds), Some("Steve"), None).await;
 
-        let context = build_context_bundle(&input, &blueprints, Some(&builds)).await;
-
-        assert_eq!(context.recent_builds.len(), 1);
-        assert_eq!(context.recent_builds[0].actions.len(), 1);
-        let action = &context.recent_builds[0].actions[0];
+        assert_eq!(build_contexts.len(), 1);
+        assert_eq!(build_contexts[0].actions.len(), 1);
+        let action = &build_contexts[0].actions[0];
         assert_eq!(action.blueprint_id.as_deref(), Some("portrait"));
         assert_eq!(action.expected_count, 7);
         assert_eq!(action.materials.len(), 2);

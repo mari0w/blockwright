@@ -451,6 +451,7 @@ mod tests {
                     message: Some("ok".to_string()),
                     report: None,
                     player_state: Some(crate::domain::types::PlayerState {
+                        client_language: Some("en_us".to_string()),
                         selected_slot: 0,
                         main_hand: Some(crate::domain::types::PlayerItemStack {
                             item: "minecraft:bricks".to_string(),

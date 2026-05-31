@@ -24,6 +24,7 @@
       --composer-height: 176px;
       --top-control-size: 42px;
       --top-control-offset: 12px;
+      --topbar-height: calc(env(safe-area-inset-top) + var(--top-control-size) + var(--top-control-offset) + var(--top-control-offset));
       --composer-control-height: 42px;
       --composer-control-max-height: 104px;
     }
@@ -66,6 +67,19 @@
       height: 100vh;
       height: 100dvh;
       overflow: hidden;
+    }
+    main::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      height: var(--topbar-height);
+      border-bottom: 1px solid rgba(48, 57, 65, .72);
+      background: rgba(16, 18, 20, .97);
+      backdrop-filter: blur(10px);
+      pointer-events: none;
     }
     .setup-field {
       display: block;
@@ -165,12 +179,13 @@
     }
     .messages {
       position: fixed;
-      inset: 0 0 var(--composer-height) 0;
+      inset: var(--topbar-height) 0 var(--composer-height) 0;
       z-index: 1;
       overflow-x: hidden;
       overflow-y: auto;
       min-height: 0;
-      padding: calc(var(--top-control-size) + var(--top-control-offset) + env(safe-area-inset-top) + 10px) 24px 24px;
+      padding: 12px 24px 24px;
+      scroll-padding-top: 12px;
       overscroll-behavior: contain;
       touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
@@ -719,6 +734,25 @@
     .provider-fields[hidden] {
       display: none;
     }
+    .model-setup-form {
+      display: grid;
+      gap: 14px;
+    }
+    .model-setup-form label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .model-setup-form .config-checkbox {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      color: var(--text);
+    }
+    .model-setup-form .config-checkbox input {
+      width: auto;
+      margin: 0;
+    }
     .language-choice {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -935,7 +969,8 @@
         padding: 8px 10px;
       }
       .messages {
-        padding: calc(var(--top-control-size) + var(--top-control-offset) + env(safe-area-inset-top) + 6px) 10px 12px;
+        padding: 10px 10px 12px;
+        scroll-padding-top: 10px;
       }
       .message {
         max-width: 94%;
@@ -1135,7 +1170,50 @@
         <input id="usernameGateInput" autocomplete="username" placeholder="For example Steve" data-i18n-placeholder="usernamePlaceholder">
       </label>
       <p id="usernameGateError" class="config-status error"></p>
-      <button id="usernameGateSubmit" type="submit" data-i18n="enterChat">Enter chat</button>
+      <button id="usernameGateSubmit" type="submit" data-i18n="enterChat">Next</button>
+    </form>
+  </section>
+  <section id="modelSetupGate" class="guide-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="modelSetupTitle">
+    <form id="modelSetupForm" class="guide-panel model-setup-form">
+      <div class="guide-head">
+        <h2 id="modelSetupTitle" data-i18n="modelSetupTitle">Configure the AI model</h2>
+        <p data-i18n="modelSetupIntro">Choose the model Blockwright should use for planning. You can change this later from settings.</p>
+      </div>
+      <label for="modelSetupProvider">
+        <span data-i18n="llmProvider">Model mode</span>
+        <select id="modelSetupProvider">
+          <option value="codex_cli">Codex CLI</option>
+          <option value="openai">OpenAI API</option>
+          <option value="deepseek">DeepSeek API</option>
+          <option value="doubao">Doubao API</option>
+          <option value="gemini">Gemini API</option>
+        </select>
+      </label>
+      <p id="modelSetupCodexHint" data-i18n="llmCodexHelp">Codex CLI uses the command configured on the controller. API keys are not needed for this mode.</p>
+      <div id="modelSetupApiFields" class="provider-fields" hidden>
+        <label for="modelSetupModel">
+          <span data-i18n="llmModel">Model</span>
+          <input id="modelSetupModel" placeholder="gpt-4.1">
+        </label>
+        <label for="modelSetupBaseUrl">
+          <span data-i18n="llmBaseUrl">Base URL</span>
+          <input id="modelSetupBaseUrl" placeholder="https://api.openai.com/v1">
+        </label>
+        <label for="modelSetupApiKey">
+          <span data-i18n="llmApiKey">API Key</span>
+          <input id="modelSetupApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the existing key" data-i18n-placeholder="llmKeyPlaceholder">
+        </label>
+        <label class="config-checkbox" for="modelSetupSupportsImages">
+          <input id="modelSetupSupportsImages" type="checkbox">
+          <span data-i18n="llmSupportsImages">This model accepts image input</span>
+        </label>
+        <p id="modelSetupApiHint" hidden></p>
+      </div>
+      <p id="modelSetupStatus" class="config-status"></p>
+      <div class="guide-actions">
+        <button id="modelSetupOpenSettings" class="secondary-button" type="button" data-i18n="modelSetupOpenSettings">Full settings</button>
+        <button id="modelSetupSubmit" type="submit" data-i18n="modelSetupSave">Finish setup</button>
+      </div>
     </form>
   </section>
   <section id="configPage" class="config-page" hidden>
@@ -1159,7 +1237,7 @@
               <button id="languageEnglish" class="language-choice-button" type="button" data-language="en" data-i18n="languageEnglish">English</button>
               <button id="languageChinese" class="language-choice-button" type="button" data-language="zh" data-i18n="languageChinese">中文</button>
             </div>
-            <p data-i18n="languageHelp">Choose the language used by this browser. New browsers open in English by default.</p>
+            <p data-i18n="languageHelp">Choose the language used by this browser. New browsers follow the browser language first.</p>
           </section>
           <section class="config-section">
             <h3 data-i18n="player">Player</h3>
@@ -1206,7 +1284,7 @@
                 <input id="llmSupportsImages" type="checkbox">
                 <span data-i18n="llmSupportsImages">This model accepts image input</span>
               </label>
-              <p id="llmApiHint"></p>
+              <p id="llmApiHint" hidden></p>
             </div>
           </section>
           <section class="config-section">
@@ -1292,6 +1370,7 @@
     const CHAT_HISTORY_KEY = 'bw.chatHistory.v1';
     const ACTIVE_JOB_KEY = 'bw.activeJob.v1';
     const MAX_CHAT_HISTORY_ITEMS = 80;
+    const MODEL_SETUP_PENDING_KEY = 'bw.modelSetupPending.v1';
     const LLM_PROVIDER_DEFAULTS = {
       codex_cli: {model: '', base_url: '', supports_images: true, key_placeholder: ''},
       openai: {model: 'gpt-4.1', base_url: 'https://api.openai.com/v1', supports_images: true, key_placeholder: 'OPENAI_API_KEY'},
@@ -1305,6 +1384,19 @@
     const usernameGateForm = document.getElementById('usernameGateForm');
     const usernameGateInput = document.getElementById('usernameGateInput');
     const usernameGateError = document.getElementById('usernameGateError');
+    const modelSetupGate = document.getElementById('modelSetupGate');
+    const modelSetupForm = document.getElementById('modelSetupForm');
+    const modelSetupProvider = document.getElementById('modelSetupProvider');
+    const modelSetupCodexHint = document.getElementById('modelSetupCodexHint');
+    const modelSetupApiFields = document.getElementById('modelSetupApiFields');
+    const modelSetupModel = document.getElementById('modelSetupModel');
+    const modelSetupBaseUrl = document.getElementById('modelSetupBaseUrl');
+    const modelSetupApiKey = document.getElementById('modelSetupApiKey');
+    const modelSetupSupportsImages = document.getElementById('modelSetupSupportsImages');
+    const modelSetupApiHint = document.getElementById('modelSetupApiHint');
+    const modelSetupStatus = document.getElementById('modelSetupStatus');
+    const modelSetupSubmit = document.getElementById('modelSetupSubmit');
+    const modelSetupOpenSettings = document.getElementById('modelSetupOpenSettings');
     const languageToggle = document.getElementById('languageToggle');
     const languageToggleLabel = document.getElementById('languageToggleLabel');
     const languageButtons = [...document.querySelectorAll('[data-language]')];
@@ -1340,6 +1432,27 @@
     const llmApiHint = document.getElementById('llmApiHint');
     const llmProviderConfigCache = {};
     let lastLlmProvider = 'codex_cli';
+    let modelSetupLastLlmProvider = 'codex_cli';
+    const settingsLlmControls = {
+      provider: llmProvider,
+      codexHint: llmCodexHint,
+      apiFields: llmApiFields,
+      model: llmModel,
+      baseUrl: llmBaseUrl,
+      apiKey: llmApiKey,
+      supportsImages: llmSupportsImages,
+      apiHint: llmApiHint
+    };
+    const modelSetupLlmControls = {
+      provider: modelSetupProvider,
+      codexHint: modelSetupCodexHint,
+      apiFields: modelSetupApiFields,
+      model: modelSetupModel,
+      baseUrl: modelSetupBaseUrl,
+      apiKey: modelSetupApiKey,
+      supportsImages: modelSetupSupportsImages,
+      apiHint: modelSetupApiHint
+    };
     const matrixEnabled = document.getElementById('matrixEnabled');
     const matrixHomeserver = document.getElementById('matrixHomeserver');
     const matrixAccessToken = document.getElementById('matrixAccessToken');
@@ -1373,7 +1486,7 @@
         language: '显示语言',
         languageEnglish: 'English',
         languageChinese: '中文',
-        languageHelp: '选择这个浏览器使用的页面语言。新的浏览器默认打开英文。',
+        languageHelp: '选择这个浏览器使用的页面语言。新的浏览器首次会跟随浏览器语言。',
         openSettings: '打开设置',
         composerPlaceholder: '说你想建什么、改什么。',
         send: '发送',
@@ -1385,7 +1498,11 @@
         usernameGateIntro: 'Blockwright 会把指令发给这个玩家。这个名字就是你游戏里的用户名，之后可以在右上角设置里修改。',
         minecraftUsername: 'Minecraft 用户名',
         usernamePlaceholder: '例如 Steve',
-        enterChat: '进入聊天',
+        enterChat: '下一步',
+        modelSetupTitle: '配置 AI 模型',
+        modelSetupIntro: '选择 Blockwright 规划建筑时使用的模型。完成后就可以开始聊天，之后也能在右上角设置里修改。',
+        modelSetupSave: '完成配置',
+        modelSetupOpenSettings: '完整设置',
         backToChat: '返回聊天',
         settings: '设置',
         settingsIntro: '聊天接入和浏览器权限都在这里处理。',
@@ -1397,7 +1514,6 @@
         llmApiKey: 'API Key',
         llmKeyPlaceholder: '留空表示保留已有 key',
         llmSupportsImages: '这个模型支持图片输入',
-        llmApiHint: '当前模式会把规划请求发送到 {provider}，密钥保存到本地 .env，不会写入仓库配置。',
         llmConfigRequired: '请填写模型名和 Base URL。',
         llmConfigSaved: '大模型配置已保存。',
         player: '玩家',
@@ -1536,7 +1652,7 @@
         language: 'Language',
         languageEnglish: 'English',
         languageChinese: 'Chinese',
-        languageHelp: 'Choose the language used by this browser. New browsers open in English by default.',
+        languageHelp: 'Choose the language used by this browser. New browsers follow the browser language first.',
         openSettings: 'Open settings',
         composerPlaceholder: 'Describe what to build or change.',
         send: 'Send',
@@ -1548,7 +1664,11 @@
         usernameGateIntro: 'Blockwright sends commands to this player. Use the exact username shown in Minecraft; you can change it later in settings.',
         minecraftUsername: 'Minecraft username',
         usernamePlaceholder: 'For example Steve',
-        enterChat: 'Enter chat',
+        enterChat: 'Next',
+        modelSetupTitle: 'Configure the AI model',
+        modelSetupIntro: 'Choose the model Blockwright should use for planning. After this you can start chatting, and you can change it later from settings.',
+        modelSetupSave: 'Finish setup',
+        modelSetupOpenSettings: 'Full settings',
         backToChat: 'Back to chat',
         settings: 'Settings',
         settingsIntro: 'Chat integrations and browser permissions are configured here.',
@@ -1560,7 +1680,6 @@
         llmApiKey: 'API Key',
         llmKeyPlaceholder: 'Leave blank to keep the existing key',
         llmSupportsImages: 'This model accepts image input',
-        llmApiHint: 'Planning requests will be sent to {provider}. The key is saved in the local .env file, not in repo config.',
         llmConfigRequired: 'Enter the model and Base URL.',
         llmConfigSaved: 'LLM configuration saved.',
         player: 'Player',
@@ -1715,11 +1834,24 @@
     let lastTouchEndAt = 0;
 
     function initialLanguage() {
-      const stored = localStorage.getItem('bw.language');
+      let stored = null;
+      try {
+        stored = localStorage.getItem('bw.language');
+      } catch (error) {
+        stored = null;
+      }
       if (stored === 'zh' || stored === 'en') {
         return stored;
       }
-      return 'en';
+      return browserPreferredLanguage();
+    }
+
+    function browserPreferredLanguage() {
+      const browserNavigator = typeof navigator === 'undefined' ? {} : navigator;
+      const languages = Array.isArray(browserNavigator.languages) && browserNavigator.languages.length
+        ? browserNavigator.languages
+        : [browserNavigator.language || ''];
+      return languages.some((language) => String(language).toLowerCase().startsWith('zh')) ? 'zh' : 'en';
     }
 
     function t(key, values = {}) {
@@ -1757,7 +1889,8 @@
       resetVoiceCancelText();
       updateVoiceToggleLabels(!voicePanel.hidden);
       renderHttpsGuideStep();
-      updateLlmProviderFields();
+      updateLlmProviderFields(settingsLlmControls);
+      updateLlmProviderFields(modelSetupLlmControls);
     }
 
     function setLanguage(language) {
@@ -1798,6 +1931,7 @@
     llmBaseUrl.value = localStorage.getItem('bw.llmBaseUrl') || '';
     llmSupportsImages.checked = localStorage.getItem('bw.llmSupportsImages') === '1';
     applyLlmDefaults(localStorage.getItem('bw.llmProvider') || 'codex_cli');
+    syncModelSetupFromLlmSettings();
     matrixHomeserver.value = localStorage.getItem('bw.matrixHomeserver') || 'https://matrix-client.matrix.org';
     matrixAllowedSender.value = localStorage.getItem('bw.matrixAllowedSender') || '';
     matrixEnabled.checked = localStorage.getItem('bw.matrixEnabled') === '1';
@@ -1839,6 +1973,8 @@
     }
     if (!username.value.trim()) {
       showUsernameGate();
+    } else if (isModelSetupPending()) {
+      showModelSetupGate();
     }
 
     updateComposerHeight();
@@ -1881,12 +2017,24 @@
       rememberCurrentLlmProviderFields(lastLlmProvider);
       lastLlmProvider = normalizeLlmProvider(llmProvider.value);
       applyLlmDefaults(lastLlmProvider, true);
+      syncModelSetupFromLlmSettings();
+    });
+    modelSetupProvider.addEventListener('change', () => {
+      rememberLlmProviderFields(modelSetupLastLlmProvider, modelSetupLlmControls);
+      modelSetupLastLlmProvider = normalizeLlmProvider(modelSetupProvider.value);
+      applyLlmDefaultsToControls(modelSetupLastLlmProvider, modelSetupLlmControls, true);
     });
 
     configBack.addEventListener('click', closeConfigPage);
     configClose.addEventListener('click', closeConfigPage);
     configForm.addEventListener('submit', saveWebConfig);
     usernameGateForm.addEventListener('submit', saveUsernameGate);
+    modelSetupForm.addEventListener('submit', saveModelSetupGate);
+    modelSetupOpenSettings.addEventListener('click', () => {
+      syncLlmSettingsFromModelSetup();
+      modelSetupGate.hidden = true;
+      openConfigPage({focusLlm: true});
+    });
     permissionRequest.addEventListener('click', requestMicrophonePermission);
     refreshMicrophonePermission(false);
     httpsGuideClose.addEventListener('click', closeHttpsGuide);
@@ -2064,7 +2212,8 @@
     async function loadLlmConfig() {
       const token = controllerToken.value.trim();
       if (!token) {
-        updateLlmProviderFields();
+        updateLlmProviderFields(settingsLlmControls);
+        updateLlmProviderFields(modelSetupLlmControls);
         return;
       }
       try {
@@ -2072,63 +2221,75 @@
           headers: {'x-blockwright-token': token}
         });
         if (!response.ok) {
-          updateLlmProviderFields();
+          updateLlmProviderFields(settingsLlmControls);
+          updateLlmProviderFields(modelSetupLlmControls);
           return;
         }
         const payload = await response.json();
         applyLlmConfig(payload);
       } catch (_) {
-        updateLlmProviderFields();
+        updateLlmProviderFields(settingsLlmControls);
+        updateLlmProviderFields(modelSetupLlmControls);
       }
     }
 
     function applyLlmConfig(payload) {
       cacheLlmProviderConfigs(payload);
       const provider = normalizeLlmProvider(payload.provider);
-      llmProvider.value = provider;
       lastLlmProvider = provider;
-      applyLlmDefaults(provider, true);
+      applyLlmConfigToControls(provider, settingsLlmControls);
+      persistLlmLocalState();
+      syncModelSetupFromLlmSettings();
+    }
+
+    function applyLlmConfigToControls(provider, controls) {
+      provider = normalizeLlmProvider(provider);
+      controls.provider.value = provider;
+      applyLlmDefaultsToControls(provider, controls, true);
       const api = llmProviderConfigCache[provider];
       if (api && provider !== 'codex_cli') {
-        llmModel.value = api.model || llmModel.value;
-        llmBaseUrl.value = api.base_url || llmBaseUrl.value;
-        llmSupportsImages.checked = Boolean(api.supports_images);
+        controls.model.value = api.model || controls.model.value;
+        controls.baseUrl.value = api.base_url || controls.baseUrl.value;
+        controls.supportsImages.checked = Boolean(api.supports_images);
       }
-      persistLlmLocalState();
-      updateLlmProviderFields();
+      updateLlmProviderFields(controls);
     }
 
     function applyLlmDefaults(provider, overwrite) {
-      provider = normalizeLlmProvider(provider);
-      llmProvider.value = provider;
-      const defaults = llmProviderSettings(provider);
-      if (provider !== 'codex_cli' && (overwrite || !llmModel.value.trim())) {
-        llmModel.value = defaults.model || '';
-      }
-      if (provider !== 'codex_cli' && (overwrite || !llmBaseUrl.value.trim())) {
-        llmBaseUrl.value = defaults.base_url || '';
-      }
-      if (overwrite || localStorage.getItem('bw.llmSupportsImages') === null) {
-        llmSupportsImages.checked = Boolean(defaults.supports_images);
-      }
-      updateLlmProviderFields();
+      applyLlmDefaultsToControls(provider, settingsLlmControls, overwrite);
       persistLlmLocalState();
     }
 
-    function updateLlmProviderFields() {
-      const provider = normalizeLlmProvider(llmProvider.value);
+    function applyLlmDefaultsToControls(provider, controls, overwrite) {
+      provider = normalizeLlmProvider(provider);
+      controls.provider.value = provider;
+      const defaults = llmProviderSettings(provider);
+      if (provider !== 'codex_cli' && (overwrite || !controls.model.value.trim())) {
+        controls.model.value = defaults.model || '';
+      }
+      if (provider !== 'codex_cli' && (overwrite || !controls.baseUrl.value.trim())) {
+        controls.baseUrl.value = defaults.base_url || '';
+      }
+      if (overwrite || (controls === settingsLlmControls && localStorage.getItem('bw.llmSupportsImages') === null)) {
+        controls.supportsImages.checked = Boolean(defaults.supports_images);
+      }
+      updateLlmProviderFields(controls);
+    }
+
+    function updateLlmProviderFields(controls = settingsLlmControls) {
+      const provider = normalizeLlmProvider(controls.provider.value);
       const isApi = provider !== 'codex_cli';
-      llmApiFields.hidden = !isApi;
-      llmCodexHint.hidden = isApi;
+      controls.apiFields.hidden = !isApi;
+      controls.codexHint.hidden = isApi;
+      controls.apiHint.hidden = true;
+      controls.apiHint.textContent = '';
       if (!isApi) {
-        llmApiHint.textContent = '';
         return;
       }
       const settings = llmProviderSettings(provider);
-      llmApiKey.placeholder = settings.api_key_configured
+      controls.apiKey.placeholder = settings.api_key_configured
         ? t('llmKeyPlaceholder')
         : (settings.api_key_env || settings.key_placeholder || t('llmKeyPlaceholder'));
-      llmApiHint.textContent = t('llmApiHint', {provider: llmProviderLabel(provider)});
     }
 
     function persistLlmLocalState() {
@@ -2151,15 +2312,19 @@
     }
 
     function rememberCurrentLlmProviderFields(provider) {
+      rememberLlmProviderFields(provider, settingsLlmControls);
+    }
+
+    function rememberLlmProviderFields(provider, controls) {
       provider = normalizeLlmProvider(provider);
       if (provider === 'codex_cli') {
         return;
       }
       llmProviderConfigCache[provider] = {
         ...llmProviderSettings(provider),
-        model: llmModel.value.trim(),
-        base_url: llmBaseUrl.value.trim(),
-        supports_images: llmSupportsImages.checked
+        model: controls.model.value.trim(),
+        base_url: controls.baseUrl.value.trim(),
+        supports_images: controls.supportsImages.checked
       };
     }
 
@@ -2175,34 +2340,18 @@
       return ['codex_cli', 'openai', 'deepseek', 'doubao', 'gemini'].includes(provider) ? provider : 'codex_cli';
     }
 
-    function llmProviderLabel(provider) {
-      if (provider === 'openai') {
-        return 'OpenAI API';
-      }
-      if (provider === 'deepseek') {
-        return 'DeepSeek API';
-      }
-      if (provider === 'doubao') {
-        return 'Doubao API';
-      }
-      if (provider === 'gemini') {
-        return 'Gemini API';
-      }
-      return 'Codex CLI';
-    }
-
-    async function saveLlmConfig(token) {
-      const provider = normalizeLlmProvider(llmProvider.value);
-      if (provider !== 'codex_cli' && (!llmModel.value.trim() || !llmBaseUrl.value.trim())) {
+    async function saveLlmConfig(token, controls = settingsLlmControls) {
+      const provider = normalizeLlmProvider(controls.provider.value);
+      if (provider !== 'codex_cli' && (!controls.model.value.trim() || !controls.baseUrl.value.trim())) {
         throw new Error(t('llmConfigRequired'));
       }
       const body = {provider};
       if (provider !== 'codex_cli') {
         body[provider] = {
-          model: llmModel.value.trim(),
-          base_url: llmBaseUrl.value.trim(),
-          api_key: llmApiKey.value.trim(),
-          supports_images: llmSupportsImages.checked
+          model: controls.model.value.trim(),
+          base_url: controls.baseUrl.value.trim(),
+          api_key: controls.apiKey.value.trim(),
+          supports_images: controls.supportsImages.checked
         };
       }
       const response = await fetch('/api/llm/config', {
@@ -2217,7 +2366,7 @@
       if (!response.ok) {
         throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
       }
-      llmApiKey.value = '';
+      controls.apiKey.value = '';
       applyLlmConfig(payload);
       return payload;
     }
@@ -2272,11 +2421,86 @@
             throw new Error(payload.message || payload.error || await response.text() || t('saveFailed'));
           }
         }
+        markModelSetupComplete();
         setConfigStatus(`${t('llmConfigSaved')} ${t('configSaved')}`, false);
       } catch (error) {
         setConfigStatus(error.message || t('saveFailed'), true);
       } finally {
         configSave.disabled = false;
+      }
+    }
+
+    function syncModelSetupFromLlmSettings() {
+      const provider = normalizeLlmProvider(llmProvider.value);
+      modelSetupProvider.value = provider;
+      modelSetupLastLlmProvider = provider;
+      modelSetupModel.value = llmModel.value;
+      modelSetupBaseUrl.value = llmBaseUrl.value;
+      modelSetupApiKey.value = '';
+      modelSetupSupportsImages.checked = llmSupportsImages.checked;
+      updateLlmProviderFields(modelSetupLlmControls);
+    }
+
+    function syncLlmSettingsFromModelSetup() {
+      rememberLlmProviderFields(modelSetupLastLlmProvider, modelSetupLlmControls);
+      const provider = normalizeLlmProvider(modelSetupProvider.value);
+      llmProvider.value = provider;
+      lastLlmProvider = provider;
+      llmModel.value = modelSetupModel.value;
+      llmBaseUrl.value = modelSetupBaseUrl.value;
+      llmApiKey.value = modelSetupApiKey.value;
+      llmSupportsImages.checked = modelSetupSupportsImages.checked;
+      updateLlmProviderFields(settingsLlmControls);
+      persistLlmLocalState();
+    }
+
+    function isModelSetupPending() {
+      return localStorage.getItem(MODEL_SETUP_PENDING_KEY) === '1';
+    }
+
+    function markModelSetupPending() {
+      localStorage.setItem(MODEL_SETUP_PENDING_KEY, '1');
+    }
+
+    function markModelSetupComplete() {
+      localStorage.removeItem(MODEL_SETUP_PENDING_KEY);
+    }
+
+    function showModelSetupGate() {
+      syncModelSetupFromLlmSettings();
+      setModelSetupStatus('', false);
+      modelSetupGate.hidden = false;
+      modelSetupProvider.focus();
+    }
+
+    function closeModelSetupGate() {
+      modelSetupGate.hidden = true;
+      text.focus();
+    }
+
+    function setModelSetupStatus(message, isError) {
+      modelSetupStatus.textContent = message;
+      modelSetupStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    async function saveModelSetupGate(event) {
+      event.preventDefault();
+      const token = controllerToken.value.trim();
+      if (!token) {
+        setModelSetupStatus(t('configTokenRequired'), true);
+        return;
+      }
+      modelSetupSubmit.disabled = true;
+      setModelSetupStatus(t('savingConfig'), false);
+      try {
+        await saveLlmConfig(token, modelSetupLlmControls);
+        markModelSetupComplete();
+        setModelSetupStatus(t('llmConfigSaved'), false);
+        closeModelSetupGate();
+      } catch (error) {
+        setModelSetupStatus(error.message || t('saveFailed'), true);
+      } finally {
+        modelSetupSubmit.disabled = false;
       }
     }
 
@@ -2301,7 +2525,9 @@
         return;
       }
       usernameGateError.textContent = '';
-      closeUsernameGate();
+      markModelSetupPending();
+      closeUsernameGate(false);
+      showModelSetupGate();
     }
 
     function showUsernameGate() {
@@ -2310,22 +2536,31 @@
       usernameGateInput.focus();
     }
 
-    function closeUsernameGate() {
+    function closeUsernameGate(focusChat = true) {
       usernameGate.hidden = true;
-      text.focus();
+      if (focusChat) {
+        text.focus();
+      }
     }
 
-    function openConfigPage() {
+    function openConfigPage(options = {}) {
       clearConfigStatus();
       configPage.hidden = false;
       refreshMicrophonePermission(true);
-      configBack.focus();
+      if (options && options.focusLlm === true) {
+        llmProvider.scrollIntoView({block: 'center'});
+        llmProvider.focus();
+      } else {
+        configBack.focus();
+      }
     }
 
     function closeConfigPage() {
       configPage.hidden = true;
       if (!username.value.trim()) {
         showUsernameGate();
+      } else if (isModelSetupPending()) {
+        showModelSetupGate();
       } else {
         configOpen.focus();
       }

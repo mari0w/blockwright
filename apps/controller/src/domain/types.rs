@@ -31,6 +31,8 @@ pub struct PlayerInventorySlot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_language: Option<String>,
     pub selected_slot: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand: Option<PlayerItemStack>,

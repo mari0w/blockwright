@@ -1,10 +1,6 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use base64::{engine::general_purpose, Engine as _};
@@ -20,7 +16,6 @@ use crate::{
 };
 
 static NEXT_LLM_TRACE_ID: AtomicU64 = AtomicU64::new(1);
-const API_SESSION_MAX_MESSAGES: usize = 12;
 
 #[derive(Clone)]
 pub struct LlmClient {
@@ -29,21 +24,12 @@ pub struct LlmClient {
     runtime_override: Option<LlmRuntimeConfig>,
     progress: Option<ProgressStore>,
     http: reqwest::Client,
-    api_sessions: ApiSessionStore,
 }
 
 #[derive(Debug, Clone)]
 struct ActiveApiProvider {
     kind: LlmProviderKind,
     config: LlmApiProviderConfig,
-}
-
-type ApiSessionStore = Arc<Mutex<HashMap<String, Vec<ApiSessionMessage>>>>;
-
-#[derive(Debug, Clone)]
-struct ApiSessionMessage {
-    role: &'static str,
-    content: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -164,7 +150,6 @@ impl LlmClient {
             runtime_override: None,
             progress: None,
             http: reqwest::Client::new(),
-            api_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -378,7 +363,6 @@ impl LlmClient {
         if answer.trim().is_empty() {
             return Ok(None);
         }
-        self.remember_api_exchange(session_key, prompt, &answer);
         self.record_progress(progress_id, "AI API 已返回结果", None);
         tracing::info!(
             trace_id = %trace_id,
@@ -463,7 +447,6 @@ impl LlmClient {
         if answer.trim().is_empty() {
             return Ok(None);
         }
-        self.remember_api_exchange(session_key, prompt, &answer);
         self.record_progress(progress_id, "Gemini API 已返回结果", None);
         tracing::info!(
             trace_id = %trace_id,
@@ -516,14 +499,12 @@ impl LlmClient {
         prompt: &str,
         config: &LlmApiProviderConfig,
         image_paths: &[PathBuf],
-        session_key: Option<&str>,
+        _session_key: Option<&str>,
     ) -> Result<Vec<ChatMessage>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut messages = self.api_session_messages(session_key);
-        messages.push(ChatMessage {
+        Ok(vec![ChatMessage {
             role: "user",
             content: self.message_content(prompt, config, image_paths).await?,
-        });
-        Ok(messages)
+        }])
     }
 
     async fn gemini_contents_for_request(
@@ -531,14 +512,12 @@ impl LlmClient {
         prompt: &str,
         config: &LlmApiProviderConfig,
         image_paths: &[PathBuf],
-        session_key: Option<&str>,
+        _session_key: Option<&str>,
     ) -> Result<Vec<GeminiContent>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut contents = self.gemini_session_contents(session_key);
-        contents.push(GeminiContent {
+        Ok(vec![GeminiContent {
             role: "user",
             parts: self.gemini_parts(prompt, config, image_paths).await?,
-        });
-        Ok(contents)
+        }])
     }
 
     async fn gemini_parts(
@@ -603,73 +582,6 @@ impl LlmClient {
             return;
         };
         progress.record(progress_id, phase, detail);
-    }
-
-    fn api_session_messages(&self, session_key: Option<&str>) -> Vec<ChatMessage> {
-        let Some(session_key) = normalized_session_key(session_key) else {
-            return Vec::new();
-        };
-        let sessions = self
-            .api_sessions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        sessions
-            .get(&session_key)
-            .into_iter()
-            .flatten()
-            .map(|message| ChatMessage {
-                role: message.role,
-                content: ChatMessageContent::Text(message.content.clone()),
-            })
-            .collect()
-    }
-
-    fn gemini_session_contents(&self, session_key: Option<&str>) -> Vec<GeminiContent> {
-        let Some(session_key) = normalized_session_key(session_key) else {
-            return Vec::new();
-        };
-        let sessions = self
-            .api_sessions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        sessions
-            .get(&session_key)
-            .into_iter()
-            .flatten()
-            .map(|message| GeminiContent {
-                role: if message.role == "assistant" {
-                    "model"
-                } else {
-                    "user"
-                },
-                parts: vec![GeminiContentPart::Text {
-                    text: message.content.clone(),
-                }],
-            })
-            .collect()
-    }
-
-    fn remember_api_exchange(&self, session_key: Option<&str>, prompt: &str, answer: &str) {
-        let Some(session_key) = normalized_session_key(session_key) else {
-            return;
-        };
-        let mut sessions = self
-            .api_sessions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let history = sessions.entry(session_key).or_default();
-        history.push(ApiSessionMessage {
-            role: "user",
-            content: prompt.to_string(),
-        });
-        history.push(ApiSessionMessage {
-            role: "assistant",
-            content: answer.to_string(),
-        });
-        if history.len() > API_SESSION_MAX_MESSAGES {
-            let overflow = history.len() - API_SESSION_MAX_MESSAGES;
-            history.drain(0..overflow);
-        }
     }
 }
 
@@ -784,13 +696,6 @@ fn llm_trace_id() -> String {
     format!("llm-{}-{sequence}", std::process::id())
 }
 
-fn normalized_session_key(session_key: Option<&str>) -> Option<String> {
-    session_key
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_ascii_lowercase())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -892,7 +797,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_provider_reuses_session_history_for_same_session_key() {
+    async fn api_provider_does_not_replay_local_session_history() {
         let client = LlmClient::new(
             CodexClient::new(CodexConfig {
                 enabled: false,
@@ -901,7 +806,6 @@ mod tests {
             }),
             LlmConfig::default(),
         );
-        client.remember_api_exchange(Some("Minecraft:Steve"), "第一轮规划", "{\"actions\":[]}");
 
         let messages = client
             .messages_for_api_request(
@@ -913,16 +817,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(3, messages.len());
+        assert_eq!(1, messages.len());
         assert_eq!("user", messages[0].role);
-        assert_eq!("第一轮规划", text_content(&messages[0]));
-        assert_eq!("assistant", messages[1].role);
-        assert_eq!("{\"actions\":[]}", text_content(&messages[1]));
-        assert_eq!("继续刚才的规划", text_content(&messages[2]));
+        assert_eq!("继续刚才的规划", text_content(&messages[0]));
     }
 
     #[tokio::test]
-    async fn gemini_request_reuses_session_history_and_sends_inline_images() {
+    async fn gemini_request_sends_only_current_message_and_inline_images() {
         let dir = std::env::temp_dir().join(format!(
             "blockwright-gemini-request-{}-{}",
             std::process::id(),
@@ -939,7 +840,6 @@ mod tests {
             }),
             LlmConfig::default(),
         );
-        client.remember_api_exchange(Some("Minecraft:Steve"), "第一轮规划", "{\"actions\":[]}");
 
         let contents = client
             .gemini_contents_for_request(
@@ -952,19 +852,16 @@ mod tests {
             .unwrap();
         let serialized = serde_json::to_value(&contents).unwrap();
 
+        assert_eq!(1, serialized.as_array().unwrap().len());
         assert_eq!("user", serialized[0]["role"]);
-        assert_eq!("第一轮规划", serialized[0]["parts"][0]["text"]);
-        assert_eq!("model", serialized[1]["role"]);
-        assert_eq!("{\"actions\":[]}", serialized[1]["parts"][0]["text"]);
-        assert_eq!("user", serialized[2]["role"]);
-        assert_eq!("继续刚才的规划", serialized[2]["parts"][0]["text"]);
+        assert_eq!("继续刚才的规划", serialized[0]["parts"][0]["text"]);
         assert_eq!(
             "image/png",
-            serialized[2]["parts"][1]["inline_data"]["mime_type"]
+            serialized[0]["parts"][1]["inline_data"]["mime_type"]
         );
         assert_eq!(
             "aW1hZ2UtYnl0ZXM=",
-            serialized[2]["parts"][1]["inline_data"]["data"]
+            serialized[0]["parts"][1]["inline_data"]["data"]
         );
         let _ = fs::remove_dir_all(dir);
     }

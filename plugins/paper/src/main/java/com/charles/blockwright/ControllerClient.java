@@ -61,6 +61,7 @@ public final class ControllerClient {
         request.text = text;
         request.position = JsonModels.PlayerPosition.fromLocation(location);
         request.playerState = JsonModels.PlayerState.fromPlayer(player);
+        request.nearbyScan = WorldScanner.scan(player, 0);
         request.progressId = "paper-" + UUID.randomUUID();
 
         HttpRequest httpRequest = baseRequest(ControllerPaths.minecraftMessagePath())

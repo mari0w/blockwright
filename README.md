@@ -109,11 +109,7 @@ Examples:
 | Command | Purpose |
 | --- | --- |
 | `/bw <request>` | Send a natural-language request, such as giving items, building, editing, or changing weather. |
-| `/bw ask <request>` | Explicitly send an AI chat/planning request. |
-| `/bw chat <request>` | Same idea as `/bw ask`; sends a chat/planning request. |
 | `/bw web` | Print the Web page address in Minecraft chat. |
-| `/bw config` | Point you to Web settings for player name, model, and chat tools. |
-| `/bw url` / `/bw address` / `/bw lan` | Show the Web address, similar to `/bw web`. |
 
 ## Who It Is For
 
